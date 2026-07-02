@@ -110,9 +110,36 @@
     .small-box { border-radius: 0.75rem; }
     .card { border-radius: 0.9rem; background: var(--card); border-color: var(--border); }
     .content-wrapper { min-height: calc(100vh - 56px); background: var(--surface-muted); }
+    /* Layout shifts: reserve space for sidebar on wide screens */
+    body:not(.sidebar-open) .content-wrapper { margin-left: 220px; transition: margin .25s ease; }
+    body.sidebar-collapse .content-wrapper { margin-left: 64px; }
+    @media (max-width: 767.98px) {
+      body:not(.sidebar-open) .content-wrapper { margin-left: 0; }
+    }
     .breadcrumb .breadcrumb-item a { color: var(--text); }
     .breadcrumb .breadcrumb-item.active { color: var(--text-muted); }
   </style>
+  <style>
+    /* Responsive tweaks */
+    @media (max-width: 767.98px) {
+      .brand-text { display: none; }
+      /* mobile: sidebar hidden by default, slides in as overlay */
+      .app-sidebar { width: 220px; transform: translateX(-100%); position: fixed; left: 0; top: 0; bottom: 0; z-index: 1050; transition: transform .25s ease; }
+      .app-sidebar .nav-sidebar .nav-link p { display: none; }
+      .app-sidebar .user-panel .info { display: none; }
+      body.sidebar-open .app-sidebar { transform: translateX(0); }
+      .sidebar-backdrop { display: none; }
+      body.sidebar-open .sidebar-backdrop { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1040; }
+      .content-wrapper { min-height: calc(100vh - 56px); padding: 0.75rem; }
+      .app-header .nav-link { padding: .35rem .5rem; }
+      .app-header .rounded-circle { width: 34px !important; height: 34px !important; }
+    }
+    @media (min-width: 768px) {
+      .app-sidebar { width: 220px; }
+    }
+  </style>
+    <!-- Backdrop for mobile sidebar -->
+    <div id="sidebarBackdrop" class="sidebar-backdrop" style="display:none;"></div>
 </head>
 <body class="layout-fixed sidebar-mini">
 <?php
@@ -135,9 +162,9 @@ $user = $user ?? ['nom_complet' => 'Utilisateur'];
             <a href="<?= BASE_URL ?>/ecoles" class="nav-link">Écoles</a>
           </li>
         </ul>
-                <ul class="navbar-nav ms-auto">
-                  <li class="nav-item">
-                    <div class="image me-2">
+        <ul class="navbar-nav ms-auto">
+            <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle d-flex align-items-center" data-bs-toggle="dropdown" href="#" role="button">
                       <?php
                       $avatarUrl = null;
                       // Prefer explicit avatar/photo from DB
@@ -167,10 +194,14 @@ $user = $user ?? ['nom_complet' => 'Utilisateur'];
                       <?php else: ?>
                         <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width:42px;height:42px;"><i class="bi bi-person-fill"></i></div>
                       <?php endif; ?>
-                    </div>
+                      <span class="ms-2 d-none d-md-inline fw-semibold"><?php echo htmlspecialchars($user['nom_complet'] ?? 'Utilisateur'); ?></span>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                      <li><a class="dropdown-item" href="<?= BASE_URL ?>/profile"><i class="bi bi-person-circle me-2"></i>Mon profil</a></li>
+                      <li><hr class="dropdown-divider"></li>
+                      <li><a class="dropdown-item text-danger" href="<?= BASE_URL ?>/logout"><i class="bi bi-box-arrow-right me-2"></i>Déconnexion</a></li>
+                    </ul>
                   </li>
-
-        <ul class="navbar-nav ms-auto">
           <li class="nav-item">
             <a class="nav-link" id="navbarSearchToggle" href="#" role="button"><i class="bi bi-search"></i></a>
           </li>

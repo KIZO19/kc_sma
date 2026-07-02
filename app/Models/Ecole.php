@@ -138,34 +138,12 @@ class Ecole
         }
     }
 
-                        return false;
+    public static function setAdmin(int $ecoleId, int $userId): bool
     {
-                        return false;
+        try {
             $db = Database::getConnection();
-            $stmt = $db->prepare(
-
-                public static function setAdmin(int $ecoleId, int $userId): bool
-                {
-                    try {
-                        $db = Database::getConnection();
-                        $stmt = $db->prepare('UPDATE ecoles SET admin_ecole_id = :user WHERE id = :id');
-                        return $stmt->execute([':user' => $userId, ':id' => $ecoleId]);
-                    } catch (\Throwable $e) {
-                        return false;
-                    }
-                }
-                'INSERT INTO abonnements_ecoles (ecole_id, plan_id, date_debut, date_fin, statut_abonnement, montant_paye)
-                 VALUES (:ecole_id, :plan_id, :date_debut, :date_fin, :statut_abonnement, :montant_paye)'
-            );
-
-            return $stmt->execute([
-                ':ecole_id' => $ecoleId,
-                ':plan_id' => $planId,
-                ':date_debut' => $dateDebut,
-                ':date_fin' => $dateFin,
-                ':statut_abonnement' => $statutAbonnement,
-                ':montant_paye' => $montantPaye,
-            ]);
+            $stmt = $db->prepare('UPDATE ecoles SET admin_ecole_id = :user WHERE id = :id');
+            return $stmt->execute([':user' => $userId, ':id' => $ecoleId]);
         } catch (\Throwable $e) {
             return false;
         }
