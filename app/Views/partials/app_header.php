@@ -69,7 +69,13 @@
       background: var(--bg);
       color: var(--text);
     }
-    .app-header { background: var(--navbar); }
+    .app-header {
+      background: var(--navbar);
+      position: sticky;
+      top: 0;
+      z-index: 1050;
+      width: 100%;
+    }
     .app-header .navbar-nav .nav-link { color: var(--navbar-text); }
     .app-sidebar {
       background: var(--sidebar);
@@ -349,4 +355,4 @@ if (!empty($modules) && is_array($modules)) {
       </div>
     </aside>
 
-    <!-- <div class="content-wrapper"> -->
+    <div class="content-wrapper">
