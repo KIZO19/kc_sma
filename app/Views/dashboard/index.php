@@ -13,7 +13,7 @@
             </div>
           </div>
         </div>
-      </section>
+      <!-- </section> -->
 
       <section class="content">
         <div class="container-fluid">

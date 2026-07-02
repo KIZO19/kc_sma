@@ -110,12 +110,6 @@
     .small-box { border-radius: 0.75rem; }
     .card { border-radius: 0.9rem; background: var(--card); border-color: var(--border); }
     .content-wrapper { min-height: calc(100vh - 56px); background: var(--surface-muted); }
-    /* Layout shifts: reserve space for sidebar on wide screens */
-    body:not(.sidebar-open) .content-wrapper { margin-left: 220px; transition: margin .25s ease; }
-    body.sidebar-collapse .content-wrapper { margin-left: 64px; }
-    @media (max-width: 767.98px) {
-      body:not(.sidebar-open) .content-wrapper { margin-left: 0; }
-    }
     .breadcrumb .breadcrumb-item a { color: var(--text); }
     .breadcrumb .breadcrumb-item.active { color: var(--text-muted); }
   </style>
@@ -334,6 +328,27 @@ $user = $user ?? ['nom_complet' => 'Utilisateur'];
 
             <?php if (($role ?? '') === 'super_admin'): ?>
               <li class="nav-header">ADMINISTRATION</li>
+              <li class="nav-item has-treeview <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/ressources-humaines') !== false || strpos($_SERVER['REQUEST_URI'] ?? '', '/finances-statistiques') !== false) ? 'menu-open' : '' ?>">
+                <a href="#" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/ressources-humaines') !== false || strpos($_SERVER['REQUEST_URI'] ?? '', '/finances-statistiques') !== false) ? 'active' : '' ?>" data-lte-toggle="treeview">
+                  <i class="nav-icon bi bi-grid-3x3-gap"></i>
+                  <p>Modules <i class="bi bi-caret-down-fill float-end"></i></p>
+                </a>
+                <ul class="nav nav-treeview ps-3">
+                  <li class="nav-item">
+                    <a href="<?= BASE_URL ?>/ressources-humaines" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/ressources-humaines') !== false) ? 'active' : '' ?>">
+                      <i class="nav-icon bi bi-people"></i>
+                      <p>Ressources humaines</p>
+                    </a>
+                  </li>
+                  <li class="nav-item">
+                    <a href="<?= BASE_URL ?>/finances-statistiques" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/finances-statistiques') !== false) ? 'active' : '' ?>">
+                      <i class="nav-icon bi bi-bar-chart-line"></i>
+                      <p>Finances - Statistiques</p>
+                    </a>
+                  </li>
+                </ul>
+              </li>
+
               <li class="nav-item has-treeview <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/ecoles') !== false) ? 'menu-open' : '' ?>">
                 <a href="#" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/ecoles') !== false) ? 'active' : '' ?>" data-lte-toggle="treeview">
                   <i class="nav-icon bi bi-building"></i>
@@ -355,40 +370,31 @@ $user = $user ?? ['nom_complet' => 'Utilisateur'];
                   <li class="nav-item">
                     <a href="<?= BASE_URL ?>/ecoles/addSubscription" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/ecoles/addSubscription') !== false) ? 'active' : '' ?>">
                       <i class="nav-icon bi bi-wallet2"></i>
-                      <p>Ajouter un abonnement</p>
-                    </a>
-                  </li>
-                  <li class="nav-item">
-                    <a href="<?= BASE_URL ?>/ecoles/requests" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/ecoles/requests') !== false) ? 'active' : '' ?>">
-                      <i class="nav-icon bi bi-hourglass-split"></i>
-                      <p>Demandes en attente</p>
+                      <p>Abonnement</p>
                     </a>
                   </li>
                 </ul>
               </li>
-              <li class="nav-item">
-                <a href="<?= BASE_URL ?>/comptes" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/comptes') !== false) ? 'active' : '' ?>">
+
+              <li class="nav-item has-treeview <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/abonnements') !== false || strpos($_SERVER['REQUEST_URI'] ?? '', '/ecoles/generatePassword') !== false) ? 'menu-open' : '' ?>">
+                <a href="#" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/abonnements') !== false || strpos($_SERVER['REQUEST_URI'] ?? '', '/ecoles/generatePassword') !== false) ? 'active' : '' ?>" data-lte-toggle="treeview">
                   <i class="nav-icon bi bi-person-badge"></i>
-                  <p>Gestion des comptes</p>
+                  <p>Utilisateurs <i class="bi bi-caret-down-fill float-end"></i></p>
                 </a>
-              </li>
-              <li class="nav-item">
-                <a href="<?= BASE_URL ?>/abonnements" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/abonnements') !== false) ? 'active' : '' ?>">
-                  <i class="nav-icon bi bi-card-checklist"></i>
-                  <p>Abonnements</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="<?= BASE_URL ?>/ecoles/generatePassword" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/ecoles/generatePassword') !== false) ? 'active' : '' ?>">
-                  <i class="nav-icon bi bi-key"></i>
-                  <p>Générer mot de passe élève</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="<?= BASE_URL ?>/activities" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/activities') !== false) ? 'active' : '' ?>">
-                  <i class="nav-icon bi bi-activity"></i>
-                  <p>Activités</p>
-                </a>
+                <ul class="nav nav-treeview ps-3">
+                  <li class="nav-item">
+                    <a href="<?= BASE_URL ?>/abonnements" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/abonnements') !== false) ? 'active' : '' ?>">
+                      <i class="nav-icon bi bi-card-checklist"></i>
+                      <p>Abonnement</p>
+                    </a>
+                  </li>
+                  <li class="nav-item">
+                    <a href="<?= BASE_URL ?>/ecoles/generatePassword" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/ecoles/generatePassword') !== false) ? 'active' : '' ?>">
+                      <i class="nav-icon bi bi-key"></i>
+                      <p>Générer mot de passe élève</p>
+                    </a>
+                  </li>
+                </ul>
               </li>
             <?php endif; ?>
 
