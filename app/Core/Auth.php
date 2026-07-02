@@ -125,6 +125,7 @@ class Auth
         return match ($role) {
             'super_admin',
             'ecole_admin',
+            'agent_ecole',
             'préfet_école',
             'DE_école',
             'DD_école',

@@ -21,9 +21,11 @@ class UtilisateursController extends Controller
         $inactiveUsers = User::getInactiveUsers();
         $unassignedUsers = User::getUnassignedPersonalAccounts();
         $schools = Ecole::getAll();
+        $schoolPopulations = Ecole::getSchoolPopulationCounts();
 
         $this->view('utilisateurs/index', [
             'title' => APP_NAME . ' - Validation des comptes',
+            'schoolPopulations' => $schoolPopulations,
             'user' => $user,
             'role' => $role,
             'roleLabel' => User::getRoleLabel($role),

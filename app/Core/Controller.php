@@ -89,6 +89,7 @@ class Controller
                 ['name' => 'Générer mot de passe', 'path' => '/ecoles/generatePassword', 'icon' => 'bi-key'],
             ],
             'comptable_école' => [
+                ['name' => 'Inscriptions', 'path' => '/inscriptions', 'icon' => 'bi-person-plus'],
                 ['name' => 'Facturation', 'path' => '/facturation', 'icon' => 'bi-receipt'],
                 ['name' => 'Caisses & Banques', 'path' => '/comptes', 'icon' => 'bi-bank'],
                 ['name' => 'Paiements', 'path' => '/paiements', 'icon' => 'bi-currency-dollar'],
@@ -102,6 +103,9 @@ class Controller
                 ['name' => 'Présences', 'path' => '/presences', 'icon' => 'bi-calendar-check'],
                 ['name' => 'Générer mot de passe', 'path' => '/ecoles/generatePassword', 'icon' => 'bi-key'],
                 ['name' => 'Rapports', 'path' => '/rapports', 'icon' => 'bi-file-earmark-bar-graph'],
+            ],
+            'agent_ecole' => [
+                ['name' => 'Inscriptions', 'path' => '/inscriptions', 'icon' => 'bi-person-plus'],
             ],
             'enseignant_école' => [
                 ['name' => 'Mes cours', 'path' => '/mes-cours', 'icon' => 'bi-book'],

@@ -133,6 +133,25 @@ class Ecole
         }
     }
 
+    public static function getSchoolPopulationCounts(): array
+    {
+        try {
+            $db = Database::getConnection();
+            $stmt = $db->prepare(
+                'SELECT e.id, e.nom_etablissement, COUNT(u.id) AS total_personnels '
+                . 'FROM ecoles e '
+                . 'LEFT JOIN utilisateurs u ON u.ecole_id = e.id '
+                . 'GROUP BY e.id, e.nom_etablissement '
+                . 'ORDER BY total_personnels DESC'
+            );
+            $stmt->execute();
+
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
     public static function updateSystemStatus(int $id, string $status): bool
     {
         try {

@@ -44,7 +44,7 @@ class PageController extends Controller
     private function renderPage(string $route, string $role): array
     {
         $accessMap = [
-            'inscriptions' => ['super_admin', 'ecole_admin', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école'],
+            'inscriptions' => ['super_admin', 'ecole_admin', 'agent_ecole', 'comptable_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école'],
             'eleves' => ['super_admin', 'ecole_admin', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école'],
             'notes' => ['super_admin', 'ecole_admin', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'eleve_ecole', 'parent_ecole'],
             'paiements' => ['super_admin', 'ecole_admin', 'comptable_école', 'sec_école', 'parent_ecole'],
