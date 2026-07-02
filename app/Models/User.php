@@ -167,7 +167,6 @@ class User
             'eleve_ecole' => 'Élève',
             'parent_ecole' => 'Parent',
             'agent_ecole' => 'Agent',
-            'ecole_admin' => 'École',
             default => ucfirst(str_replace('_', ' ', $role)),
         };
     }
