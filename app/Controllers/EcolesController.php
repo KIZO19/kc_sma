@@ -183,6 +183,124 @@ class EcolesController extends Controller
         $this->redirect('/ecoles');
     }
 
+    public function edit(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin']);
+
+        $user = Auth::refresh() ?: Auth::user();
+        $role = $user['role'] ?? 'default';
+        $modules = $this->getModulesForRole($role);
+
+        $id = (int) ($_GET['id'] ?? 0);
+        if ($id <= 0) {
+            // redirect to list
+            $this->redirect('/ecoles');
+            return;
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $data = [
+                'nom_etablissement' => trim($_POST['nom_etablissement'] ?? ''),
+                'email_officiel' => trim($_POST['email_officiel'] ?? ''),
+                'identifiant' => trim($_POST['identifiant'] ?? ''),
+                'matricule' => trim($_POST['matricule'] ?? ''),
+                'telephone_contact' => trim($_POST['telephone'] ?? ''),
+                'adresse' => trim($_POST['adresse'] ?? ''),
+                'statut_systeme' => $_POST['statut_systeme'] ?? null,
+            ];
+            $errors = [];
+
+            if ($data['nom_etablissement'] === '') $errors[] = 'Le nom de l\'établissement est requis.';
+            if ($data['identifiant'] === '') $errors[] = 'L\'identifiant est requis.';
+
+            // Handle optional logo upload
+            if (!empty($_FILES['logo']['name'])) {
+                $logoUrl = $this->uploadLogoFile($_FILES['logo']);
+                if ($logoUrl) {
+                    $data['logo_url'] = $logoUrl;
+                } else {
+                    $errors[] = 'Impossible de téléverser le logo (format/taille).';
+                }
+            }
+
+            if (!empty($errors)) {
+                $_SESSION['ecole_edit_errors'] = $errors;
+            } else {
+                $ok = Ecole::update($id, $data);
+                if ($ok) {
+                    $_SESSION['ecole_edit_success'] = 'École mise à jour.';
+                } else {
+                    $_SESSION['ecole_edit_errors'] = ['Erreur lors de la mise à jour.'];
+                }
+                $this->redirect('/ecoles');
+                return;
+            }
+        }
+
+        $school = Ecole::findById($id);
+        if (!$school) {
+            $this->redirect('/ecoles');
+            return;
+        }
+
+        $this->view('ecoles/edit', [
+            'title' => APP_NAME . ' - Modifier école',
+            'user' => $user,
+            'role' => $role,
+            'roleLabel' => \App\Models\User::getRoleLabel($role),
+            'modules' => $modules,
+            'school' => $school,
+        ]);
+    }
+
+    public function requests(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin']);
+
+        $user = Auth::refresh() ?: Auth::user();
+        $role = $user['role'] ?? 'default';
+        $modules = $this->getModulesForRole($role);
+
+        $page = max(1, (int) ($_GET['page'] ?? 1));
+        $perPage = 10;
+        $offset = ($page - 1) * $perPage;
+
+        $total = Ecole::countBySystemStatus('En_Attente');
+        $pending = Ecole::getPendingSchoolsPaged($perPage, $offset);
+
+        $this->view('ecoles/requests', [
+            'title' => APP_NAME . ' - Demandes écoles',
+            'user' => $user,
+            'role' => $role,
+            'roleLabel' => \App\Models\User::getRoleLabel($role),
+            'modules' => $modules,
+            'pending' => $pending,
+            'pagination' => [
+                'page' => $page,
+                'perPage' => $perPage,
+                'total' => $total,
+                'totalPages' => (int) ceil($total / $perPage),
+            ],
+        ]);
+    }
+
+    public function delete(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin']);
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $id = (int) ($_POST['ecole_id'] ?? 0);
+            if ($id > 0) {
+                Ecole::delete($id);
+            }
+        }
+
+        $this->redirect('/ecoles/requests');
+    }
+
     private function generateMatricule(string $name): string
     {
         $prefix = strtoupper(preg_replace('/[^A-Z0-9]/', '', mb_substr($name, 0, 6, 'UTF-8')));

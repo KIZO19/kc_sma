@@ -334,11 +334,37 @@ $user = $user ?? ['nom_complet' => 'Utilisateur'];
 
             <?php if (($role ?? '') === 'super_admin'): ?>
               <li class="nav-header">ADMINISTRATION</li>
-              <li class="nav-item">
-                <a href="<?= BASE_URL ?>/ecoles" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/ecoles') !== false) ? 'active' : '' ?>">
+              <li class="nav-item has-treeview">
+                <a href="#" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/ecoles') !== false) ? 'active' : '' ?>">
                   <i class="nav-icon bi bi-building"></i>
-                  <p>Gestion des écoles</p>
+                  <p>Gestion des écoles <i class="bi bi-caret-down-fill float-end"></i></p>
                 </a>
+                <ul class="nav nav-treeview ps-3">
+                  <li class="nav-item">
+                    <a href="<?= BASE_URL ?>/ecoles" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/ecoles') !== false) ? 'active' : '' ?>">
+                      <i class="nav-icon bi bi-list"></i>
+                      <p>Liste des écoles</p>
+                    </a>
+                  </li>
+                  <li class="nav-item">
+                    <a href="<?= BASE_URL ?>/ecoles#create" class="nav-link">
+                      <i class="nav-icon bi bi-plus-square"></i>
+                      <p>Créer une école</p>
+                    </a>
+                  </li>
+                  <li class="nav-item">
+                    <a href="<?= BASE_URL ?>/ecoles/edit" class="nav-link">
+                      <i class="nav-icon bi bi-pencil-square"></i>
+                      <p>Modifier une école</p>
+                    </a>
+                  </li>
+                  <li class="nav-item">
+                    <a href="<?= BASE_URL ?>/ecoles/requests" class="nav-link">
+                      <i class="nav-icon bi bi-hourglass-split"></i>
+                      <p>Demandes en attente</p>
+                    </a>
+                  </li>
+                </ul>
               </li>
               <li class="nav-item">
                 <a href="<?= BASE_URL ?>/comptes" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/comptes') !== false) ? 'active' : '' ?>">
@@ -350,6 +376,12 @@ $user = $user ?? ['nom_complet' => 'Utilisateur'];
                 <a href="<?= BASE_URL ?>/abonnements" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/abonnements') !== false) ? 'active' : '' ?>">
                   <i class="nav-icon bi bi-card-checklist"></i>
                   <p>Abonnements</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="<?= BASE_URL ?>/activities" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/activities') !== false) ? 'active' : '' ?>">
+                  <i class="nav-icon bi bi-activity"></i>
+                  <p>Activités</p>
                 </a>
               </li>
             <?php endif; ?>

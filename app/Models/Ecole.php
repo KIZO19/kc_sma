@@ -35,14 +35,50 @@ class Ecole
     {
         try {
             $db = Database::getConnection();
-            $stmt = $db->prepare('SELECT * FROM ecoles WHERE statut_systeme = :status ORDER BY date_creation_compte DESC LIMIT :limit');
+            if ($limit === 0) {
+                $stmt = $db->prepare('SELECT * FROM ecoles WHERE statut_systeme = :status ORDER BY date_creation_compte DESC');
+                $stmt->execute([':status' => 'En_Attente']);
+                return $stmt->fetchAll(PDO::FETCH_ASSOC);
+            }
+
+            // For pagination use LIMIT :limit OFFSET :offset via prepared statement
+            // Default offset is 0 (handled by caller building SQL)
+            $stmt = $db->prepare('SELECT * FROM ecoles WHERE statut_systeme = :status ORDER BY date_creation_compte DESC LIMIT :limit OFFSET :offset');
             $stmt->bindValue(':status', 'En_Attente', PDO::PARAM_STR);
-            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+            $stmt->bindValue(':limit', (int) $limit, PDO::PARAM_INT);
+            $stmt->bindValue(':offset', 0, PDO::PARAM_INT);
             $stmt->execute();
 
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (\Throwable $e) {
             return [];
+        }
+    }
+
+    public static function getPendingSchoolsPaged(int $limit, int $offset): array
+    {
+        try {
+            $db = Database::getConnection();
+            $stmt = $db->prepare('SELECT * FROM ecoles WHERE statut_systeme = :status ORDER BY date_creation_compte DESC LIMIT :limit OFFSET :offset');
+            $stmt->bindValue(':status', 'En_Attente', PDO::PARAM_STR);
+            $stmt->bindValue(':limit', (int) $limit, PDO::PARAM_INT);
+            $stmt->bindValue(':offset', (int) $offset, PDO::PARAM_INT);
+            $stmt->execute();
+
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    public static function delete(int $id): bool
+    {
+        try {
+            $db = Database::getConnection();
+            $stmt = $db->prepare('DELETE FROM ecoles WHERE id = :id');
+            return $stmt->execute([':id' => $id]);
+        } catch (\Throwable $e) {
+            return false;
         }
     }
 
@@ -144,6 +180,41 @@ class Ecole
             $db = Database::getConnection();
             $stmt = $db->prepare('UPDATE ecoles SET admin_ecole_id = :user WHERE id = :id');
             return $stmt->execute([':user' => $userId, ':id' => $ecoleId]);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    public static function update(int $id, array $data): bool
+    {
+        try {
+            $db = Database::getConnection();
+            $fields = [];
+            $params = [':id' => $id];
+
+            $mapping = [
+                'nom_etablissement' => 'nom_etablissement',
+                'matricule' => 'matricule',
+                'adresse' => 'adresse',
+                'telephone_contact' => 'telephone_contact',
+                'email_officiel' => 'email_officiel',
+                'identifiant' => 'identifiant',
+                'logo_url' => 'logo_url',
+                'statut_systeme' => 'statut_systeme',
+            ];
+
+            foreach ($mapping as $k => $col) {
+                if (array_key_exists($k, $data)) {
+                    $fields[] = $col . ' = :' . $k;
+                    $params[':' . $k] = $data[$k];
+                }
+            }
+
+            if (empty($fields)) return false;
+
+            $sql = 'UPDATE ecoles SET ' . implode(', ', $fields) . ' WHERE id = :id';
+            $stmt = $db->prepare($sql);
+            return $stmt->execute($params);
         } catch (\Throwable $e) {
             return false;
         }
