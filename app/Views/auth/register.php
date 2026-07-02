@@ -34,6 +34,8 @@ $old = $old ?? [];
             <?php endforeach; ?>
           </ul>
         </div>
+      <?php elseif (!empty($message)): ?>
+        <div class="alert alert-success"><?= htmlspecialchars($message) ?></div>
       <?php endif; ?>
       <form action="<?= BASE_URL ?>/register" method="post">
         <div class="input-group mb-3">

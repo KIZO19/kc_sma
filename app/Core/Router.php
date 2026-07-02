@@ -37,7 +37,7 @@ class Router
         } elseif ($segments[0] === 'dashboard') {
             $controllerName = 'Dashboard';
             $actionName = 'index';
-        } elseif ($segments[0] === 'ecoles') {
+        } elseif ($segments[0] === 'ecoles' || $segments[0] === 'Ecole') {
             $controllerName = 'Ecoles';
             $actionName = $segments[1] ?? 'index';
         } elseif ($segments[0] === 'profile') {

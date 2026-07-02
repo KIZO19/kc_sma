@@ -1,5 +1,25 @@
     </div>
   </div>
+  <?php
+    $footerAppName = APP_NAME;
+    if (!empty($user['role']) && $user['role'] !== 'super_admin') {
+      $schoolName = null;
+      if (!empty($user['ecole_id'])) {
+        $school = \App\Models\Ecole::findById((int) $user['ecole_id']);
+        if (!empty($school['nom_etablissement'])) {
+          $schoolName = $school['nom_etablissement'];
+        }
+      }
+      if (!empty($schoolName)) {
+        $footerAppName = $schoolName;
+      }
+    }
+  ?>
+  <footer class="main-footer border-top py-3 bg-body-tertiary">
+    <div class="container-fluid text-center">
+      <span class="text-muted">&copy; <?= date('Y') ?> <?= htmlspecialchars($footerAppName) ?>. Tous droits réservés.</span>
+    </div>
+  </footer>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" crossorigin="anonymous"></script>
   <script src="<?= BASE_URL ?>/assets/adminlte.min.js"></script>

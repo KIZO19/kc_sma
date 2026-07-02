@@ -15,6 +15,6 @@ class HomeController extends Controller
             $this->redirect('/dashboard');
         }
 
-        $this->redirect('/login');
+        $this->redirect('/Ecole/landing');
     }
 }

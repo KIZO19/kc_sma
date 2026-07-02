@@ -82,11 +82,21 @@ class AuthController extends Controller
                     'identifiant' => $identifiant,
                     'mot_de_passe' => password_hash($motDePasse, PASSWORD_DEFAULT),
                     'role' => $role,
-                    'statut' => 'Actif',
+                    'statut' => 'Inactif',
                 ]);
 
-                Auth::login($user);
-                $this->redirect('/dashboard');
+                $message = 'Votre compte a été créé. Il est en attente de validation par le super administrateur.';
+                $this->view('auth/register', [
+                    'errors' => [],
+                    'message' => $message,
+                    'title' => APP_NAME,
+                    'old' => [
+                        'nom_complet' => $nomComplet,
+                        'identifiant' => $identifiant,
+                        'role' => $role,
+                    ],
+                ]);
+                return;
             }
 
             $this->view('auth/register', [

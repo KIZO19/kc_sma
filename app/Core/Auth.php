@@ -70,7 +70,7 @@ class Auth
     public static function requireAuth(): void
     {
         if (self::guest()) {
-            header('Location: ' . BASE_URL . '/login');
+            header('Location: ' . BASE_URL . '/Ecole/landing');
             exit;
         }
     }
@@ -136,7 +136,7 @@ class Auth
             'enseignant_école',
             'eleve_ecole',
             'parent_ecole' => '/dashboard',
-            default => '/login',
+            default => '/Ecole/landing',
         };
     }
 

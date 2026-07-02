@@ -412,6 +412,13 @@ class EcolesController extends Controller
         return null;
     }
 
+    public function landing(): void
+    {
+        $this->view('ecoles/landing', [
+            'title' => APP_NAME . ' - Landing',
+        ]);
+    }
+
     public function addSubscription(): void
     {
         Auth::requireAuth();

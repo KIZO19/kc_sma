@@ -138,6 +138,10 @@ class User
                 $fields[] = 'avatar = :avatar';
                 $params[':avatar'] = $data['avatar'];
             }
+            if (isset($data['statut'])) {
+                $fields[] = 'statut = :statut';
+                $params[':statut'] = $data['statut'];
+            }
 
             if (empty($fields)) {
                 return false;
@@ -145,6 +149,25 @@ class User
 
             $stmt = $db->prepare('UPDATE utilisateurs SET ' . implode(', ', $fields) . ' WHERE id = :id');
             return $stmt->execute($params);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    public static function getInactiveUsers(): array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare('SELECT * FROM utilisateurs WHERE statut = :statut ORDER BY created_at ASC');
+        $stmt->execute([':statut' => 'Inactif']);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function updateStatus(int $id, string $statut): bool
+    {
+        try {
+            $db = Database::getConnection();
+            $stmt = $db->prepare('UPDATE utilisateurs SET statut = :statut WHERE id = :id');
+            return $stmt->execute([':statut' => $statut, ':id' => $id]);
         } catch (\Throwable $e) {
             return false;
         }
