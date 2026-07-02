@@ -1,0 +1,24 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /kc_sma/public/
+
+    # Redirect all requests to index.php
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.php [L,QSA]
+</IfModule>
+
+<IfModule mod_authz_core.c>
+    <FilesMatch "^\.(env|gitignore|htaccess|htpasswd)$">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+
+<IfModule !mod_authz_core.c>
+    <FilesMatch "^\.(env|gitignore|htaccess|htpasswd)$">
+        Deny from all
+    </FilesMatch>
+</IfModule>
+
+# Prevent directory listing
+Options -Indexes

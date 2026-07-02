@@ -1,0 +1,26 @@
+# Redirect root requests to public folder
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /kc_sma/
+
+    RewriteCond %{REQUEST_URI} !^/kc_sma/public/
+    RewriteRule ^(.*)$ public/$1 [L]
+
+    # Deny direct access to application source files
+    RewriteRule ^app/ - [F,L]
+</IfModule>
+
+<IfModule mod_authz_core.c>
+    <FilesMatch "^\.htaccess$">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+
+<IfModule !mod_authz_core.c>
+    <FilesMatch "^\.htaccess$">
+        Deny from all
+    </FilesMatch>
+</IfModule>
+
+# Prevent directory listing
+Options -Indexes
