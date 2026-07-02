@@ -301,6 +301,57 @@ class EcolesController extends Controller
         $this->redirect('/ecoles/requests');
     }
 
+    public function generatePassword(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin', 'ecole_admin']);
+
+        $user = Auth::refresh() ?: Auth::user();
+        $role = $user['role'] ?? 'default';
+        $modules = $this->getModulesForRole($role);
+
+        $errors = [];
+        $success = null;
+        $matricule = '';
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $matricule = trim($_POST['matricule'] ?? '');
+
+            if ($matricule === '') {
+                $errors[] = 'Le matricule de l\'élève est requis.';
+            } else {
+                $eleveUser = User::findByEleveMatricule($matricule);
+
+                if (!$eleveUser) {
+                    $errors[] = 'Aucun élève trouvé pour ce matricule.';
+                } else {
+                    if ($role === 'ecole_admin' && !empty($user['ecole_id']) && $eleveUser['ecole_id'] !== $user['ecole_id']) {
+                        $errors[] = 'Vous ne pouvez générer un mot de passe que pour les élèves de votre établissement.';
+                    } else {
+                        $tempPassword = bin2hex(random_bytes(4));
+                        $ok = User::updateProfile((int) $eleveUser['id'], ['mot_de_passe' => password_hash($tempPassword, PASSWORD_DEFAULT)]);
+                        if ($ok) {
+                            $success = 'Mot de passe généré pour ' . htmlspecialchars($matricule) . ' : ' . $tempPassword;
+                        } else {
+                            $errors[] = 'Impossible de mettre à jour le mot de passe. Réessayez.';
+                        }
+                    }
+                }
+            }
+        }
+
+        $this->view('ecoles/generate_password', [
+            'title' => APP_NAME . ' - Générer mot de passe élève',
+            'user' => $user,
+            'role' => $role,
+            'roleLabel' => User::getRoleLabel($role),
+            'modules' => $modules,
+            'errors' => $errors,
+            'success' => $success,
+            'matricule' => $matricule,
+        ]);
+    }
+
     private function generateMatricule(string $name): string
     {
         $prefix = strtoupper(preg_replace('/[^A-Z0-9]/', '', mb_substr($name, 0, 6, 'UTF-8')));

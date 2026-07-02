@@ -379,6 +379,12 @@ $user = $user ?? ['nom_complet' => 'Utilisateur'];
                 </a>
               </li>
               <li class="nav-item">
+                <a href="<?= BASE_URL ?>/ecoles/generatePassword" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/ecoles/generatePassword') !== false) ? 'active' : '' ?>">
+                  <i class="nav-icon bi bi-key"></i>
+                  <p>Générer mot de passe élève</p>
+                </a>
+              </li>
+              <li class="nav-item">
                 <a href="<?= BASE_URL ?>/activities" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/activities') !== false) ? 'active' : '' ?>">
                   <i class="nav-icon bi bi-activity"></i>
                   <p>Activités</p>
@@ -399,6 +405,12 @@ $user = $user ?? ['nom_complet' => 'Utilisateur'];
                   <a href="<?= BASE_URL ?>/paiements" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/paiements') !== false) ? 'active' : '' ?>">
                     <i class="nav-icon bi bi-currency-dollar"></i>
                     <p>Paiements</p>
+                  </a>
+                </li>
+                <li class="nav-item">
+                  <a href="<?= BASE_URL ?>/ecoles/generatePassword" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/ecoles/generatePassword') !== false) ? 'active' : '' ?>">
+                    <i class="nav-icon bi bi-key"></i>
+                    <p>Générer mot de passe élève</p>
                   </a>
                 </li>
               <?php elseif (($role ?? '') === 'comptable_école'): ?>
