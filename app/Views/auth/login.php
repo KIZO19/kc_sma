@@ -36,7 +36,7 @@ $identifiant = $identifiant ?? '';
       <?php endif; ?>
       <form action="<?= BASE_URL ?>/login" method="post">
         <div class="input-group mb-3">
-          <input type="text" name="identifiant" class="form-control" placeholder="Email ou téléphone" value="<?= htmlspecialchars($identifiant) ?>" required>
+          <input type="text" name="identifiant" class="form-control" placeholder="Email, téléphone ou matricule" value="<?= htmlspecialchars($identifiant) ?>" required>
           <div class="input-group-append"><div class="input-group-text"><span class="bi bi-person"></span></div></div>
         </div>
         <div class="input-group mb-3">

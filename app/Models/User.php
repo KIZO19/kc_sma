@@ -12,6 +12,10 @@ class User
         $user = self::findByIdentifiant($identifiant);
 
         if (!$user) {
+            $user = self::findByEleveMatricule($identifiant);
+        }
+
+        if (!$user) {
             return null;
         }
 
@@ -25,6 +29,20 @@ class User
     public static function existsByIdentifiant(string $identifiant): bool
     {
         return self::findByIdentifiant($identifiant) !== null;
+    }
+
+    public static function findByEleveMatricule(string $matricule): ?array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            'SELECT u.* FROM utilisateurs u '
+            . 'INNER JOIN eleves e ON u.reference_id = e.id '
+            . 'WHERE u.role = :role AND e.matricule = :matricule LIMIT 1'
+        );
+        $stmt->execute([':role' => 'eleve_ecole', ':matricule' => $matricule]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $user ?: null;
     }
 
     public static function findByIdentifiant(string $identifiant): ?array
@@ -157,7 +175,6 @@ class User
     public static function getEligibleRoles(): array
     {
         return [
-            'eleve_ecole' => 'Élève',
             'parent_ecole' => 'Parent',
             'agent_ecole' => 'Agent',
             'ecole_admin' => 'École',
@@ -194,11 +211,11 @@ class User
     {
         $db = Database::getConnection();
         try {
-            $stmt = $db->prepare('SELECT e.id FROM eleves e INNER JOIN ecoles c ON e.ecole_id = c.id WHERE e.identifiant = :identifiant LIMIT 1');
+            $stmt = $db->prepare('SELECT e.id FROM eleves e INNER JOIN ecoles c ON e.ecole_id = c.id WHERE e.matricule = :identifiant LIMIT 1');
             $stmt->execute([':identifiant' => $identifiant]);
             return (bool) $stmt->fetch(PDO::FETCH_ASSOC);
         } catch (\PDOException $e) {
-            $stmt = $db->prepare('SELECT id FROM eleves WHERE identifiant = :identifiant LIMIT 1');
+            $stmt = $db->prepare('SELECT id FROM eleves WHERE matricule = :identifiant LIMIT 1');
             $stmt->execute([':identifiant' => $identifiant]);
             return (bool) $stmt->fetch(PDO::FETCH_ASSOC);
         }

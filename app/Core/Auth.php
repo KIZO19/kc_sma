@@ -23,6 +23,7 @@ class Auth
             'nom_complet' => $user['nom_complet'],
             'role' => $user['role'],
             'ecole_id' => isset($user['ecole_id']) ? (int) $user['ecole_id'] : null,
+            'reference_id' => isset($user['reference_id']) ? (int) $user['reference_id'] : null,
             'statut' => $user['statut'] ?? 'Actif',
         ];
     }

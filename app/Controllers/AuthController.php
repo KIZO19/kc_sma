@@ -18,11 +18,16 @@ class AuthController extends Controller
 
             $user = User::authenticate($identifiant, $motDePasse);
             if ($user && $user['statut'] === 'Actif') {
-                Auth::login($user);
-                $this->redirect('/dashboard');
+                if (($user['role'] ?? '') !== 'super_admin' && empty($user['ecole_id'])) {
+                    $error = 'Votre compte n’est pas encore affecté à une école. Contactez l’administration.';
+                } else {
+                    Auth::login($user);
+                    $this->redirect('/dashboard');
+                    return;
+                }
             }
 
-            $error = 'Identifiant ou mot de passe incorrect.';
+            $error = $error ?? 'Identifiant ou mot de passe incorrect.';
             if ($user && $user['statut'] !== 'Actif') {
                 $error = 'Votre compte est actuellement ' . htmlspecialchars($user['statut']) . '. Contactez l’administrateur.';
             }
