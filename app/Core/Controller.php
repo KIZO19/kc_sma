@@ -42,7 +42,7 @@ class Controller
                 ['name' => 'Parents', 'path' => '/parents', 'icon' => 'bi-people'],
                 ['name' => 'Élèves', 'path' => '/eleves', 'icon' => 'bi-person-badge'],
                 ['name' => 'Rapports', 'path' => '/rapports', 'icon' => 'bi-file-text'],
-                ['name' => 'Mes cours', 'path' => '/mes-cours', 'icon' => 'bi-book'],
+                ['name' => 'Générer mot de passe', 'path' => '/ecoles/generatePassword', 'icon' => 'bi-key'],
                 ['name' => 'Notes', 'path' => '/notes', 'icon' => 'bi-pencil-square'],
                 ['name' => 'Mon emploi du temps', 'path' => '/mon-emploi', 'icon' => 'bi-calendar2-week'],
                 ['name' => 'Mes notes', 'path' => '/mes-notes', 'icon' => 'bi-bar-chart-steps'],
@@ -53,6 +53,10 @@ class Controller
                 ['name' => 'Messages', 'path' => '/messages', 'icon' => 'bi-chat-dots'],
             ],
             'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école' => [
+                ['name' => 'Admissions', 'path' => '/inscriptions', 'icon' => 'bi-person-plus'],
+                ['name' => 'Élèves', 'path' => '/eleves', 'icon' => 'bi-person-badge'],
+                ['name' => 'Notes', 'path' => '/notes', 'icon' => 'bi-pencil-square'],
+                ['name' => 'Générer mot de passe', 'path' => '/ecoles/generatePassword', 'icon' => 'bi-key'],
                 ['name' => 'Bulletins', 'path' => '/bulletins', 'icon' => 'bi-file-earmark-text'],
                 ['name' => 'Présences', 'path' => '/presences', 'icon' => 'bi-calendar-check'],
                 ['name' => 'Évaluations', 'path' => '/evaluations', 'icon' => 'bi-journal-check'],
@@ -68,6 +72,8 @@ class Controller
                 ['name' => 'Admissions', 'path' => '/inscriptions', 'icon' => 'bi-person-plus'],
                 ['name' => 'Parents', 'path' => '/parents', 'icon' => 'bi-people'],
                 ['name' => 'Élèves', 'path' => '/eleves', 'icon' => 'bi-person-badge'],
+                ['name' => 'Notes', 'path' => '/notes', 'icon' => 'bi-pencil-square'],
+                ['name' => 'Générer mot de passe', 'path' => '/ecoles/generatePassword', 'icon' => 'bi-key'],
                 ['name' => 'Rapports', 'path' => '/rapports', 'icon' => 'bi-file-text'],
             ],
             'enseignant_école' => [

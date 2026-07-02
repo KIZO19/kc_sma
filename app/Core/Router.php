@@ -51,7 +51,7 @@ class Router
         $controllerClass = 'App\\Controllers\\' . $controllerName . 'Controller';
 
         if (!class_exists($controllerClass)) {
-            $controllerClass = 'App\\Controllers\\HomeController';
+            $controllerClass = 'App\\Controllers\\PageController';
             $actionName = 'index';
         }
 
