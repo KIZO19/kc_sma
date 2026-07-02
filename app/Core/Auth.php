@@ -83,6 +83,21 @@ class Auth
         }
     }
 
+    public static function requireAssignedSchool(): void
+    {
+        $user = self::user();
+        if (!$user) {
+            self::requireAuth();
+            return;
+        }
+
+        if (($user['role'] ?? '') !== 'super_admin' && empty($user['ecole_id'])) {
+            $_SESSION['access_error'] = 'Vous devez être affecté(e) à une école pour accéder au dashboard.';
+            header('Location: ' . BASE_URL . '/profile');
+            exit;
+        }
+    }
+
     public static function requireGuest(): void
     {
         if (self::check()) {

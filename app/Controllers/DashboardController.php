@@ -14,6 +14,7 @@ class DashboardController extends Controller
     public function index(): void
     {
         Auth::requireAuth();
+        Auth::requireAssignedSchool();
 
         $user = Auth::user();
         $user = Auth::refresh() ?: $user;

@@ -45,56 +45,56 @@
           if (!searchForm.classList.contains('d-none')) {
             searchForm.querySelector('input[type="search"]')?.focus();
           }
+        });
 
-            // Auto-collapse sidebar on small screens for better UX
-            function updateSidebarForViewport() {
-              const body = document.body;
-              if (window.innerWidth < 768) {
-                body.classList.add('sidebar-collapse');
-              } else {
-                body.classList.remove('sidebar-collapse');
-              }
+        // Auto-collapse sidebar on small screens for better UX
+        function updateSidebarForViewport() {
+          const body = document.body;
+          if (window.innerWidth < 768) {
+            body.classList.add('sidebar-collapse');
+          } else {
+            body.classList.remove('sidebar-collapse');
+          }
+        }
+
+        updateSidebarForViewport();
+        window.addEventListener('resize', function () {
+          updateSidebarForViewport();
+        });
+
+        // Ensure sidebar not collapsed on larger screens (override persisted AdminLTE state)
+        if (window.innerWidth >= 768) {
+          document.body.classList.remove('sidebar-collapse');
+        }
+
+        // Sidebar toggle: mobile overlay behavior
+        const sidebarToggle = document.querySelector('[data-lte-toggle="sidebar"]');
+        const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+        if (sidebarToggle) {
+          sidebarToggle.addEventListener('click', function (e) {
+            e.preventDefault();
+            if (window.innerWidth < 768) {
+              document.body.classList.toggle('sidebar-open');
+              if (sidebarBackdrop) sidebarBackdrop.style.display = document.body.classList.contains('sidebar-open') ? 'block' : 'none';
+            } else {
+              document.body.classList.toggle('sidebar-collapse');
             }
+          });
+        }
 
-            updateSidebarForViewport();
-            window.addEventListener('resize', function () {
-              updateSidebarForViewport();
-            });
+        if (sidebarBackdrop) {
+          sidebarBackdrop.addEventListener('click', function () {
+            document.body.classList.remove('sidebar-open');
+            this.style.display = 'none';
+          });
+        }
 
-            // Ensure sidebar not collapsed on larger screens (override persisted AdminLTE state)
-            if (window.innerWidth >= 768) {
-              document.body.classList.remove('sidebar-collapse');
-            }
-
-            // Sidebar toggle: mobile overlay behavior
-            const sidebarToggle = document.querySelector('[data-lte-toggle="sidebar"]');
-            const sidebarBackdrop = document.getElementById('sidebarBackdrop');
-            if (sidebarToggle) {
-              sidebarToggle.addEventListener('click', function (e) {
-                e.preventDefault();
-                if (window.innerWidth < 768) {
-                  document.body.classList.toggle('sidebar-open');
-                  if (sidebarBackdrop) sidebarBackdrop.style.display = document.body.classList.contains('sidebar-open') ? 'block' : 'none';
-                } else {
-                  document.body.classList.toggle('sidebar-collapse');
-                }
-              });
-            }
-
-            if (sidebarBackdrop) {
-              sidebarBackdrop.addEventListener('click', function () {
-                document.body.classList.remove('sidebar-open');
-                this.style.display = 'none';
-              });
-            }
-
-            // Close mobile sidebar on larger resize
-            window.addEventListener('resize', function () {
-              if (window.innerWidth >= 768) {
-                document.body.classList.remove('sidebar-open');
-                if (sidebarBackdrop) sidebarBackdrop.style.display = 'none';
-              }
-            });
+        // Close mobile sidebar on larger resize
+        window.addEventListener('resize', function () {
+          if (window.innerWidth >= 768) {
+            document.body.classList.remove('sidebar-open');
+            if (sidebarBackdrop) sidebarBackdrop.style.display = 'none';
+          }
         });
       }
 

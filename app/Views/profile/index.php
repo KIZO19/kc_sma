@@ -17,6 +17,10 @@
 
       <section class="content">
         <div class="container-fluid">
+          <?php if (!empty($_SESSION['access_error'])): ?>
+            <div class="alert alert-warning"><?= htmlspecialchars($_SESSION['access_error']) ?></div>
+            <?php unset($_SESSION['access_error']); ?>
+          <?php endif; ?>
           <?php if (!empty($success)): ?>
             <div class="alert alert-success">Profil mis à jour avec succès.</div>
           <?php endif; ?>

@@ -315,7 +315,7 @@ $user = $user ?? ['nom_complet' => 'Utilisateur'];
 
             <?php if (!empty($modules) && is_array($modules)): ?>
               <li class="nav-item has-treeview">
-                <a href="#" class="nav-link">
+                <a href="#" class="nav-link" data-lte-toggle="treeview">
                   <i class="nav-icon bi bi-grid-1x2"></i>
                   <p>Modules <i class="bi bi-caret-down-fill float-end"></i></p>
                 </a>
@@ -335,7 +335,7 @@ $user = $user ?? ['nom_complet' => 'Utilisateur'];
             <?php if (($role ?? '') === 'super_admin'): ?>
               <li class="nav-header">ADMINISTRATION</li>
               <li class="nav-item has-treeview">
-                <a href="#" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/ecoles') !== false) ? 'active' : '' ?>">
+                <a href="#" class="nav-link <?= (strpos($_SERVER['REQUEST_URI'] ?? '', '/ecoles') !== false) ? 'active' : '' ?>" data-lte-toggle="treeview">
                   <i class="nav-icon bi bi-building"></i>
                   <p>Gestion des écoles <i class="bi bi-caret-down-fill float-end"></i></p>
                 </a>
