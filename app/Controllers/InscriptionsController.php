@@ -51,7 +51,8 @@ class InscriptionsController extends Controller
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
-        $parents = ParentModel::getAll();
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        $parents = $ecoleId > 0 ? ParentModel::getAllBySchool($ecoleId) : ParentModel::getAll();
         $oldInput = $_SESSION['inscriptions_old'] ?? [];
         unset($_SESSION['inscriptions_old']);
 
@@ -78,7 +79,11 @@ class InscriptionsController extends Controller
             $genre = trim($_POST['genre'] ?? '');
             $dateNaissance = trim($_POST['date_naissance'] ?? '');
             $matricule = trim($_POST['matricule'] ?? '');
+            $parentChoice = trim($_POST['parent_choice'] ?? 'existing');
             $parentId = (int) ($_POST['parent_id'] ?? 0);
+            $newParentName = trim($_POST['new_parent_nom_responsable'] ?? '');
+            $newParentTelephone = trim($_POST['new_parent_telephone'] ?? '');
+            $newParentEmail = trim($_POST['new_parent_email'] ?? '');
 
             $errors = [];
             if ($nom === '') {
@@ -98,8 +103,35 @@ class InscriptionsController extends Controller
                 $matricule = $this->generateMatricule($nom . ' ' . $postnom);
             }
 
+            if ($parentChoice === 'new') {
+                if ($newParentName === '') {
+                    $errors[] = 'Le nom du parent/tuteur est requis lorsque vous créez un nouveau parent.';
+                }
+                if ($newParentTelephone === '') {
+                    $errors[] = 'Le téléphone du parent/tuteur est requis lorsque vous créez un nouveau parent.';
+                }
+            }
+
             if (empty($errors)) {
-                Eleve::create([
+                if ($parentChoice === 'new' && $newParentName !== '' && $newParentTelephone !== '') {
+                    $newParent = ParentModel::create([
+                        'ecole_id' => $user['ecole_id'] ?? null,
+                        'nom_responsable' => $newParentName,
+                        'telephone' => $newParentTelephone,
+                        'email' => $newParentEmail !== '' ? $newParentEmail : null,
+                        'mot_de_passe' => password_hash(bin2hex(random_bytes(6)), PASSWORD_DEFAULT),
+                    ]);
+
+                    if (!empty($newParent['id'])) {
+                        $parentId = (int) $newParent['id'];
+                    }
+                }
+
+                if ($parentChoice !== 'existing') {
+                    $parentId = $parentId > 0 ? $parentId : 0;
+                }
+
+                $newStudent = Eleve::create([
                     'matricule' => $matricule,
                     'nom' => $nom,
                     'postnom' => $postnom,
@@ -120,6 +152,32 @@ class InscriptionsController extends Controller
                     'num_permanent' => trim($_POST['num_permanent'] ?? null),
                     'statut_eleve' => 'inactif',
                 ]);
+
+                // Handle optional student photo upload (saved to public/uploads/avatars/eleve_{id}.{ext})
+                if ($newStudent && !empty($_FILES['photo']['name']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
+                    $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png'];
+                    $tmp = $_FILES['photo']['tmp_name'];
+                    $mime = mime_content_type($tmp);
+                    $maxBytes = 250 * 1024;
+                    if (in_array($mime, array_keys($allowed), true) && empty($_FILES['photo']['size']) === false ? $_FILES['photo']['size'] <= $maxBytes : true) {
+                        $ext = $allowed[$mime];
+                        $projectRoot = dirname(__DIR__, 2);
+                        $targetDir = $projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'avatars';
+                        if (!is_dir($targetDir)) @mkdir($targetDir, 0755, true);
+                        $fileName = 'eleve_' . (int) $newStudent['id'] . '.' . $ext;
+                        $targetPath = $targetDir . DIRECTORY_SEPARATOR . $fileName;
+                        if (move_uploaded_file($tmp, $targetPath)) {
+                            // remove other extensions
+                            foreach (['jpg','png'] as $e) {
+                                if ($e === $ext) continue;
+                                $other = $targetDir . DIRECTORY_SEPARATOR . 'eleve_' . (int) $newStudent['id'] . '.' . $e;
+                                if (file_exists($other)) @unlink($other);
+                            }
+                            Eleve::update((int) $newStudent['id'], ['photo' => '/uploads/avatars/' . $fileName]);
+                        }
+                    }
+                }
+
                 unset($_SESSION['inscriptions_old']);
                 $_SESSION['inscriptions_success'] = 'L’élève a été enregistré. La validation doit être effectuée par le secrétaire.';
                 $this->redirect('/inscriptions');
@@ -209,7 +267,7 @@ class InscriptionsController extends Controller
             }
 
             if (empty($errors)) {
-                Eleve::update($eleveId, [
+                $updateData = [
                     'matricule' => $matricule,
                     'nom' => $nom,
                     'postnom' => $postnom,
@@ -228,7 +286,33 @@ class InscriptionsController extends Controller
                     'groupement' => trim($_POST['groupement'] ?? null),
                     'village' => trim($_POST['village'] ?? null),
                     'num_permanent' => trim($_POST['num_permanent'] ?? null),
-                ]);
+                ];
+
+                // Optional photo upload during edit
+                if (!empty($_FILES['photo']['name']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
+                    $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png'];
+                    $tmp = $_FILES['photo']['tmp_name'];
+                    $mime = mime_content_type($tmp);
+                    $maxBytes = 250 * 1024;
+                    if (in_array($mime, array_keys($allowed), true) && (empty($_FILES['photo']['size']) === false ? $_FILES['photo']['size'] <= $maxBytes : true)) {
+                        $ext = $allowed[$mime];
+                        $projectRoot = dirname(__DIR__, 2);
+                        $targetDir = $projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'avatars';
+                        if (!is_dir($targetDir)) @mkdir($targetDir, 0755, true);
+                        $fileName = 'eleve_' . $eleveId . '.' . $ext;
+                        $targetPath = $targetDir . DIRECTORY_SEPARATOR . $fileName;
+                        if (move_uploaded_file($tmp, $targetPath)) {
+                            foreach (['jpg','png'] as $e) {
+                                if ($e === $ext) continue;
+                                $other = $targetDir . DIRECTORY_SEPARATOR . 'eleve_' . $eleveId . '.' . $e;
+                                if (file_exists($other)) @unlink($other);
+                            }
+                            $updateData['photo'] = '/uploads/avatars/' . $fileName;
+                        }
+                    }
+                }
+
+                Eleve::update($eleveId, $updateData);
                 unset($_SESSION['inscriptions_old']);
                 $_SESSION['inscriptions_success'] = 'Les informations de l’inscription ont été mises à jour.';
                 $this->redirect('/inscriptions');
@@ -240,6 +324,73 @@ class InscriptionsController extends Controller
         }
 
         $this->redirect('/inscriptions');
+    }
+
+    // AJAX endpoints for cascading location selects
+    public function provinces(): void
+    {
+        header('Content-Type: application/json');
+        $provinces = [
+            'Kinshasa', 'Nord-Kivu', 'Sud-Kivu', 'Haut-Katanga', 'Kongo Central', 'Équateur', 'Maniema', 'Ituri'
+        ];
+        echo json_encode(array_values($provinces));
+        exit;
+    }
+
+    public function territoires(): void
+    {
+        header('Content-Type: application/json');
+        $province = trim($_GET['province'] ?? '');
+        $map = [
+            'Kinshasa' => ['Funa','Kalamu','Kasa-Vubu','Lingwala'],
+            'Nord-Kivu' => ['Goma','Beni','Masisi','Rutshuru'],
+            'Sud-Kivu' => ['Uvira','Bukavu','Fizi'],
+            'Haut-Katanga' => ['Lubumbashi','Kambove','Likasi'],
+            'Kongo Central' => ['Matadi','Boma','Kimpese'],
+        ];
+        $list = $map[$province] ?? [];
+        echo json_encode(array_values($list));
+        exit;
+    }
+
+    public function secteurs(): void
+    {
+        header('Content-Type: application/json');
+        $territoire = trim($_GET['territoire'] ?? '');
+        $map = [
+            'Goma' => ['Sector 1','Sector 2'],
+            'Beni' => ['Beni-Centre','Mabalako'],
+            'Lubumbashi' => ['Kawama','Katanga-Centre']
+        ];
+        $list = $map[$territoire] ?? [];
+        echo json_encode(array_values($list));
+        exit;
+    }
+
+    public function groupements(): void
+    {
+        header('Content-Type: application/json');
+        $secteur = trim($_GET['secteur'] ?? '');
+        $map = [
+            'Sector 1' => ['Group A','Group B'],
+            'Beni-Centre' => ['Group X','Group Y']
+        ];
+        $list = $map[$secteur] ?? [];
+        echo json_encode(array_values($list));
+        exit;
+    }
+
+    public function villages(): void
+    {
+        header('Content-Type: application/json');
+        $groupement = trim($_GET['groupement'] ?? '');
+        $map = [
+            'Group A' => ['Village 1','Village 2'],
+            'Group X' => ['Village X1','Village X2']
+        ];
+        $list = $map[$groupement] ?? [];
+        echo json_encode(array_values($list));
+        exit;
     }
 
     public function approve(): void

@@ -51,7 +51,7 @@ $student = $student ?? [];
                   <h3 class="card-title">Modifier l’inscription de <?= htmlspecialchars($student['nom'] . ' ' . ($student['prenom'] ?? '')) ?></h3>
                 </div>
                 <div class="card-body">
-                  <form method="post" action="<?= BASE_URL ?>/inscriptions/update" autocomplete="off">
+                  <form method="post" action="<?= BASE_URL ?>/inscriptions/update" autocomplete="off" enctype="multipart/form-data">
                     <input type="hidden" name="eleve_id" value="<?= (int) $student['id'] ?>">
                     <div class="row">
                       <div class="col-md-6 mb-3">
@@ -116,27 +116,37 @@ $student = $student ?? [];
                     <div class="row">
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Province d’origine</label>
-                        <input type="text" name="province_origine" class="form-control" value="<?= htmlspecialchars($oldInput['province_origine'] ?? $student['province_origine']) ?>">
+                        <select name="province_origine" id="province-select" class="form-select">
+                          <option value="">Sélectionnez une province</option>
+                        </select>
                       </div>
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Territoire</label>
-                        <input type="text" name="territoire" class="form-control" value="<?= htmlspecialchars($oldInput['territoire'] ?? $student['territoire']) ?>">
+                        <select name="territoire" id="territoire-select" class="form-select">
+                          <option value="">Sélectionnez un territoire</option>
+                        </select>
                       </div>
                     </div>
                     <div class="row">
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Secteur</label>
-                        <input type="text" name="secteur" class="form-control" value="<?= htmlspecialchars($oldInput['secteur'] ?? $student['secteur']) ?>">
+                        <select name="secteur" id="secteur-select" class="form-select">
+                          <option value="">Sélectionnez un secteur</option>
+                        </select>
                       </div>
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Groupement</label>
-                        <input type="text" name="groupement" class="form-control" value="<?= htmlspecialchars($oldInput['groupement'] ?? $student['groupement']) ?>">
+                        <select name="groupement" id="groupement-select" class="form-select">
+                          <option value="">Sélectionnez un groupement</option>
+                        </select>
                       </div>
                     </div>
                     <div class="row">
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Village</label>
-                        <input type="text" name="village" class="form-control" value="<?= htmlspecialchars($oldInput['village'] ?? $student['village']) ?>">
+                        <select name="village" id="village-select" class="form-select">
+                          <option value="">Sélectionnez un village</option>
+                        </select>
                       </div>
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Numéro permanent</label>
@@ -151,6 +161,13 @@ $student = $student ?? [];
                       <label class="form-label">Adresse</label>
                       <textarea name="adresse" class="form-control" rows="4"><?= htmlspecialchars($oldInput['adresse'] ?? $student['adresse']) ?></textarea>
                     </div>
+                    <div class="mb-3">
+                      <label class="form-label">Photo de l'élève (PNG/JPEG, ≤250KB)</label>
+                      <input type="file" name="photo" accept="image/png,image/jpeg" class="form-control">
+                      <?php if (!empty($student['photo'])): ?>
+                        <div class="mt-2"><img src="<?= htmlspecialchars($student['photo']) ?>" alt="Photo élève" width="96" height="96" style="object-fit:cover;border-radius:6px"></div>
+                      <?php endif; ?>
+                    </div>
                     <div class="d-flex justify-content-between">
                       <a href="<?= BASE_URL ?>/inscriptions" class="btn btn-secondary">Retour aux dossiers</a>
                       <button type="submit" class="btn btn-primary">Mettre à jour</button>
@@ -162,4 +179,85 @@ $student = $student ?? [];
           </div>
         </div>
       </section>
+      <script>
+        (function () {
+          const baseUrl = '<?= BASE_URL ?>';
+          const provinceSelect = document.getElementById('province-select');
+          const territoireSelect = document.getElementById('territoire-select');
+          const secteurSelect = document.getElementById('secteur-select');
+          const groupementSelect = document.getElementById('groupement-select');
+          const villageSelect = document.getElementById('village-select');
+
+          function populate(select, items, selected) {
+            select.innerHTML = '<option value="">Sélectionnez</option>';
+            items.forEach(function (it) {
+              const opt = document.createElement('option');
+              opt.value = it;
+              opt.textContent = it;
+              if (selected && selected === it) opt.selected = true;
+              select.appendChild(opt);
+            });
+          }
+
+          function fetchJson(url) {
+            return fetch(url, { credentials: 'same-origin' }).then(function (r) { return r.json(); });
+          }
+
+          const initialProvince = '<?= htmlspecialchars($oldInput['province_origine'] ?? $student['province_origine'] ?? '') ?>';
+          const initialTerritoire = '<?= htmlspecialchars($oldInput['territoire'] ?? $student['territoire'] ?? '') ?>';
+          const initialSecteur = '<?= htmlspecialchars($oldInput['secteur'] ?? $student['secteur'] ?? '') ?>';
+          const initialGroupement = '<?= htmlspecialchars($oldInput['groupement'] ?? $student['groupement'] ?? '') ?>';
+          const initialVillage = '<?= htmlspecialchars($oldInput['village'] ?? $student['village'] ?? '') ?>';
+
+          fetchJson(baseUrl + '/inscriptions/provinces').then(function (data) {
+            populate(provinceSelect, data, initialProvince || null);
+            if (initialProvince) provinceSelect.dispatchEvent(new Event('change'));
+          }).catch(()=>{});
+
+          provinceSelect && provinceSelect.addEventListener('change', function () {
+            const val = this.value;
+            populate(territoireSelect, [], null);
+            populate(secteurSelect, [], null);
+            populate(groupementSelect, [], null);
+            populate(villageSelect, [], null);
+            if (!val) return;
+            fetchJson(baseUrl + '/inscriptions/territoires?province=' + encodeURIComponent(val)).then(function (data) {
+              populate(territoireSelect, data, initialTerritoire || null);
+              if (initialTerritoire) territoireSelect.dispatchEvent(new Event('change'));
+            }).catch(()=>{});
+          });
+
+          territoireSelect && territoireSelect.addEventListener('change', function () {
+            const val = this.value;
+            populate(secteurSelect, [], null);
+            populate(groupementSelect, [], null);
+            populate(villageSelect, [], null);
+            if (!val) return;
+            fetchJson(baseUrl + '/inscriptions/secteurs?territoire=' + encodeURIComponent(val)).then(function (data) {
+              populate(secteurSelect, data, initialSecteur || null);
+              if (initialSecteur) secteurSelect.dispatchEvent(new Event('change'));
+            }).catch(()=>{});
+          });
+
+          secteurSelect && secteurSelect.addEventListener('change', function () {
+            const val = this.value;
+            populate(groupementSelect, [], null);
+            populate(villageSelect, [], null);
+            if (!val) return;
+            fetchJson(baseUrl + '/inscriptions/groupements?secteur=' + encodeURIComponent(val)).then(function (data) {
+              populate(groupementSelect, data, initialGroupement || null);
+              if (initialGroupement) groupementSelect.dispatchEvent(new Event('change'));
+            }).catch(()=>{});
+          });
+
+          groupementSelect && groupementSelect.addEventListener('change', function () {
+            const val = this.value;
+            populate(villageSelect, [], null);
+            if (!val) return;
+            fetchJson(baseUrl + '/inscriptions/villages?groupement=' + encodeURIComponent(val)).then(function (data) {
+              populate(villageSelect, data, initialVillage || null);
+            }).catch(()=>{});
+          });
+        })();
+      </script>
 <?php require __DIR__ . '/../partials/app_footer.php'; ?>

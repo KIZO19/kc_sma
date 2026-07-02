@@ -50,7 +50,7 @@ $oldInput = $oldInput ?? [];
                   <h3 class="card-title">Formulaire d’inscription</h3>
                 </div>
                 <div class="card-body">
-                  <form method="post" action="<?= BASE_URL ?>/inscriptions/submit" autocomplete="off">
+                  <form method="post" action="<?= BASE_URL ?>/inscriptions/submit" autocomplete="off" enctype="multipart/form-data">
                     <div class="row">
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Nom</label>
@@ -100,6 +100,30 @@ $oldInput = $oldInput ?? [];
                       </select>
                       <small class="form-text text-muted">Sélectionnez un parent existant pour lier l’élève.</small>
                     </div>
+                    <div class="mb-4 p-3 bg-light rounded border">
+                      <h5 class="mb-3">Créer un nouveau parent/tuteur</h5>
+                      <p class="text-muted small">Remplissez ces champs uniquement si le parent n’existe pas encore.</p>
+                      <div class="row">
+                        <div class="col-md-6 mb-3">
+                          <label class="form-label">Nom du parent/tuteur</label>
+                          <input type="text" name="new_parent_nom_responsable" class="form-control" value="<?= htmlspecialchars($oldInput['new_parent_nom_responsable'] ?? '') ?>">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                          <label class="form-label">Téléphone du parent/tuteur</label>
+                          <input type="text" name="new_parent_telephone" class="form-control" value="<?= htmlspecialchars($oldInput['new_parent_telephone'] ?? '') ?>">
+                        </div>
+                      </div>
+                      <div class="row">
+                        <div class="col-md-6 mb-3">
+                          <label class="form-label">Email du parent/tuteur</label>
+                          <input type="email" name="new_parent_email" class="form-control" value="<?= htmlspecialchars($oldInput['new_parent_email'] ?? '') ?>">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                          <label class="form-label">Note</label>
+                          <textarea class="form-control" rows="3" readonly>Remplissez ces champs uniquement si le parent n’existe pas dans la liste ci-dessus.</textarea>
+                        </div>
+                      </div>
+                    </div>
                     <div class="row">
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Nom du père</label>
@@ -113,27 +137,37 @@ $oldInput = $oldInput ?? [];
                     <div class="row">
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Province d’origine</label>
-                        <input type="text" name="province_origine" class="form-control" value="<?= htmlspecialchars($oldInput['province_origine'] ?? '') ?>">
+                        <select name="province_origine" id="province-select" class="form-select">
+                          <option value="">Sélectionnez une province</option>
+                        </select>
                       </div>
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Territoire</label>
-                        <input type="text" name="territoire" class="form-control" value="<?= htmlspecialchars($oldInput['territoire'] ?? '') ?>">
+                        <select name="territoire" id="territoire-select" class="form-select">
+                          <option value="">Sélectionnez un territoire</option>
+                        </select>
                       </div>
                     </div>
                     <div class="row">
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Secteur</label>
-                        <input type="text" name="secteur" class="form-control" value="<?= htmlspecialchars($oldInput['secteur'] ?? '') ?>">
+                        <select name="secteur" id="secteur-select" class="form-select">
+                          <option value="">Sélectionnez un secteur</option>
+                        </select>
                       </div>
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Groupement</label>
-                        <input type="text" name="groupement" class="form-control" value="<?= htmlspecialchars($oldInput['groupement'] ?? '') ?>">
+                        <select name="groupement" id="groupement-select" class="form-select">
+                          <option value="">Sélectionnez un groupement</option>
+                        </select>
                       </div>
                     </div>
                     <div class="row">
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Village</label>
-                        <input type="text" name="village" class="form-control" value="<?= htmlspecialchars($oldInput['village'] ?? '') ?>">
+                        <select name="village" id="village-select" class="form-select">
+                          <option value="">Sélectionnez un village</option>
+                        </select>
                       </div>
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Numéro permanent</label>
@@ -148,6 +182,11 @@ $oldInput = $oldInput ?? [];
                       <label class="form-label">Adresse</label>
                       <textarea name="adresse" class="form-control" rows="4"><?= htmlspecialchars($oldInput['adresse'] ?? '') ?></textarea>
                     </div>
+                    <div class="mb-3">
+                      <label class="form-label">Photo de l'élève (PNG/JPEG, ≤250KB)</label>
+                      <input type="file" name="photo" accept="image/png,image/jpeg" class="form-control">
+                      <small class="form-text text-muted">Optionnel — téléversez une photo de l'élève.</small>
+                    </div>
                     <div class="d-flex justify-content-between">
                       <a href="<?= BASE_URL ?>/inscriptions" class="btn btn-secondary">Retour aux dossiers</a>
                       <button type="submit" class="btn btn-success">Enregistrer</button>
@@ -159,4 +198,113 @@ $oldInput = $oldInput ?? [];
           </div>
         </div>
       </section>
+      <script>
+        document.addEventListener('DOMContentLoaded', function () {
+          const existingRadio = document.getElementById('parent-choice-existing');
+          const newRadio = document.getElementById('parent-choice-new');
+          const existingSection = document.querySelector('.parent-choice-existing-section');
+          const newSection = document.querySelector('.parent-choice-new-section');
+
+          function toggleParentSections() {
+            const useNew = newRadio && newRadio.checked;
+            if (existingSection) {
+              existingSection.classList.toggle('d-none', useNew);
+            }
+            if (newSection) {
+              newSection.classList.toggle('d-none', !useNew);
+            }
+          }
+
+          if (existingRadio) {
+            existingRadio.addEventListener('change', toggleParentSections);
+          }
+          if (newRadio) {
+            newRadio.addEventListener('change', toggleParentSections);
+          }
+
+          toggleParentSections();
+        });
+      </script>
+      <script>
+        (function () {
+          const baseUrl = '<?= BASE_URL ?>';
+          const provinceSelect = document.getElementById('province-select');
+          const territoireSelect = document.getElementById('territoire-select');
+          const secteurSelect = document.getElementById('secteur-select');
+          const groupementSelect = document.getElementById('groupement-select');
+          const villageSelect = document.getElementById('village-select');
+
+          function populate(select, items, selected) {
+            select.innerHTML = '<option value="">Sélectionnez</option>';
+            items.forEach(function (it) {
+              const opt = document.createElement('option');
+              opt.value = it;
+              opt.textContent = it;
+              if (selected && selected === it) opt.selected = true;
+              select.appendChild(opt);
+            });
+          }
+
+          function fetchJson(url) {
+            return fetch(url, { credentials: 'same-origin' }).then(function (r) { return r.json(); });
+          }
+
+          // Load provinces
+          fetchJson(baseUrl + '/inscriptions/provinces').then(function (data) {
+            const sel = '<?= htmlspecialchars($oldInput['province_origine'] ?? '') ?>';
+            populate(provinceSelect, data, sel || null);
+            if (sel) provinceSelect.dispatchEvent(new Event('change'));
+          }).catch(()=>{});
+
+          provinceSelect && provinceSelect.addEventListener('change', function () {
+            const val = this.value;
+            // clear downstream
+            populate(territoireSelect, [], null);
+            populate(secteurSelect, [], null);
+            populate(groupementSelect, [], null);
+            populate(villageSelect, [], null);
+            if (!val) return;
+            fetchJson(baseUrl + '/inscriptions/territoires?province=' + encodeURIComponent(val)).then(function (data) {
+              const sel = '<?= htmlspecialchars($oldInput['territoire'] ?? '') ?>';
+              populate(territoireSelect, data, sel || null);
+              if (sel) territoireSelect.dispatchEvent(new Event('change'));
+            }).catch(()=>{});
+          });
+
+          territoireSelect && territoireSelect.addEventListener('change', function () {
+            const val = this.value;
+            populate(secteurSelect, [], null);
+            populate(groupementSelect, [], null);
+            populate(villageSelect, [], null);
+            if (!val) return;
+            fetchJson(baseUrl + '/inscriptions/secteurs?territoire=' + encodeURIComponent(val)).then(function (data) {
+              const sel = '<?= htmlspecialchars($oldInput['secteur'] ?? '') ?>';
+              populate(secteurSelect, data, sel || null);
+              if (sel) secteurSelect.dispatchEvent(new Event('change'));
+            }).catch(()=>{});
+          });
+
+          secteurSelect && secteurSelect.addEventListener('change', function () {
+            const val = this.value;
+            populate(groupementSelect, [], null);
+            populate(villageSelect, [], null);
+            if (!val) return;
+            fetchJson(baseUrl + '/inscriptions/groupements?secteur=' + encodeURIComponent(val)).then(function (data) {
+              const sel = '<?= htmlspecialchars($oldInput['groupement'] ?? '') ?>';
+              populate(groupementSelect, data, sel || null);
+              if (sel) groupementSelect.dispatchEvent(new Event('change'));
+            }).catch(()=>{});
+          });
+
+          groupementSelect && groupementSelect.addEventListener('change', function () {
+            const val = this.value;
+            populate(villageSelect, [], null);
+            if (!val) return;
+            fetchJson(baseUrl + '/inscriptions/villages?groupement=' + encodeURIComponent(val)).then(function (data) {
+              const sel = '<?= htmlspecialchars($oldInput['village'] ?? '') ?>';
+              populate(villageSelect, data, sel || null);
+            }).catch(()=>{});
+          });
+        })();
+      </script>
 <?php require __DIR__ . '/../partials/app_footer.php'; ?>

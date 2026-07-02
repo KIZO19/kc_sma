@@ -208,6 +208,18 @@
           }
         });
       }
+
+      // Student photo input on inscriptions page
+      const photoInput = document.querySelector('input[name="photo"]');
+      if (photoInput) {
+        photoInput.addEventListener('change', function () {
+          const res = validateImageFile(this);
+          if (!res.ok) {
+            alert(res.error);
+            this.value = '';
+          }
+        });
+      }
     });
   </script>
   <?= $pageScripts ?? '' ?>
