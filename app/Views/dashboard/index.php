@@ -18,75 +18,63 @@
       <section class="content">
         <div class="container-fluid">
           <div class="row">
-            <div class="col-lg-3 col-6">
-              <div class="small-box bg-primary text-white">
-                <div class="inner">
-                  <h3>150</h3>
-                  <p>New Orders</p>
+            <?php foreach ($dashboardData['stats'] ?? [] as $stat): ?>
+              <div class="col-lg-3 col-md-6 col-sm-6 mb-4">
+                <div class="small-box <?= htmlspecialchars($stat['bg'] ?? 'bg-primary') ?> text-white">
+                  <div class="inner">
+                    <h3><?= htmlspecialchars($stat['value'] ?? '0') ?></h3>
+                    <p><?= htmlspecialchars($stat['title'] ?? '') ?></p>
+                  </div>
+                  <div class="icon"><i class="bi <?= htmlspecialchars($stat['icon'] ?? 'bi-bar-chart-line') ?>"></i></div>
+                  <a href="#" class="small-box-footer"><?= htmlspecialchars($stat['hint'] ?? 'Détails') ?> <i class="bi bi-arrow-right"></i></a>
                 </div>
-                <div class="icon"><i class="bi bi-cart4"></i></div>
-                <a href="#" class="small-box-footer">More info <i class="bi bi-arrow-right"></i></a>
               </div>
-            </div>
-            <div class="col-lg-3 col-6">
-              <div class="small-box bg-success text-white">
-                <div class="inner">
-                  <h3>53<sup style="font-size: 0.6rem">%</sup></h3>
-                  <p>Bounce Rate</p>
-                </div>
-                <div class="icon"><i class="bi bi-graph-up-arrow"></i></div>
-                <a href="#" class="small-box-footer">More info <i class="bi bi-arrow-right"></i></a>
-              </div>
-            </div>
-            <div class="col-lg-3 col-6">
-              <div class="small-box bg-warning text-white">
-                <div class="inner">
-                  <h3>44</h3>
-                  <p>User Registrations</p>
-                </div>
-                <div class="icon"><i class="bi bi-person-plus"></i></div>
-                <a href="#" class="small-box-footer">More info <i class="bi bi-arrow-right"></i></a>
-              </div>
-            </div>
-            <div class="col-lg-3 col-6">
-              <div class="small-box bg-danger text-white">
-                <div class="inner">
-                  <h3>65</h3>
-                  <p>Unique Visitors</p>
-                </div>
-                <div class="icon"><i class="bi bi-people-fill"></i></div>
-                <a href="#" class="small-box-footer">More info <i class="bi bi-arrow-right"></i></a>
-              </div>
-            </div>
+            <?php endforeach; ?>
           </div>
 
           <div class="row">
             <div class="col-lg-8">
               <div class="card card-primary card-outline">
                 <div class="card-header">
-                  <h3 class="card-title">Sales Value</h3>
+                  <h3 class="card-title"><?= htmlspecialchars($dashboardData['chart']['title'] ?? 'Performance scolaire') ?></h3>
                   <div class="card-tools">
                       <button type="button" class="btn btn-tool" data-lte-toggle="card-collapse"><i class="bi bi-dash"></i></button>
                   </div>
                 </div>
                 <div class="card-body">
-                  <canvas id="dashboardChart" height="140"></canvas>
+                  <canvas id="dashboardChart" height="230"></canvas>
                 </div>
               </div>
             </div>
             <div class="col-lg-4">
-              <div class="card card-primary card-outline">
-                <div class="card-header">
-                  <h3 class="card-title">Sales Value</h3>
-                  <div class="card-tools">
-                  <button type="button" class="btn btn-tool" data-lte-toggle="card-collapse"><i class="bi bi-dash"></i></button>
-                  </div>
+              <div class="card card-outline shadow-sm h-100">
+                <div class="card-header bg-info">
+                  <h3 class="card-title text-white">Aperçu rapide</h3>
                 </div>
-                <div class="card-body p-0">
-                  <div class="position-relative overflow-hidden" style="height: 100%; min-height: 320px; background:#007bff; border-bottom-left-radius:0.9rem; border-bottom-right-radius:0.9rem;">
-                    <div class="position-absolute top-50 start-50 translate-middle text-white text-center">
-                      <i class="bi bi-globe2" style="font-size:3rem;"></i>
-                      <p class="mt-3 mb-0">Carte du monde</p>
+                <div class="card-body">
+                  <div class="mb-4">
+                    <h5 class="mb-1">Vue synthétique</h5>
+                    <p class="text-muted">Suivi des commandes, présences et performances en temps réel.</p>
+                  </div>
+                  <div class="progress-group mb-3">
+                    <span class="progress-text">Taux de présence</span>
+                    <span class="float-right"><b>92%</b></span>
+                    <div class="progress progress-sm">
+                      <div class="progress-bar bg-success" style="width:92%"></div>
+                    </div>
+                  </div>
+                  <div class="progress-group mb-3">
+                    <span class="progress-text">Satisfaction</span>
+                    <span class="float-right"><b>87%</b></span>
+                    <div class="progress progress-sm">
+                      <div class="progress-bar bg-warning" style="width:87%"></div>
+                    </div>
+                  </div>
+                  <div class="progress-group">
+                    <span class="progress-text">Paiements traités</span>
+                    <span class="float-right"><b>74%</b></span>
+                    <div class="progress progress-sm">
+                      <div class="progress-bar bg-primary" style="width:74%"></div>
                     </div>
                   </div>
                 </div>
@@ -97,14 +85,14 @@
           <div class="row">
             <?php foreach ($modules as $module): ?>
               <div class="col-lg-3 col-md-4 col-sm-6 mb-4">
-                <div class="card card-outline shadow-sm h-100">
+                <div class="card card-outline shadow-sm h-100 border-0">
                   <div class="card-body text-center">
                     <div class="mb-3">
                       <i class="bi <?= htmlspecialchars($module['icon']) ?> text-primary" style="font-size:2.2rem;"></i>
                     </div>
                     <h5 class="card-title mb-1"><?= htmlspecialchars($module['name']) ?></h5>
                     <p class="text-muted small">Accédez à <?= htmlspecialchars($module['name']) ?>.</p>
-                    <a href="<?= BASE_URL . $module['path'] ?>" class="btn btn-sm btn-outline-primary">Ouvrir</a>
+                    <a href="<?= BASE_URL . $module['path'] ?>" class="btn btn-sm btn-primary rounded-pill">Ouvrir</a>
                   </div>
                 </div>
               </div>
@@ -122,14 +110,10 @@
         data: {
           labels: <?= json_encode($dashboardData['chart']['labels'] ?? []) ?>,
           datasets: [{
-            label: 'Sales Value',
+            label: <?= json_encode($dashboardData['chart']['label'] ?? 'Indicateur scolaire') ?>,
             data: <?= json_encode($dashboardData['chart']['values'] ?? []) ?>,
-            borderColor: '#0d6efd',
-            backgroundColor: 'rgba(13, 110, 253, 0.15)',
-            fill: true,
-            tension: 0.35,
-            pointRadius: 4,
-            pointHoverRadius: 6,
+            borderColor: <?= json_encode($dashboardData['chart']['borderColor'] ?? '#0d6efd') ?>,
+            backgroundColor: <?= json_encode($dashboardData['chart']['backgroundColor'] ?? 'rgba(13, 110, 253, 0.15)') ?>,
           }]
         },
         options: {

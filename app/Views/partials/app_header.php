@@ -103,6 +103,12 @@
       background-color: var(--sidebar-active);
       color: var(--sidebar-text-active);
     }
+    .app-sidebar .nav-sidebar .nav-treeview {
+      display: none;
+    }
+    .app-sidebar .nav-sidebar .menu-open > .nav-treeview {
+      display: block;
+    }
     .app-sidebar .nav-header {
       color: #a2b1c4;
       margin-top: 1rem;
@@ -143,6 +149,15 @@ $role = $role ?? '';
 $roleLabel = $roleLabel ?? '';
 $user = $user ?? ['nom_complet' => 'Utilisateur'];
 $currentPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?? '';
+$moduleMenuOpen = false;
+if (!empty($modules) && is_array($modules)) {
+    foreach ($modules as $module) {
+        if ($currentPath === BASE_URL . $module['path']) {
+            $moduleMenuOpen = true;
+            break;
+        }
+    }
+}
 ?>
   <div class="app-wrapper">
     <nav class="app-header navbar navbar-expand bg-body">
@@ -300,7 +315,7 @@ $currentPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?? '';
         </div>
 
         <nav class="mt-2">
-          <ul class="nav nav-pills nav-sidebar flex-column" data-lte-treeview="true" role="menu" data-accordion="false">
+          <ul class="nav nav-pills nav-sidebar flex-column" data-lte-treeview="true" role="menu" data-accordion="true">
             <li class="nav-header">MENU</li>
             <li class="nav-item">
               <a href="<?= BASE_URL ?>/dashboard" class="nav-link <?= $currentPath === BASE_URL . '/dashboard' ? 'active' : '' ?>">
@@ -309,9 +324,10 @@ $currentPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?? '';
               </a>
             </li>
 
-            <?php if (!empty($modules) && is_array($modules) && ($role ?? '') !== 'super_admin'): ?>
-              <li class="nav-item has-treeview">
-                <a href="#" class="nav-link" data-lte-toggle="treeview">
+            <?php if (!empty($modules) && is_array($modules)): ?>
+              <li class="nav-header">MODULES</li>
+              <li class="nav-item has-treeview <?= $moduleMenuOpen ? 'menu-open' : '' ?>">
+                <a href="#" class="nav-link <?= $moduleMenuOpen ? 'active' : '' ?>" data-lte-toggle="treeview">
                   <i class="nav-icon bi bi-grid-1x2"></i>
                   <p>Modules <i class="bi bi-caret-down-fill float-end"></i></p>
                 </a>

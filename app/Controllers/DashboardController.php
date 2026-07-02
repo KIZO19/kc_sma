@@ -109,6 +109,7 @@ class DashboardController extends Controller
         $labels = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jui'];
 
         $series = match ($role) {
+            'super_admin', 'ecole_admin' => [40, 52, 47, 56, 62, 68],
             'comptable_école' => [18, 24, 21, 29, 33, 41],
             'enseignant_école' => [78, 81, 84, 83, 88, 91],
             'eleve_ecole' => [11, 13, 12, 15, 14, 16],
@@ -117,10 +118,23 @@ class DashboardController extends Controller
             default => [12, 19, 15, 24, 18, 30],
         };
 
+        $chartConfig = match ($role) {
+            'super_admin', 'ecole_admin' => ['title' => 'Performance des écoles', 'label' => 'Évolution scolaire', 'border' => '#0d6efd', 'background' => 'rgba(13, 110, 253, 0.18)'],
+            'comptable_école' => ['title' => 'Flux financier', 'label' => 'Paiements et revenus', 'border' => '#198754', 'background' => 'rgba(25, 135, 84, 0.18)'],
+            'sec_école' => ['title' => 'Inscriptions et effectifs', 'label' => 'Nouveaux dossiers', 'border' => '#0dcaf0', 'background' => 'rgba(13, 202, 240, 0.18)'],
+            'enseignant_école' => ['title' => 'Suivi des présences', 'label' => 'Taux de présence', 'border' => '#ffc107', 'background' => 'rgba(255, 193, 7, 0.18)'],
+            'eleve_ecole' => ['title' => 'Progression des notes', 'label' => 'Moyenne trimestrielle', 'border' => '#6610f2', 'background' => 'rgba(102, 16, 242, 0.18)'],
+            'parent_ecole' => ['title' => 'Suivi des enfants', 'label' => 'Évolution scolaire', 'border' => '#6f42c1', 'background' => 'rgba(111, 66, 193, 0.18)'],
+            default => ['title' => 'Performance', 'label' => 'Indicateur', 'border' => '#0d6efd', 'background' => 'rgba(13, 110, 253, 0.18)'],
+        };
+
         return [
-            'title' => 'Évolution de la performance',
+            'title' => $chartConfig['title'],
+            'label' => $chartConfig['label'],
             'labels' => $labels,
             'values' => $series,
+            'borderColor' => $chartConfig['border'],
+            'backgroundColor' => $chartConfig['background'],
         ];
     }
 

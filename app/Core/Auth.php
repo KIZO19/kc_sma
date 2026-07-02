@@ -78,7 +78,16 @@ class Auth
     public static function requireRoles(array $roles): void
     {
         $user = self::user();
-        if (!$user || !in_array($user['role'] ?? '', $roles, true)) {
+        if (!$user) {
+            header('Location: ' . BASE_URL . self::getLandingPage(null));
+            exit;
+        }
+
+        if (($user['role'] ?? '') === 'super_admin') {
+            return;
+        }
+
+        if (!in_array($user['role'] ?? '', $roles, true)) {
             header('Location: ' . BASE_URL . self::getLandingPage($user['role'] ?? null));
             exit;
         }
