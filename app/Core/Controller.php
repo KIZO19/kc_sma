@@ -32,6 +32,7 @@ class Controller
                 ['name' => 'Parents', 'path' => '/parents', 'icon' => 'bi-people'],
                 ['name' => 'Élèves', 'path' => '/eleves', 'icon' => 'bi-person-badge'],
                 ['name' => 'Inscriptions', 'path' => '/inscriptions', 'icon' => 'bi-person-plus'],
+                ['name' => 'Options', 'path' => '/options', 'icon' => 'bi-grid-1x2'],
                 ['name' => 'Paiements', 'path' => '/paiements', 'icon' => 'bi-currency-dollar'],
                 ['name' => 'Générer mot de passe', 'path' => '/ecoles/generatePassword', 'icon' => 'bi-key'],
                 ['name' => 'Notes', 'path' => '/notes', 'icon' => 'bi-pencil-square'],
@@ -58,6 +59,7 @@ class Controller
                 ['name' => 'Parents', 'path' => '/parents', 'icon' => 'bi-people'],
                 ['name' => 'Élèves', 'path' => '/eleves', 'icon' => 'bi-person-badge'],
                 ['name' => 'Inscriptions', 'path' => '/inscriptions', 'icon' => 'bi-person-plus'],
+                ['name' => 'Options', 'path' => '/options', 'icon' => 'bi-grid-1x2'],
                 ['name' => 'Paiements', 'path' => '/paiements', 'icon' => 'bi-currency-dollar'],
                 ['name' => 'Générer mot de passe', 'path' => '/ecoles/generatePassword', 'icon' => 'bi-key'],
                 ['name' => 'Notes', 'path' => '/notes', 'icon' => 'bi-pencil-square'],
@@ -78,8 +80,10 @@ class Controller
                 ['name' => 'Bulletins parents', 'path' => '/bulletins-enfant', 'icon' => 'bi-file-earmark-text'],
                 ['name' => 'Messages', 'path' => '/messages', 'icon' => 'bi-chat-dots'],
             ],
-            'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école' => [
+            'promoteur_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école' => [
                 ['name' => 'Admissions', 'path' => '/inscriptions', 'icon' => 'bi-person-plus'],
+                ['name' => 'Classes', 'path' => '/classes', 'icon' => 'bi-houses'],
+                ['name' => 'Options', 'path' => '/options', 'icon' => 'bi-grid-1x2'],
                 ['name' => 'Élèves', 'path' => '/eleves', 'icon' => 'bi-person-badge'],
                 ['name' => 'Notes', 'path' => '/notes', 'icon' => 'bi-pencil-square'],
                 ['name' => 'Bulletins', 'path' => '/bulletins', 'icon' => 'bi-file-earmark-text'],
@@ -97,6 +101,8 @@ class Controller
             ],
             'sec_école' => [
                 ['name' => 'Inscriptions', 'path' => '/inscriptions', 'icon' => 'bi-person-plus'],
+                ['name' => 'Classes', 'path' => '/classes', 'icon' => 'bi-houses'],
+                ['name' => 'Options', 'path' => '/options', 'icon' => 'bi-grid-1x2'],
                 ['name' => 'Parents', 'path' => '/parents', 'icon' => 'bi-people'],
                 ['name' => 'Élèves', 'path' => '/eleves', 'icon' => 'bi-person-badge'],
                 ['name' => 'Notes', 'path' => '/notes', 'icon' => 'bi-pencil-square'],

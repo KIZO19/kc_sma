@@ -24,4 +24,11 @@ class Option
 
         return $option ?: null;
     }
+
+    public static function create(array $data): bool
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare('INSERT INTO options (nom_option) VALUES (:nom_option)');
+        return $stmt->execute([':nom_option' => $data['nom_option'] ?? '']);
+    }
 }
