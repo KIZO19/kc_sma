@@ -110,6 +110,14 @@ class InscriptionsController extends Controller
                     'adresse' => trim($_POST['adresse'] ?? null),
                     'date_naissance' => $dateNaissance,
                     'parent_id' => $parentId > 0 ? $parentId : null,
+                    'nom_pere' => trim($_POST['nom_pere'] ?? null),
+                    'nom_mere' => trim($_POST['nom_mere'] ?? null),
+                    'province_origine' => trim($_POST['province_origine'] ?? null),
+                    'territoire' => trim($_POST['territoire'] ?? null),
+                    'secteur' => trim($_POST['secteur'] ?? null),
+                    'groupement' => trim($_POST['groupement'] ?? null),
+                    'village' => trim($_POST['village'] ?? null),
+                    'num_permanent' => trim($_POST['num_permanent'] ?? null),
                     'statut_eleve' => 'inactif',
                 ]);
                 unset($_SESSION['inscriptions_old']);
@@ -212,6 +220,14 @@ class InscriptionsController extends Controller
                     'adresse' => trim($_POST['adresse'] ?? null),
                     'date_naissance' => $dateNaissance,
                     'parent_id' => $parentId > 0 ? $parentId : null,
+                    'nom_pere' => trim($_POST['nom_pere'] ?? null),
+                    'nom_mere' => trim($_POST['nom_mere'] ?? null),
+                    'province_origine' => trim($_POST['province_origine'] ?? null),
+                    'territoire' => trim($_POST['territoire'] ?? null),
+                    'secteur' => trim($_POST['secteur'] ?? null),
+                    'groupement' => trim($_POST['groupement'] ?? null),
+                    'village' => trim($_POST['village'] ?? null),
+                    'num_permanent' => trim($_POST['num_permanent'] ?? null),
                 ]);
                 unset($_SESSION['inscriptions_old']);
                 $_SESSION['inscriptions_success'] = 'Les informations de l’inscription ont été mises à jour.';

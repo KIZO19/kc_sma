@@ -1,4 +1,8 @@
 <?php require __DIR__ . '/../partials/app_header.php'; ?>
+<?php
+$parents = $parents ?? [];
+$oldInput = $oldInput ?? [];
+?>
       <section class="content-header">
         <div class="container-fluid">
           <div class="row mb-2">
@@ -95,6 +99,46 @@
                         <?php endforeach; ?>
                       </select>
                       <small class="form-text text-muted">Sélectionnez un parent existant pour lier l’élève.</small>
+                    </div>
+                    <div class="row">
+                      <div class="col-md-6 mb-3">
+                        <label class="form-label">Nom du père</label>
+                        <input type="text" name="nom_pere" class="form-control" value="<?= htmlspecialchars($oldInput['nom_pere'] ?? '') ?>">
+                      </div>
+                      <div class="col-md-6 mb-3">
+                        <label class="form-label">Nom de la mère</label>
+                        <input type="text" name="nom_mere" class="form-control" value="<?= htmlspecialchars($oldInput['nom_mere'] ?? '') ?>">
+                      </div>
+                    </div>
+                    <div class="row">
+                      <div class="col-md-6 mb-3">
+                        <label class="form-label">Province d’origine</label>
+                        <input type="text" name="province_origine" class="form-control" value="<?= htmlspecialchars($oldInput['province_origine'] ?? '') ?>">
+                      </div>
+                      <div class="col-md-6 mb-3">
+                        <label class="form-label">Territoire</label>
+                        <input type="text" name="territoire" class="form-control" value="<?= htmlspecialchars($oldInput['territoire'] ?? '') ?>">
+                      </div>
+                    </div>
+                    <div class="row">
+                      <div class="col-md-6 mb-3">
+                        <label class="form-label">Secteur</label>
+                        <input type="text" name="secteur" class="form-control" value="<?= htmlspecialchars($oldInput['secteur'] ?? '') ?>">
+                      </div>
+                      <div class="col-md-6 mb-3">
+                        <label class="form-label">Groupement</label>
+                        <input type="text" name="groupement" class="form-control" value="<?= htmlspecialchars($oldInput['groupement'] ?? '') ?>">
+                      </div>
+                    </div>
+                    <div class="row">
+                      <div class="col-md-6 mb-3">
+                        <label class="form-label">Village</label>
+                        <input type="text" name="village" class="form-control" value="<?= htmlspecialchars($oldInput['village'] ?? '') ?>">
+                      </div>
+                      <div class="col-md-6 mb-3">
+                        <label class="form-label">Numéro permanent</label>
+                        <input type="text" name="num_permanent" class="form-control" value="<?= htmlspecialchars($oldInput['num_permanent'] ?? '') ?>" placeholder="Numéro permanent MINEDUB">
+                      </div>
                     </div>
                     <div class="mb-3">
                       <label class="form-label">Lieu de naissance</label>
