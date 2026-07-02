@@ -18,9 +18,19 @@ class EcolesController extends Controller
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
 
-        $schools = Ecole::getAll();
+        if ($role === 'ecole_admin') {
+            $schools = [];
+            $myId = $user['ecole_id'] ?? null;
+            if ($myId) {
+                $s = Ecole::findById((int) $myId);
+                if ($s) $schools = [$s];
+            }
+        } else {
+            $schools = Ecole::getAll();
+        }
         $pending = Ecole::getPendingSchools(6);
         $plans = Ecole::getPlans();
+        $availableAdmins = \App\Models\User::getAvailableEcoleAdmins();
 
         $this->view('dashboard/ecoles', [
             'title' => APP_NAME,
@@ -31,6 +41,7 @@ class EcolesController extends Controller
             'schools' => $schools,
             'pending' => $pending,
             'plans' => $plans,
+            'availableAdmins' => $availableAdmins,
         ]);
     }
 
@@ -113,16 +124,59 @@ class EcolesController extends Controller
                     $matricule = $this->generateMatricule($nom);
                 }
 
-                Ecole::create([
+                // Create school first to obtain id
+                $ecoleId = Ecole::create([
                     'nom_etablissement' => $nom,
                     'email_officiel' => $email,
                     'identifiant' => $identifiant,
                     'matricule' => $matricule,
-                    'telephone' => $telephone,
+                    'telephone_contact' => $telephone,
                     'adresse' => $adresse,
                     'logo_url' => $logoUrl,
                     'statut_systeme' => 'En_Attente',
                 ]);
+
+                if ($ecoleId === false) {
+                    $_SESSION['ecoles_errors'] = ['Impossible de créer l\'école, réessayez.'];
+                    $this->redirect('/ecoles');
+                    return;
+                }
+
+                // Handle admin: create new or assign existing
+                $existingAdminId = (int) ($_POST['existing_admin_id'] ?? 0);
+                $newAdminName = trim($_POST['admin_nom'] ?? '');
+                $newAdminIdent = trim($_POST['admin_identifiant'] ?? '');
+                $newAdminPass = trim($_POST['admin_mot_de_passe'] ?? '');
+
+                $adminUserId = null;
+
+                if ($existingAdminId > 0) {
+                    // assign existing admin
+                    \App\Models\User::assignToSchool($existingAdminId, (int) $ecoleId);
+                    $adminUserId = $existingAdminId;
+                } elseif ($newAdminIdent !== '' && $newAdminName !== '') {
+                    // create new admin (generate password if empty)
+                    if ($newAdminPass === '') {
+                        $newAdminPass = bin2hex(random_bytes(4));
+                    }
+                    $user = \App\Models\User::create([
+                        'nom_complet' => $newAdminName,
+                        'identifiant' => $newAdminIdent,
+                        'mot_de_passe' => password_hash($newAdminPass, PASSWORD_DEFAULT),
+                        'role' => 'ecole_admin',
+                        'statut' => 'Actif',
+                        'ecole_id' => (int) $ecoleId,
+                    ]);
+                    if (!empty($user['id'])) {
+                        $adminUserId = (int) $user['id'];
+                        // Optionally: store temp password somewhere or display it (not emailing)
+                        $_SESSION['ecoles_success'] = 'École créée. Mot de passe temporaire pour l\'admin: ' . $newAdminPass;
+                    }
+                }
+
+                if ($adminUserId) {
+                    Ecole::setAdmin((int) $ecoleId, $adminUserId);
+                }
             }
         }
 

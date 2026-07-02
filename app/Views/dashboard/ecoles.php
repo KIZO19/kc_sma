@@ -11,6 +11,10 @@
             </div>
             <?php unset($_SESSION['ecoles_errors']); ?>
           <?php endif; ?>
+          <?php if (!empty($_SESSION['ecoles_success'])): ?>
+            <div class="alert alert-success"><?= htmlspecialchars($_SESSION['ecoles_success']) ?></div>
+            <?php unset($_SESSION['ecoles_success']); ?>
+          <?php endif; ?>
           <div class="row mb-2">
             <div class="col-sm-6">
               <h1 class="mb-0">Gestion des écoles</h1>
@@ -120,8 +124,8 @@
                   <?php endif; ?>
                 </div>
               </div>
-
-              <div class="card mb-4">
+              <?php if (($role ?? '') === 'super_admin'): ?>
+                <div class="card mb-4">
                 <div class="card-header">
                   <h3 class="card-title">Créer une école</h3>
                 </div>
@@ -148,6 +152,29 @@
                       <input type="file" name="logo" class="form-control" accept="image/png,image/jpeg">
                       <div class="form-text">Formats autorisés: PNG, JPEG. Taille max: 250 KB.</div>
                     </div>
+                    <hr>
+                    <h5 class="mb-3">Admin de l'école</h5>
+                    <div class="mb-3">
+                      <label class="form-label">Attribuer un admin existant</label>
+                      <select name="existing_admin_id" class="form-select">
+                        <option value="0">-- Aucun (créer un nouveau) --</option>
+                        <?php foreach (($availableAdmins ?? []) as $adm): ?>
+                          <option value="<?= (int) $adm['id'] ?>"><?= htmlspecialchars($adm['nom_complet']) ?> (<?= htmlspecialchars($adm['identifiant']) ?>)</option>
+                        <?php endforeach; ?>
+                      </select>
+                    </div>
+
+                    <div class="mb-3">
+                      <label class="form-label">Ou créer un nouvel admin</label>
+                      <input type="text" name="admin_nom" class="form-control" placeholder="Nom complet de l'admin">
+                    </div>
+                    <div class="mb-3">
+                      <input type="text" name="admin_identifiant" class="form-control" placeholder="Identifiant (email ou téléphone)">
+                    </div>
+                    <div class="mb-3">
+                      <input type="text" name="admin_mot_de_passe" class="form-control" placeholder="Mot de passe (laisser vide pour générer)">
+                      <div class="form-text">Si vous ne spécifiez pas de mot de passe, un mot de passe temporaire sera généré.</div>
+                    </div>
                     <div class="mb-3">
                       <label class="form-label">Téléphone</label>
                       <input type="text" name="telephone" class="form-control">
@@ -160,6 +187,7 @@
                   </form>
                 </div>
               </div>
+            <?php endif; ?>
 
               <div class="card">
                 <div class="card-header">

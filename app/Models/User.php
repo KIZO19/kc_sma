@@ -40,16 +40,51 @@ class User
     public static function create(array $data): array
     {
         $db = Database::getConnection();
-        $stmt = $db->prepare('INSERT INTO utilisateurs (nom_complet, identifiant, mot_de_passe, role, statut, created_at) VALUES (:nom_complet, :identifiant, :mot_de_passe, :role, :statut, NOW())');
-        $stmt->execute([
+        // Allow optional ecole_id when creating a user
+        $fields = ['nom_complet', 'identifiant', 'mot_de_passe', 'role', 'statut'];
+        $placeholders = [':nom_complet', ':identifiant', ':mot_de_passe', ':role', ':statut'];
+        $params = [
             ':nom_complet' => $data['nom_complet'],
             ':identifiant' => $data['identifiant'],
             ':mot_de_passe' => $data['mot_de_passe'],
             ':role' => $data['role'],
             ':statut' => $data['statut'],
-        ]);
+        ];
+
+        if (isset($data['ecole_id'])) {
+            $fields[] = 'ecole_id';
+            $placeholders[] = ':ecole_id';
+            $params[':ecole_id'] = $data['ecole_id'];
+        }
+
+        $sql = 'INSERT INTO utilisateurs (' . implode(', ', $fields) . ', created_at) VALUES (' . implode(', ', $placeholders) . ', NOW())';
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
 
         return self::findById((int) $db->lastInsertId());
+    }
+
+    public static function assignToSchool(int $userId, int $ecoleId): bool
+    {
+        try {
+            $db = Database::getConnection();
+            $stmt = $db->prepare('UPDATE utilisateurs SET ecole_id = :ecole_id WHERE id = :id');
+            return $stmt->execute([':ecole_id' => $ecoleId, ':id' => $userId]);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    public static function getAvailableEcoleAdmins(): array
+    {
+        try {
+            $db = Database::getConnection();
+            $stmt = $db->prepare("SELECT id, nom_complet, identifiant FROM utilisateurs WHERE role = 'ecole_admin' AND (ecole_id IS NULL OR ecole_id = 0)");
+            $stmt->execute();
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 
     public static function findById(int $id): ?array

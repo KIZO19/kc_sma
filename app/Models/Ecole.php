@@ -108,7 +108,7 @@ class Ecole
         }
     }
 
-    public static function create(array $data): bool
+    public static function create(array $data)
     {
         try {
             $db = Database::getConnection();
@@ -117,26 +117,43 @@ class Ecole
                  VALUES (:nom_etablissement, :matricule, :adresse, :telephone_contact, :email_officiel, :identifiant, :logo_url, :statut_systeme, NOW())'
             );
 
-            return $stmt->execute([
+            $ok = $stmt->execute([
                 ':nom_etablissement' => $data['nom_etablissement'] ?? '',
                 ':matricule' => $data['matricule'] ?? null,
                 ':adresse' => $data['adresse'] ?? null,
-                ':telephone_contact' => $data['telephone'] ?? '',
+                ':telephone_contact' => $data['telephone_contact'] ?? ($data['telephone'] ?? ''),
                 ':email_officiel' => $data['email_officiel'] ?? '',
-                ':identifiant' => $data['identifiant'] ?? '',
+                ':identifiant' => $data['identifiant'] ?? null,
                 ':logo_url' => $data['logo_url'] ?? null,
                 ':statut_systeme' => $data['statut_systeme'] ?? 'En_Attente',
             ]);
+
+            if ($ok) {
+                return (int) $db->lastInsertId();
+            }
+
+            return false;
         } catch (\Throwable $e) {
             return false;
         }
     }
 
-    public static function addSubscription(int $ecoleId, int $planId, string $dateDebut, string $dateFin, float $montantPaye, string $statutAbonnement = 'Actif'): bool
+                        return false;
     {
-        try {
+                        return false;
             $db = Database::getConnection();
             $stmt = $db->prepare(
+
+                public static function setAdmin(int $ecoleId, int $userId): bool
+                {
+                    try {
+                        $db = Database::getConnection();
+                        $stmt = $db->prepare('UPDATE ecoles SET admin_ecole_id = :user WHERE id = :id');
+                        return $stmt->execute([':user' => $userId, ':id' => $ecoleId]);
+                    } catch (\Throwable $e) {
+                        return false;
+                    }
+                }
                 'INSERT INTO abonnements_ecoles (ecole_id, plan_id, date_debut, date_fin, statut_abonnement, montant_paye)
                  VALUES (:ecole_id, :plan_id, :date_debut, :date_fin, :statut_abonnement, :montant_paye)'
             );
