@@ -22,17 +22,14 @@ class PageController extends Controller
 
         $page = $this->renderPage($route, $role);
 
+        if (!$page['found']) {
+            header('Location: ' . BASE_URL . '/error/notFound');
+            exit;
+        }
+
         if (!$page['accessible']) {
-            $page = [
-                'view' => 'pages/page',
-                'title' => 'Accès refusé',
-                'data' => [
-                    'pageTitle' => 'Accès refusé',
-                    'pageDescription' => 'Vous n’êtes pas autorisé à accéder à cette page.',
-                    'pageContent' => 'Contactez votre administrateur si vous pensez que vous devriez avoir accès à cette fonctionnalité.',
-                    'pageNotes' => 'Votre rôle actuel : ' . User::getRoleLabel($role),
-                ],
-            ];
+            header('Location: ' . BASE_URL . '/error/accessDenied');
+            exit;
         }
 
         $this->view($page['view'], array_merge($page['data'], [
@@ -252,6 +249,7 @@ class PageController extends Controller
         if (isset($pages[$route])) {
             $page = $pages[$route];
             return [
+                'found' => true,
                 'accessible' => $accessible,
                 'view' => 'pages/page',
                 'title' => $page['title'],
@@ -267,6 +265,7 @@ class PageController extends Controller
         if ($route === 'ecoles/generatePassword') {
             $accessible = in_array($role, ['super_admin', 'ecole_admin'], true);
             return [
+                'found' => true,
                 'accessible' => $accessible,
                 'view' => 'ecoles/generate_password',
                 'title' => 'Générer mot de passe',
@@ -275,6 +274,7 @@ class PageController extends Controller
         }
 
         return [
+            'found' => false,
             'accessible' => false,
             'view' => 'pages/page',
             'title' => 'Page introuvable',

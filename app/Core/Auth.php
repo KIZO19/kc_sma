@@ -88,7 +88,11 @@ class Auth
         }
 
         if (!in_array($user['role'] ?? '', $roles, true)) {
-            header('Location: ' . BASE_URL . self::getLandingPage($user['role'] ?? null));
+            if (self::check()) {
+                header('Location: ' . BASE_URL . '/error/accessDenied');
+            } else {
+                header('Location: ' . BASE_URL . self::getLandingPage($user['role'] ?? null));
+            }
             exit;
         }
     }

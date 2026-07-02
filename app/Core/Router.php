@@ -49,16 +49,20 @@ class Router
         }
 
         $controllerClass = 'App\\Controllers\\' . $controllerName . 'Controller';
+        $fallbackController = 'App\\Controllers\\ErrorController';
 
         if (!class_exists($controllerClass)) {
-            $controllerClass = 'App\\Controllers\\PageController';
-            $actionName = 'index';
+            $controllerClass = $fallbackController;
+            $actionName = 'notFound';
         }
 
         $controller = new $controllerClass();
 
         if (!method_exists($controller, $actionName)) {
-            $actionName = 'index';
+            if ($controllerClass !== $fallbackController) {
+                $controller = new $fallbackController();
+            }
+            $actionName = 'notFound';
         }
 
         $controller->{$actionName}();
