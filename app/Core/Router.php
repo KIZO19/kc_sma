@@ -44,8 +44,8 @@ class Router
             $controllerName = 'Profile';
             $actionName = $segments[1] ?? 'index';
         } else {
-            $controllerName = ucfirst($segments[0]);
-            $actionName = $segments[1] ?? $defaultAction;
+            $controllerName = $this->formatSegment($segments[0]);
+            $actionName = $this->formatSegment($segments[1] ?? $defaultAction);
         }
 
         $controllerClass = 'App\\Controllers\\' . $controllerName . 'Controller';
@@ -62,5 +62,10 @@ class Router
         }
 
         $controller->{$actionName}();
+    }
+
+    private function formatSegment(string $segment): string
+    {
+        return str_replace(' ', '', ucwords(str_replace('-', ' ', $segment)));
     }
 }
