@@ -82,17 +82,6 @@ class User
         return self::findById((int) $db->lastInsertId());
     }
 
-    public static function assignToSchool(int $userId, int $ecoleId): bool
-    {
-        try {
-            $db = Database::getConnection();
-            $stmt = $db->prepare('UPDATE utilisateurs SET ecole_id = :ecole_id WHERE id = :id');
-            return $stmt->execute([':ecole_id' => $ecoleId, ':id' => $userId]);
-        } catch (\Throwable $e) {
-            return false;
-        }
-    }
-
     public static function getAvailableEcoleAdmins(): array
     {
         try {
@@ -162,12 +151,34 @@ class User
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public static function getUnassignedPersonalAccounts(): array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            "SELECT * FROM utilisateurs WHERE role IN ('agent_ecole', 'parent_ecole', 'enseignant_école') "
+            . 'AND (ecole_id IS NULL OR ecole_id = 0) ORDER BY role, created_at ASC'
+        );
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public static function updateStatus(int $id, string $statut): bool
     {
         try {
             $db = Database::getConnection();
             $stmt = $db->prepare('UPDATE utilisateurs SET statut = :statut WHERE id = :id');
             return $stmt->execute([':statut' => $statut, ':id' => $id]);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    public static function assignToSchool(int $userId, int $ecoleId): bool
+    {
+        try {
+            $db = Database::getConnection();
+            $stmt = $db->prepare('UPDATE utilisateurs SET ecole_id = :ecole_id WHERE id = :id');
+            return $stmt->execute([':ecole_id' => $ecoleId, ':id' => $userId]);
         } catch (\Throwable $e) {
             return false;
         }
