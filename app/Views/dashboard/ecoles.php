@@ -126,109 +126,11 @@
               </div>
               <?php if (($role ?? '') === 'super_admin'): ?>
                 <div class="card mb-4">
-                <div class="card-header">
-                  <h3 class="card-title">Créer une école</h3>
+                  <div class="card-body">
+                    <p class="text-muted mb-0">Utilisez les pages dédiées de la sidebar pour créer une école ou ajouter un abonnement.</p>
+                  </div>
                 </div>
-                <div class="card-body">
-                  <form method="post" action="<?= BASE_URL ?>/ecoles/create" enctype="multipart/form-data">
-                    <div class="mb-3">
-                      <label class="form-label">Nom de l'école</label>
-                      <input type="text" name="nom_etablissement" class="form-control" required>
-                    </div>
-                    <div class="mb-3">
-                      <label class="form-label">Matricule</label>
-                      <input type="text" name="matricule" class="form-control" placeholder="Généré automatiquement si vide">
-                    </div>
-                    <div class="mb-3">
-                      <label class="form-label">Email officiel</label>
-                      <input type="email" name="email_officiel" class="form-control" required>
-                    </div>
-                    <div class="mb-3">
-                      <label class="form-label">Identifiant</label>
-                      <input type="text" name="identifiant" class="form-control" required>
-                    </div>
-                    <div class="mb-3">
-                      <label class="form-label">Logo de l'école</label>
-                      <input type="file" name="logo" class="form-control" accept="image/png,image/jpeg">
-                      <div class="form-text">Formats autorisés: PNG, JPEG. Taille max: 250 KB.</div>
-                    </div>
-                    <hr>
-                    <h5 class="mb-3">Admin de l'école</h5>
-                    <div class="mb-3">
-                      <label class="form-label">Attribuer un admin existant</label>
-                      <select name="existing_admin_id" class="form-select">
-                        <option value="0">-- Aucun (créer un nouveau) --</option>
-                        <?php foreach (($availableAdmins ?? []) as $adm): ?>
-                          <option value="<?= (int) $adm['id'] ?>"><?= htmlspecialchars($adm['nom_complet']) ?> (<?= htmlspecialchars($adm['identifiant']) ?>)</option>
-                        <?php endforeach; ?>
-                      </select>
-                    </div>
-
-                    <div class="mb-3">
-                      <label class="form-label">Ou créer un nouvel admin</label>
-                      <input type="text" name="admin_nom" class="form-control" placeholder="Nom complet de l'admin">
-                    </div>
-                    <div class="mb-3">
-                      <input type="text" name="admin_identifiant" class="form-control" placeholder="Identifiant (email ou téléphone)">
-                    </div>
-                    <div class="mb-3">
-                      <input type="text" name="admin_mot_de_passe" class="form-control" placeholder="Mot de passe (laisser vide pour générer)">
-                      <div class="form-text">Si vous ne spécifiez pas de mot de passe, un mot de passe temporaire sera généré.</div>
-                    </div>
-                    <div class="mb-3">
-                      <label class="form-label">Téléphone</label>
-                      <input type="text" name="telephone" class="form-control">
-                    </div>
-                    <div class="mb-3">
-                      <label class="form-label">Adresse</label>
-                      <input type="text" name="adresse" class="form-control">
-                    </div>
-                    <button type="submit" class="btn btn-primary w-100">Créer l'école</button>
-                  </form>
-                </div>
-              </div>
-            <?php endif; ?>
-
-              <div class="card">
-                <div class="card-header">
-                  <h3 class="card-title">Ajouter un abonnement</h3>
-                </div>
-                <div class="card-body">
-                  <form method="post" action="<?= BASE_URL ?>/ecoles/addSubscription">
-                    <div class="mb-3">
-                      <label class="form-label">École</label>
-                      <select name="ecole_id" class="form-select" required>
-                        <option value="">Sélectionnez une école</option>
-                        <?php foreach ($schools as $school): ?>
-                          <option value="<?= (int) $school['id'] ?>"><?= htmlspecialchars($school['nom_etablissement']) ?></option>
-                        <?php endforeach; ?>
-                      </select>
-                    </div>
-                    <div class="mb-3">
-                      <label class="form-label">Plan</label>
-                      <select name="plan_id" class="form-select" required>
-                        <option value="">Sélectionnez un plan</option>
-                        <?php foreach ($plans as $plan): ?>
-                          <option value="<?= (int) $plan['id'] ?>"><?= htmlspecialchars($plan['nom_plan']) ?> - <?= htmlspecialchars($plan['prix']) ?> FCFA</option>
-                        <?php endforeach; ?>
-                      </select>
-                    </div>
-                    <div class="mb-3">
-                      <label class="form-label">Montant payé</label>
-                      <input type="number" step="0.01" name="montant_paye" class="form-control" required>
-                    </div>
-                    <div class="mb-3">
-                      <label class="form-label">Date début</label>
-                      <input type="date" name="date_debut" class="form-control" required>
-                    </div>
-                    <div class="mb-3">
-                      <label class="form-label">Date fin</label>
-                      <input type="date" name="date_fin" class="form-control" required>
-                    </div>
-                    <button type="submit" class="btn btn-primary w-100">Créer abonnement</button>
-                  </form>
-                </div>
-              </div>
+              <?php endif; ?>
             </div>
           </div>
         </div>
