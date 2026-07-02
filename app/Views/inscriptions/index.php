@@ -80,9 +80,10 @@
                             <th>Nom</th>
                             <th>Prénom</th>
                             <th>Date de naissance</th>
+                            <th>Parent</th>
                             <th style="width: 120px;">Statut</th>
-                            <?php if ($canApprove): ?>
-                              <th style="width: 140px;">Action</th>
+                            <?php if ($canEdit || $canApprove): ?>
+                              <th style="width: 220px;">Action</th>
                             <?php endif; ?>
                           </tr>
                         </thead>
@@ -94,13 +95,19 @@
                               <td><?= htmlspecialchars($student['nom']) ?></td>
                               <td><?= htmlspecialchars($student['prenom'] ?? '-') ?></td>
                               <td><?= htmlspecialchars($student['date_naissance']) ?></td>
+                              <td><?= htmlspecialchars($student['parent_nom_responsable'] ?? '-') ?></td>
                               <td><span class="badge bg-warning">En attente</span></td>
-                              <?php if ($canApprove): ?>
+                              <?php if ($canEdit || $canApprove): ?>
                                 <td>
-                                  <form method="post" action="<?= BASE_URL ?>/inscriptions/approve" class="d-inline">
-                                    <input type="hidden" name="eleve_id" value="<?= (int) $student['id'] ?>">
-                                    <button type="submit" class="btn btn-sm btn-success">Valider</button>
-                                  </form>
+                                  <?php if ($canEdit): ?>
+                                    <a href="<?= BASE_URL ?>/inscriptions/edit?id=<?= (int) $student['id'] ?>" class="btn btn-sm btn-primary me-1">Modifier</a>
+                                  <?php endif; ?>
+                                  <?php if ($canApprove): ?>
+                                    <form method="post" action="<?= BASE_URL ?>/inscriptions/approve" class="d-inline">
+                                      <input type="hidden" name="eleve_id" value="<?= (int) $student['id'] ?>">
+                                      <button type="submit" class="btn btn-sm btn-success">Valider</button>
+                                    </form>
+                                  <?php endif; ?>
                                 </td>
                               <?php endif; ?>
                             </tr>

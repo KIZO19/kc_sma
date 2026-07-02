@@ -35,9 +35,36 @@ class Eleve
     public static function getPending(): array
     {
         $db = Database::getConnection();
-        $stmt = $db->prepare("SELECT * FROM eleves WHERE statut_eleve = 'inactif' ORDER BY id DESC");
+        $stmt = $db->prepare(
+            'SELECT e.*, p.nom_responsable AS parent_nom_responsable '
+            . 'FROM eleves e '
+            . 'LEFT JOIN parents p ON e.parent_id = p.id '
+            . "WHERE e.statut_eleve = 'inactif' ORDER BY e.id DESC"
+        );
         $stmt->execute();
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function update(int $id, array $data): bool
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            'UPDATE eleves SET matricule = :matricule, nom = :nom, postnom = :postnom, prenom = :prenom, genre = :genre, lieu_naissance = :lieu_naissance, nationalite = :nationalite, adresse = :adresse, date_naissance = :date_naissance, parent_id = :parent_id WHERE id = :id'
+        );
+
+        return $stmt->execute([
+            ':matricule' => $data['matricule'] ?? null,
+            ':nom' => $data['nom'],
+            ':postnom' => $data['postnom'],
+            ':prenom' => $data['prenom'] ?? null,
+            ':genre' => $data['genre'],
+            ':lieu_naissance' => $data['lieu_naissance'] ?? null,
+            ':nationalite' => $data['nationalite'] ?? 'CONGOLAISE',
+            ':adresse' => $data['adresse'] ?? null,
+            ':date_naissance' => $data['date_naissance'],
+            ':parent_id' => !empty($data['parent_id']) ? $data['parent_id'] : null,
+            ':id' => $id,
+        ]);
     }
 
     public static function countPending(): int
