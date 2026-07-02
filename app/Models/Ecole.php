@@ -185,6 +185,28 @@ class Ecole
         }
     }
 
+    public static function addSubscription(int $ecoleId, int $planId, string $dateDebut, string $dateFin, float $montant): bool
+    {
+        try {
+            $db = Database::getConnection();
+            $stmt = $db->prepare(
+                'INSERT INTO abonnements_ecoles (ecole_id, plan_id, date_debut, date_fin, statut_abonnement, montant_paye)
+                 VALUES (:ecole_id, :plan_id, :date_debut, :date_fin, :statut_abonnement, :montant_paye)'
+            );
+
+            return $stmt->execute([
+                ':ecole_id' => $ecoleId,
+                ':plan_id' => $planId,
+                ':date_debut' => $dateDebut,
+                ':date_fin' => $dateFin,
+                ':statut_abonnement' => 'Actif',
+                ':montant_paye' => $montant,
+            ]);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
     public static function update(int $id, array $data): bool
     {
         try {
