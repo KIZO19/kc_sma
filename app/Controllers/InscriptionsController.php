@@ -189,6 +189,11 @@ class InscriptionsController extends Controller
                     $parentId = $parentId > 0 ? $parentId : 0;
                 }
 
+                $studentSchoolId = $ecoleId;
+                if ($studentSchoolId <= 0 && !empty($selectedClass['ecole_id'])) {
+                    $studentSchoolId = (int) $selectedClass['ecole_id'];
+                }
+
                 $newStudent = Eleve::create([
                     'matricule' => $matricule,
                     'nom' => $nom,
@@ -200,6 +205,7 @@ class InscriptionsController extends Controller
                     'adresse' => trim($_POST['adresse'] ?? null),
                     'date_naissance' => $dateNaissance,
                     'parent_id' => $parentId > 0 ? $parentId : null,
+                    'ecole_id' => $studentSchoolId > 0 ? $studentSchoolId : null,
                     'nom_pere' => trim($_POST['nom_pere'] ?? null),
                     'nom_mere' => trim($_POST['nom_mere'] ?? null),
                     'province_origine' => trim($_POST['province_origine'] ?? null),

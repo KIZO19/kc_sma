@@ -347,6 +347,7 @@ CREATE TABLE `eleves` (
   `adresse` text DEFAULT NULL,
   `date_naissance` date NOT NULL,
   `parent_id` int(11) DEFAULT NULL,
+  `ecole_id` int(11) DEFAULT NULL,
   `nom_pere` varchar(100) DEFAULT NULL,
   `nom_mere` varchar(100) DEFAULT NULL,
   `province_origine` varchar(100) DEFAULT NULL,

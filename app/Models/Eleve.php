@@ -11,8 +11,8 @@ class Eleve
     {
         $db = Database::getConnection();
         $stmt = $db->prepare(
-            'INSERT INTO eleves (matricule, nom, postnom, prenom, genre, lieu_naissance, nationalite, adresse, date_naissance, parent_id, nom_pere, nom_mere, province_origine, territoire, secteur, groupement, village, num_permanent, photo, statut_eleve)
-             VALUES (:matricule, :nom, :postnom, :prenom, :genre, :lieu_naissance, :nationalite, :adresse, :date_naissance, :parent_id, :nom_pere, :nom_mere, :province_origine, :territoire, :secteur, :groupement, :village, :num_permanent, :photo, :statut_eleve)'
+            'INSERT INTO eleves (matricule, nom, postnom, prenom, genre, lieu_naissance, nationalite, adresse, date_naissance, parent_id, ecole_id, nom_pere, nom_mere, province_origine, territoire, secteur, groupement, village, num_permanent, photo, statut_eleve)
+             VALUES (:matricule, :nom, :postnom, :prenom, :genre, :lieu_naissance, :nationalite, :adresse, :date_naissance, :parent_id, :ecole_id, :nom_pere, :nom_mere, :province_origine, :territoire, :secteur, :groupement, :village, :num_permanent, :photo, :statut_eleve)'
         );
 
         $stmt->execute([
@@ -26,6 +26,7 @@ class Eleve
             ':adresse' => $data['adresse'] ?? null,
             ':date_naissance' => $data['date_naissance'],
             ':parent_id' => !empty($data['parent_id']) ? $data['parent_id'] : null,
+            ':ecole_id' => !empty($data['ecole_id']) ? $data['ecole_id'] : null,
             ':nom_pere' => $data['nom_pere'] ?? null,
             ':nom_mere' => $data['nom_mere'] ?? null,
             ':province_origine' => $data['province_origine'] ?? null,
