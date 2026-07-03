@@ -330,20 +330,6 @@ if (!empty($school['logo_url'])) {
           </div>
         </div>
 
-        <?php if (($role ?? '') === 'comptable_école'): ?>
-          <div class="card bg-secondary bg-opacity-10 border-0 mb-3">
-            <div class="card-body p-3">
-              <h6 class="card-title mb-2">Responsabilités</h6>
-              <ul class="small mb-0 ps-3">
-                <li>Gérer les paiements des élèves</li>
-                <li>Traiter la paie des agents</li>
-                <li>Valider les dérogations</li>
-                <li>Planifier les recouvrements</li>
-                <li>Créer les frais et leur devise</li>
-              </ul>
-            </div>
-          </div>
-        <?php endif; ?>
 
         <div class="mb-3">
           <div class="input-group">
