@@ -6,6 +6,7 @@ use App\Core\Auth;
 use App\Core\Controller;
 use App\Models\Eleve;
 use App\Models\ParentModel;
+use App\Models\Section;
 use App\Models\User;
 
 class InscriptionsController extends Controller
@@ -30,6 +31,7 @@ class InscriptionsController extends Controller
         $modules = $this->getModulesForRole($role);
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
         $pendingStudents = $ecoleId > 0 ? Eleve::getPendingBySchool($ecoleId) : Eleve::getPending();
+        $sections = Section::getAll();
 
         $this->view('inscriptions/index', [
             'title' => APP_NAME . ' - Dossiers d’inscription',
@@ -38,6 +40,7 @@ class InscriptionsController extends Controller
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $modules,
             'pendingStudents' => $pendingStudents,
+            'sections' => $sections,
             'canSubmit' => in_array($role, self::SUBMISSION_ROLES, true),
             'canEdit' => in_array($role, self::SUBMISSION_ROLES, true),
             'canApprove' => in_array($role, ['super_admin', 'sec_école'], true),
@@ -54,6 +57,11 @@ class InscriptionsController extends Controller
         $modules = $this->getModulesForRole($role);
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
         $parents = $ecoleId > 0 ? ParentModel::getAllBySchool($ecoleId) : [];
+        $selectedSection = null;
+        $sectionId = (int) ($_GET['section_id'] ?? 0);
+        if ($sectionId > 0) {
+            $selectedSection = Section::findById($sectionId);
+        }
         $oldInput = $_SESSION['inscriptions_old'] ?? [];
         unset($_SESSION['inscriptions_old']);
 
@@ -65,6 +73,7 @@ class InscriptionsController extends Controller
             'modules' => $modules,
             'parents' => $parents,
             'oldInput' => $oldInput,
+            'selectedSection' => $selectedSection,
         ]);
     }
 

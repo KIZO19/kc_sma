@@ -1,4 +1,7 @@
 <?php require __DIR__ . '/../partials/app_header.php'; ?>
+<?php
+$fees = $fees ?? [];
+?>
       <section class="content-header">
         <div class="container-fluid">
           <div class="row mb-2">
@@ -68,23 +71,28 @@
                           <th data-sort="3" data-type="string" class="cursor-pointer">Classe</th>
                           <th data-sort="4" data-type="string" class="cursor-pointer">Année scolaire</th>
                           <th data-sort="5" data-type="string" class="cursor-pointer">Devise</th>
+                          <th data-sort="6" data-type="string" class="cursor-pointer">Portée</th>
                           <th style="width: 170px;">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         <?php if (empty($fees)): ?>
                           <tr>
-                            <td colspan="7" class="text-center py-4">Aucun frais n'est encore défini pour cette école.</td>
+                            <td colspan="8" class="text-center py-4">Aucun frais n'est encore défini pour cette école.</td>
                           </tr>
                         <?php else: ?>
                           <?php foreach ($fees as $index => $fee): ?>
                             <tr>
                               <td><?= $index + 1 ?></td>
                               <td><?= htmlspecialchars($fee['type_frais']) ?></td>
-                              <td><?= number_format((float) $fee['montant_total'], 2, ',', ' ') ?></td>
+                              <td>
+                                <?= number_format((float) $fee['montant_total'], 2, ',', ' ') ?>
+                                <?= ' ' . htmlspecialchars($fee['devise'] ?? ($schoolCurrency ?? 'USD')) ?>
+                              </td>
                               <td><?= htmlspecialchars($fee['nom_classe'] ?? 'N/A') ?></td>
                               <td><?= htmlspecialchars($fee['annee_scolaire'] ?? '-') ?></td>
-                              <td><?= htmlspecialchars($schoolCurrency ?? 'USD') ?></td>
+                              <td><?= htmlspecialchars($fee['devise'] ?? ($schoolCurrency ?? 'USD')) ?></td>
+                              <td><?= htmlspecialchars($fee['scope_label'] ?? '-') ?></td>
                               <td>
                                 <a href="#" class="btn btn-sm btn-outline-primary me-1">Détail</a>
                                 <a href="#" class="btn btn-sm btn-outline-secondary">Modifier</a>
@@ -141,7 +149,7 @@
                 const row = document.createElement('tr');
                 row.className = 'no-data-row';
                 const cell = document.createElement('td');
-                cell.colSpan = 7;
+                cell.colSpan = 8;
                 cell.className = 'text-center py-4';
                 cell.textContent = 'Aucune donnée correspondante trouvée.';
                 row.appendChild(cell);

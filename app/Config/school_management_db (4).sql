@@ -486,7 +486,8 @@ CREATE TABLE `frais_scolaires` (
   `classe_id` int(11) NOT NULL,
   `type_frais` varchar(100) NOT NULL,
   `montant_total` decimal(10,2) NOT NULL,
-  `annee_scolaire_id` int(11) NOT NULL
+  `annee_scolaire_id` int(11) NOT NULL,
+  `devise` varchar(5) NOT NULL DEFAULT 'USD'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --

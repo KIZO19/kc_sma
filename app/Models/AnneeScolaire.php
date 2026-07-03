@@ -16,6 +16,15 @@ class AnneeScolaire
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public static function getActiveBySchool(int $ecoleId): ?array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare('SELECT * FROM annees_scolaires WHERE ecole_id = :ecole_id AND est_active = 1 LIMIT 1');
+        $stmt->execute([':ecole_id' => $ecoleId]);
+
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
     public static function findById(int $id): ?array
     {
         $db = Database::getConnection();
