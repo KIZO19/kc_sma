@@ -39,7 +39,12 @@
                 <div class="card-body">
                   <?php if (!empty($compte)): ?>
                     <p><strong>Solde dû:</strong> <?= number_format((float) ($compte['solde_debiteur'] ?? 0), 2) ?></p>
-                    <p><a href="#ecritures" class="btn btn-sm btn-outline-primary">Voir écritures</a></p>
+                    <p>
+                      <a href="#ecritures" class="btn btn-sm btn-outline-primary">Voir écritures</a>
+                      <?php if (in_array($role, ['super_admin','comptable_école'], true)): ?>
+                        <a href="<?= BASE_URL ?>/paiements/create?eleve_id=<?= (int) $eleve['id'] ?>" class="btn btn-sm btn-success">Enregistrer paiement</a>
+                      <?php endif; ?>
+                    </p>
                   <?php else: ?>
                     <div class="alert alert-info">Aucun compte trouvé pour cet élève.</div>
                   <?php endif; ?>
