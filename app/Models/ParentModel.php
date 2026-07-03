@@ -50,4 +50,24 @@ class ParentModel
 
         return self::findById((int) $db->lastInsertId());
     }
+
+    public static function createUserAccount(int $parentId): array
+    {
+        $parent = self::findById($parentId);
+        if (!$parent) {
+            throw new \RuntimeException('Parent not found');
+        }
+
+        $identifiant = $parent['email'] ?: $parent['telephone'] ?: 'parent' . $parent['id'] . '@local';
+        $password = bin2hex(random_bytes(4));
+
+        return \App\Models\User::findOrCreateForReference([
+            'role' => 'parent_ecole',
+            'reference_id' => $parent['id'],
+            'ecole_id' => $parent['ecole_id'] ?? null,
+            'identifiant' => $identifiant,
+            'mot_de_passe' => $password,
+            'nom_complet' => $parent['nom_responsable'] ?? $identifiant,
+        ]);
+    }
 }

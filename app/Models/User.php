@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Core\Database;
 use PDO;
+use App\Entities\RoleFactory;
 
 class User
 {
@@ -102,6 +103,75 @@ class User
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         return $user ?: null;
+    }
+
+    public static function getRoleEntityByRole(string $role)
+    {
+        return RoleFactory::make($role);
+    }
+
+    public static function getRoleEntityForUserById(int $id)
+    {
+        $user = self::findById($id);
+        if (!$user) {
+            return null;
+        }
+
+        return self::getRoleEntityByRole($user['role']);
+    }
+
+    public static function findByReference(string $role, int $referenceId): ?array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare('SELECT * FROM utilisateurs WHERE role = :role AND reference_id = :reference_id LIMIT 1');
+        $stmt->execute([':role' => $role, ':reference_id' => $referenceId]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $user ?: null;
+    }
+
+    public static function createForReference(array $data): array
+    {
+        $db = Database::getConnection();
+
+        $fields = ['nom_complet', 'identifiant', 'mot_de_passe', 'role', 'statut', 'reference_id'];
+        $placeholders = [':nom_complet', ':identifiant', ':mot_de_passe', ':role', ':statut', ':reference_id'];
+
+        $params = [
+            ':nom_complet' => $data['nom_complet'] ?? $data['identifiant'],
+            ':identifiant' => $data['identifiant'],
+            ':mot_de_passe' => $data['mot_de_passe'],
+            ':role' => $data['role'],
+            ':statut' => $data['statut'] ?? 'Actif',
+            ':reference_id' => $data['reference_id'],
+        ];
+
+        if (isset($data['ecole_id'])) {
+            $fields[] = 'ecole_id';
+            $placeholders[] = ':ecole_id';
+            $params[':ecole_id'] = $data['ecole_id'];
+        }
+
+        // Hash password if it doesn't look hashed yet
+        if (isset($params[':mot_de_passe']) && strpos($params[':mot_de_passe'], '$2y$') !== 0) {
+            $params[':mot_de_passe'] = password_hash($params[':mot_de_passe'], PASSWORD_DEFAULT);
+        }
+
+        $sql = 'INSERT INTO utilisateurs (' . implode(', ', $fields) . ', created_at) VALUES (' . implode(', ', $placeholders) . ', NOW())';
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+
+        return self::findById((int) $db->lastInsertId());
+    }
+
+    public static function findOrCreateForReference(array $data): array
+    {
+        $existing = self::findByReference($data['role'], (int) $data['reference_id']);
+        if ($existing) {
+            return $existing;
+        }
+
+        return self::createForReference($data);
     }
 
     public static function updateProfile(int $id, array $data): bool

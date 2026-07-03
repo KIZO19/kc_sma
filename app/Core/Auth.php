@@ -3,6 +3,7 @@
 namespace App\Core;
 
 use App\Models\User;
+use App\Entities\RoleFactory;
 
 class Auth
 {
@@ -92,6 +93,33 @@ class Auth
                 header('Location: ' . BASE_URL . '/error/accessDenied');
             } else {
                 header('Location: ' . BASE_URL . self::getLandingPage($user['role'] ?? null));
+            }
+            exit;
+        }
+    }
+
+    public static function can(string $permission): bool
+    {
+        $user = self::user();
+        if (!$user) {
+            return false;
+        }
+
+        if (($user['role'] ?? '') === 'super_admin') {
+            return true;
+        }
+
+        $entity = RoleFactory::make($user['role'] ?? '');
+        return $entity->can($permission);
+    }
+
+    public static function requirePermission(string $permission): void
+    {
+        if (!self::can($permission)) {
+            if (self::check()) {
+                header('Location: ' . BASE_URL . '/error/accessDenied');
+            } else {
+                header('Location: ' . BASE_URL . self::getLandingPage(self::user()['role'] ?? null));
             }
             exit;
         }

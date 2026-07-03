@@ -110,4 +110,24 @@ class Eleve
 
         return $eleve ?: null;
     }
+
+    public static function createUserAccount(int $eleveId): array
+    {
+        $eleve = self::findById($eleveId);
+        if (!$eleve) {
+            throw new \RuntimeException('Eleve not found');
+        }
+
+        $identifiant = $eleve['matricule'] ?: 'eleve' . $eleve['id'] . '@school.local';
+        $password = bin2hex(random_bytes(4));
+
+        return \App\Models\User::findOrCreateForReference([
+            'role' => 'eleve_ecole',
+            'reference_id' => $eleve['id'],
+            'ecole_id' => $eleve['ecole_id'] ?? null,
+            'identifiant' => $identifiant,
+            'mot_de_passe' => $password,
+            'nom_complet' => trim(($eleve['prenom'] ?? '') . ' ' . ($eleve['nom'] ?? '')),
+        ]);
+    }
 }
