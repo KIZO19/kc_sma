@@ -82,6 +82,7 @@ class Controller
             ],
             'promoteur_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école' => [
                 ['name' => 'Admissions', 'path' => '/inscriptions', 'icon' => 'bi-person-plus'],
+                ['name' => 'Utilisateurs', 'path' => '/utilisateurs', 'icon' => 'bi-person-check'],
                 ['name' => 'Classes', 'path' => '/classes', 'icon' => 'bi-houses'],
                 ['name' => 'Options', 'path' => '/options', 'icon' => 'bi-grid-1x2'],
                 ['name' => 'Élèves', 'path' => '/eleves', 'icon' => 'bi-person-badge'],

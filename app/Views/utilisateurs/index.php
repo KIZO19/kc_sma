@@ -89,6 +89,14 @@ SCRIPT;
       <div class="alert alert-success"><?= htmlspecialchars($_SESSION['utilisateurs_success']) ?></div>
       <?php unset($_SESSION['utilisateurs_success']); ?>
     <?php endif; ?>
+    <?php if (!empty($_SESSION['utilisateurs_errors'])): ?>
+      <div class="alert alert-danger">
+        <?php foreach ((array) $_SESSION['utilisateurs_errors'] as $error): ?>
+          <div><?= htmlspecialchars($error) ?></div>
+        <?php endforeach; ?>
+      </div>
+      <?php unset($_SESSION['utilisateurs_errors']); ?>
+    <?php endif; ?>
     <div class="row mb-2">
       <div class="col-sm-6">
         <h1>Validation des comptes</h1>
@@ -230,5 +238,6 @@ SCRIPT;
     </div>
   </div>
 </section>
+<?php endif; ?>
 
 <?php require __DIR__ . '/../partials/app_footer.php'; ?>

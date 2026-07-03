@@ -267,6 +267,22 @@ class User
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public static function getUsersBySchool(int $ecoleId): array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare('SELECT * FROM utilisateurs WHERE ecole_id = :ecole_id ORDER BY role, nom_complet ASC');
+        $stmt->execute([':ecole_id' => $ecoleId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function getInactiveUsersBySchool(int $ecoleId): array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare('SELECT * FROM utilisateurs WHERE statut = :statut AND ecole_id = :ecole_id ORDER BY created_at ASC');
+        $stmt->execute([':statut' => 'Inactif', ':ecole_id' => $ecoleId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public static function updateStatus(int $id, string $statut): bool
     {
         try {

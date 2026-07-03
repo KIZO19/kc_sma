@@ -12,7 +12,7 @@ class UtilisateursController extends Controller
     public function index(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['super_admin']);
+        Auth::requireRoles(['super_admin', 'promoteur_école']);
 
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
@@ -33,13 +33,14 @@ class UtilisateursController extends Controller
             'inactiveUsers' => $inactiveUsers,
             'unassignedUsers' => $unassignedUsers,
             'schools' => $schools,
+            'isLocalAdmin' => false,
         ]);
     }
 
     public function validate(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['super_admin']);
+        Auth::requireRoles(['super_admin', 'promoteur_école']);
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $userId = (int) ($_POST['user_id'] ?? 0);
