@@ -50,6 +50,86 @@ class PaiementsController extends Controller
         ]);
     }
 
+    public function export(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école', 'sec_école']);
+
+        $user = Auth::refresh() ?: Auth::user();
+
+        $format = strtolower(trim($_GET['format'] ?? 'csv'));
+        $db = \App\Core\Database::getConnection();
+
+        $sql = 'SELECT ece.*, ce.eleve_id, el.nom, el.postnom, el.prenom, cb.nom_compte, u.nom_complet AS agent_nom FROM ecritures_comptables_eleves ece '
+            . 'INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id '
+            . 'INNER JOIN eleves el ON ce.eleve_id = el.id '
+            . 'LEFT JOIN caisses_banques cb ON ece.caisse_banque_id = cb.id '
+            . 'LEFT JOIN utilisateurs u ON ece.agent_saisie_id = u.reference_id AND u.role NOT IN (\'eleve_ecole\', \'parent_ecole\') '
+            . 'WHERE ece.type_mouvement = :type ';
+
+        $params = [':type' => 'CREDIT'];
+        if (($user['role'] ?? '') !== 'super_admin') {
+            $sql .= 'AND (el.ecole_id = :ecole OR EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id WHERE i.eleve_id = el.id AND c.ecole_id = :ecole)) ';
+            $params[':ecole'] = (int) ($user['ecole_id'] ?? 0);
+        }
+
+        $sql .= 'ORDER BY ece.date_operation DESC';
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        $payments = $stmt->fetchAll();
+
+        if ($format === 'csv' || $format === 'excel') {
+            // output CSV (works with Excel). For `excel` we set XLS content-disposition for convenience.
+            $filename = 'paiements_' . date('Ymd_His') . ($format === 'excel' ? '.xls' : '.csv');
+            header('Content-Type: ' . ($format === 'excel' ? 'application/vnd.ms-excel' : 'text/csv') . '; charset=UTF-8');
+            header('Content-Disposition: attachment; filename="' . $filename . '"');
+            // BOM for Excel compatibility with UTF-8
+            echo "\xEF\xBB\xBF";
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['Réf reçu', 'Élève', 'Date', 'Montant', 'Caisse', 'Agent', 'Libellé']);
+            foreach ($payments as $p) {
+                $name = trim(($p['prenom'] ?? '') . ' ' . ($p['nom'] ?? '') . ' ' . ($p['postnom'] ?? ''));
+                fputcsv($out, [$p['reference_recu'] ?? '', $name, $p['date_operation'] ?? '', (float) ($p['montant'] ?? 0), $p['nom_compte'] ?? '', $p['agent_nom'] ?? '', $p['libelle'] ?? '']);
+            }
+            fclose($out);
+            exit;
+        }
+
+        if ($format === 'pdf') {
+            // If dompdf is available, render a PDF; otherwise render printable HTML fallback
+            if (class_exists('\Dompdf\Dompdf')) {
+                $html = $this->renderViewToString('paiements/export_pdf', ['payments' => $payments]);
+                $dompdfClass = '\\Dompdf\\Dompdf';
+                $dompdf = new $dompdfClass();
+                $dompdf->loadHtml($html);
+                $dompdf->setPaper('A4', 'portrait');
+                $dompdf->render();
+                $filename = 'paiements_' . date('Ymd_His') . '.pdf';
+                header('Content-Type: application/pdf');
+                header('Content-Disposition: attachment; filename="' . $filename . '"');
+                echo $dompdf->output();
+                exit;
+            }
+
+            // Fallback: show printable HTML page that user can print to PDF
+            $this->view('paiements/export_pdf', [
+                'payments' => $payments,
+            ]);
+            return;
+        }
+
+        // unknown format => redirect back
+        $this->redirect('/paiements');
+    }
+
+    private function renderViewToString(string $viewPath, array $params = []): string
+    {
+        extract($params, EXTR_SKIP);
+        ob_start();
+        require __DIR__ . '/../Views/' . str_replace(['\\', '/'], DIRECTORY_SEPARATOR, $viewPath) . '.php';
+        return ob_get_clean() ?: '';
+    }
+
     public function create(): void
     {
         Auth::requireAuth();
