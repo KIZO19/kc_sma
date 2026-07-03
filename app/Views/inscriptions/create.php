@@ -51,6 +51,12 @@ $oldInput = $oldInput ?? [];
                 </div>
                 <div class="card-body">
                   <form method="post" action="<?= BASE_URL ?>/inscriptions/submit" autocomplete="off" enctype="multipart/form-data">
+                    <?php if (!empty($selectedSection)): ?>
+                      <div class="alert alert-info">
+                        Section sélectionnée : <strong><?= htmlspecialchars($selectedSection['nom_section']) ?></strong>
+                      </div>
+                      <input type="hidden" name="section_id" value="<?= (int) $selectedSection['id'] ?>">
+                    <?php endif; ?>
                     <div class="row">
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Nom</label>

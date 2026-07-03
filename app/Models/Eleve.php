@@ -101,6 +101,13 @@ class Eleve
         ]);
     }
 
+    public static function updateMatricule(int $id, string $matricule): bool
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare('UPDATE eleves SET matricule = :matricule WHERE id = :id');
+        return $stmt->execute([':matricule' => $matricule, ':id' => $id]);
+    }
+
     public static function countPending(): int
     {
         $db = Database::getConnection();

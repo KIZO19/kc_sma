@@ -5,6 +5,8 @@ namespace App\Controllers;
 use App\Core\Auth;
 use App\Core\Controller;
 use App\Models\Eleve;
+use App\Models\AnneeScolaire;
+use App\Models\Ecole;
 use App\Models\ParentModel;
 use App\Models\Section;
 use App\Models\User;
@@ -57,6 +59,7 @@ class InscriptionsController extends Controller
         $modules = $this->getModulesForRole($role);
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
         $parents = $ecoleId > 0 ? ParentModel::getAllBySchool($ecoleId) : [];
+        $sections = Section::getAll();
         $selectedSection = null;
         $sectionId = (int) ($_GET['section_id'] ?? 0);
         if ($sectionId > 0) {
@@ -72,8 +75,8 @@ class InscriptionsController extends Controller
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $modules,
             'parents' => $parents,
-            'oldInput' => $oldInput,
             'selectedSection' => $selectedSection,
+            'oldInput' => $oldInput,
         ]);
     }
 
@@ -173,6 +176,22 @@ class InscriptionsController extends Controller
                     'statut_eleve' => 'inactif',
                 ]);
 
+                if ($newStudent && empty($newStudent['matricule'])) {
+                    $school = Ecole::findById($ecoleId);
+                    $activeYear = AnneeScolaire::getActiveBySchool($ecoleId);
+                    $yearString = $activeYear['annee'] ?? date('Y') . '-' . (date('Y') + 1);
+                    $generatedMatricule = $this->generateMatriculeFromSchool(
+                        $school['nom_etablissement'] ?? 'ECOLE',
+                        $nom,
+                        $postnom,
+                        $prenom,
+                        (int) $newStudent['id'],
+                        $yearString
+                    );
+                    Eleve::updateMatricule((int) $newStudent['id'], $generatedMatricule);
+                    $newStudent['matricule'] = $generatedMatricule;
+                }
+
                 // Handle optional student photo upload (saved to public/uploads/avatars/eleve_{id}.{ext})
                 if ($newStudent && !empty($_FILES['photo']['name']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
                     $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png'];
@@ -208,6 +227,39 @@ class InscriptionsController extends Controller
         }
 
         $this->redirect('/inscriptions/create');
+    }
+
+    public function matriculePreview(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(self::SUBMISSION_ROLES);
+
+        header('Content-Type: application/json');
+        $user = Auth::refresh() ?: Auth::user();
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        $nom = trim($_GET['nom'] ?? '');
+        $postnom = trim($_GET['postnom'] ?? '');
+        $prenom = trim($_GET['prenom'] ?? '');
+
+        if ($ecoleId <= 0 || $nom === '' || $postnom === '') {
+            echo json_encode(['error' => 'Nom, postnom et école requis pour générer le matricule.']);
+            exit;
+        }
+
+        $school = Ecole::findById($ecoleId);
+        $activeYear = AnneeScolaire::getActiveBySchool($ecoleId);
+        $yearString = $activeYear['annee'] ?? date('Y') . '-' . (date('Y') + 1);
+        $preview = $this->generateMatriculeFromSchool(
+            $school['nom_etablissement'] ?? 'ECOLE',
+            $nom,
+            $postnom,
+            $prenom,
+            random_int(1, 9999),
+            $yearString
+        );
+
+        echo json_encode(['matricule' => $preview]);
+        exit;
     }
 
     public function edit(): void
@@ -443,5 +495,54 @@ class InscriptionsController extends Controller
         $prefix = strtoupper(preg_replace('/[^A-Z0-9]/', '', mb_substr($name, 0, 6, 'UTF-8')));
         $prefix = $prefix === '' ? 'ELEVE' : $prefix;
         return sprintf('%s-%s-%s', $prefix, date('YmdHis'), substr(bin2hex(random_bytes(3)), 0, 6));
+    }
+
+    private function generateMatriculeFromSchool(string $schoolName, string $nom, string $postnom, string $prenom, int $eleveId, string $annee): string
+    {
+        $letters = $this->getRandomLettersFromSchool($schoolName, 3);
+        $initials = $this->getStudentInitials($nom, $postnom, $prenom);
+        $yearCode = $this->getYearCode($annee);
+        return strtoupper($letters . $initials . $eleveId . $yearCode);
+    }
+
+    private function getRandomLettersFromSchool(string $schoolName, int $length): string
+    {
+        $letters = preg_replace('/[^A-Z]/', '', mb_strtoupper($schoolName, 'UTF-8'));
+        if ($letters === '') {
+            return str_repeat('X', $length);
+        }
+
+        $chars = preg_split('//u', $letters, -1, PREG_SPLIT_NO_EMPTY);
+        $result = '';
+        $max = count($chars);
+        for ($i = 0; $i < $length; $i++) {
+            $result .= $chars[random_int(0, $max - 1)];
+        }
+
+        return $result;
+    }
+
+    private function getStudentInitials(string $nom, string $postnom, string $prenom): string
+    {
+        $parts = [$nom, $postnom, $prenom];
+        $initials = '';
+        foreach ($parts as $part) {
+            $part = trim($part);
+            if ($part === '') {
+                continue;
+            }
+            $initials .= mb_strtoupper(mb_substr($part, 0, 1, 'UTF-8'), 'UTF-8');
+        }
+
+        return $initials ?: 'XXX';
+    }
+
+    private function getYearCode(string $annee): string
+    {
+        if (preg_match('/(\d{4})[^\d]+(\d{4})/', $annee, $matches)) {
+            return substr($matches[1], -2) . substr($matches[2], -2);
+        }
+
+        return substr((string) date('Y'), -2) . substr((string) (date('Y') + 1), -2);
     }
 }

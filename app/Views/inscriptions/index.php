@@ -121,11 +121,40 @@
 
               <?php if ($canSubmit): ?>
                 <div class="mt-3">
-                  <a href="<?= BASE_URL ?>/inscriptions/create" class="btn btn-primary"><i class="bi bi-plus-lg me-2"></i>Nouvelle inscription</a>
+                  <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#sectionSelectModal">
+                    <i class="bi bi-plus-lg me-2"></i>Nouvelle inscription
+                  </button>
                 </div>
               <?php endif; ?>
             </div>
           </div>
         </div>
       </section>
+
+      <?php if (!empty($sections)): ?>
+        <div class="modal fade" id="sectionSelectModal" tabindex="-1" aria-labelledby="sectionSelectModalLabel" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title" id="sectionSelectModalLabel">Choisir une section</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+              </div>
+              <div class="modal-body">
+                <p>Sélectionnez la section dans laquelle vous souhaitez créer une inscription.</p>
+                <div class="list-group">
+                  <?php foreach ($sections as $section): ?>
+                    <a href="<?= BASE_URL ?>/inscriptions/create?section_id=<?= (int) $section['id'] ?>" class="list-group-item list-group-item-action">
+                      <?= htmlspecialchars($section['nom_section']) ?>
+                    </a>
+                  <?php endforeach; ?>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <a href="<?= BASE_URL ?>/inscriptions/create" class="btn btn-outline-secondary">Créer sans section</a>
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Annuler</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      <?php endif; ?>
 <?php require __DIR__ . '/../partials/app_footer.php'; ?>
