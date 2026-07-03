@@ -24,9 +24,9 @@ class FacturationController extends Controller
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $modules,
             'pageTitle' => 'Facturation',
-            'pageDescription' => 'Gérez les frais et les factures de l’école.',
-            'pageContent' => 'Suivi des factures et des paiements.',
-            'pageNotes' => 'Accessible aux comptables et à l’administration.',
+            'pageDescription' => 'Gérez les frais, les devises et les dérogations.',
+            'pageContent' => 'Suivi des factures, création des frais et gestion des taux de devises.',
+            'pageNotes' => 'Accessible aux comptables et à l’administration. Le comptable gère les frais, les devises et les dérogations.',
         ]);
     }
 }

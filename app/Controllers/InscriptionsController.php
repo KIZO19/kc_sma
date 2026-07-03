@@ -28,7 +28,8 @@ class InscriptionsController extends Controller
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
-        $pendingStudents = Eleve::getPending();
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        $pendingStudents = $ecoleId > 0 ? Eleve::getPendingBySchool($ecoleId) : Eleve::getPending();
 
         $this->view('inscriptions/index', [
             'title' => APP_NAME . ' - Dossiers d’inscription',
@@ -52,7 +53,7 @@ class InscriptionsController extends Controller
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
-        $parents = $ecoleId > 0 ? ParentModel::getAllBySchool($ecoleId) : ParentModel::getAll();
+        $parents = $ecoleId > 0 ? ParentModel::getAllBySchool($ecoleId) : [];
         $oldInput = $_SESSION['inscriptions_old'] ?? [];
         unset($_SESSION['inscriptions_old']);
 
@@ -71,6 +72,9 @@ class InscriptionsController extends Controller
     {
         Auth::requireAuth();
         Auth::requireRoles(self::SUBMISSION_ROLES);
+
+        $user = Auth::refresh() ?: Auth::user();
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $nom = trim($_POST['nom'] ?? '');
@@ -124,6 +128,13 @@ class InscriptionsController extends Controller
 
                     if (!empty($newParent['id'])) {
                         $parentId = (int) $newParent['id'];
+                    }
+                }
+
+                if ($parentChoice === 'existing' && $parentId > 0) {
+                    $parentBelongsToSchool = ParentModel::findByIdAndSchool($parentId, $ecoleId);
+                    if (!$parentBelongsToSchool) {
+                        $errors[] = 'Le parent sélectionné n’appartient pas à votre école.';
                     }
                 }
 
@@ -200,16 +211,18 @@ class InscriptionsController extends Controller
             $this->redirect('/inscriptions');
         }
 
-        $student = Eleve::findById($eleveId);
+        $user = Auth::refresh() ?: Auth::user();
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        $student = Eleve::findByIdAndSchool($eleveId, $ecoleId);
         if (!$student) {
-            $_SESSION['inscriptions_errors'] = ['Élève introuvable.'];
+            $_SESSION['inscriptions_errors'] = ['Élève introuvable ou n’appartenant pas à votre école.'];
             $this->redirect('/inscriptions');
         }
 
-        $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
-        $parents = ParentModel::getAll();
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        $parents = $ecoleId > 0 ? ParentModel::getAllBySchool($ecoleId) : [];
         $oldInput = $_SESSION['inscriptions_old'] ?? [];
         unset($_SESSION['inscriptions_old']);
 
@@ -257,9 +270,11 @@ class InscriptionsController extends Controller
                 $errors[] = 'La date de naissance est requise.';
             }
 
-            $student = Eleve::findById($eleveId);
+            $user = Auth::refresh() ?: Auth::user();
+            $ecoleId = (int) ($user['ecole_id'] ?? 0);
+            $student = Eleve::findByIdAndSchool($eleveId, $ecoleId);
             if (!$student) {
-                $errors[] = 'Élève introuvable.';
+                $errors[] = 'Élève introuvable ou n’appartenant pas à votre école.';
             }
 
             if (empty($matricule)) {

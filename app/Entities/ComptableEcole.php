@@ -11,6 +11,14 @@ class ComptableEcole extends RoleEntity
 
     public function can(string $permission): bool
     {
-        return in_array($permission, ['manage_finances', 'record_payments'], true);
+        return in_array($permission, [
+            'manage_finances',
+            'record_payments',
+            'manage_agent_payroll',
+            'approve_exemptions',
+            'plan_collections',
+            'create_fees',
+            'manage_currency',
+        ], true);
     }
 }

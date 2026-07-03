@@ -25,8 +25,8 @@ class PaiementsController extends Controller
             'modules' => $modules,
             'pageTitle' => 'Paiements',
             'pageDescription' => 'Gérez les paiements et les reçus des élèves.',
-            'pageContent' => 'Suivi des paiements scolaires et des factures.',
-            'pageNotes' => 'Page accessible aux services financiers et à l’administration.',
+            'pageContent' => 'Suivi des paiements scolaires, des plans de recouvrement et des écritures de trésorerie.',
+            'pageNotes' => 'Page accessible aux services financiers et à l’administration. Le comptable planifie les recouvrements et gère les paiements.',
         ]);
     }
 }

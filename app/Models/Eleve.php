@@ -54,6 +54,22 @@ class Eleve
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public static function getPendingBySchool(int $ecoleId): array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            'SELECT e.*, p.nom_responsable AS parent_nom_responsable '
+            . 'FROM eleves e '
+            . 'LEFT JOIN parents p ON e.parent_id = p.id '
+            . 'WHERE e.statut_eleve = :statut AND (p.ecole_id = :ecole_id OR EXISTS ('
+            . 'SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id '
+            . 'WHERE i.eleve_id = e.id AND c.ecole_id = :ecole_id)) '
+            . 'ORDER BY e.id DESC'
+        );
+        $stmt->execute([':statut' => 'inactif', ':ecole_id' => $ecoleId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public static function update(int $id, array $data): bool
     {
         $db = Database::getConnection();
@@ -111,11 +127,56 @@ class Eleve
         return $eleve ?: null;
     }
 
+    public static function findByIdAndSchool(int $id, int $ecoleId): ?array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            'SELECT e.* FROM eleves e '
+            . 'LEFT JOIN parents p ON e.parent_id = p.id '
+            . 'WHERE e.id = :id AND (p.ecole_id = :ecole_id OR EXISTS ('
+            . 'SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id '
+            . 'WHERE i.eleve_id = e.id AND c.ecole_id = :ecole_id)) '
+            . 'LIMIT 1'
+        );
+        $stmt->execute([':id' => $id, ':ecole_id' => $ecoleId]);
+        $eleve = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $eleve ?: null;
+    }
+
     public static function createUserAccount(int $eleveId): array
     {
         $eleve = self::findById($eleveId);
         if (!$eleve) {
             throw new \RuntimeException('Eleve not found');
+        }
+        // Determine associated school (ecole_id)
+        $ecoleId = $eleve['ecole_id'] ?? null;
+
+        // try to get from latest inscription -> classe -> ecole
+        if (empty($ecoleId)) {
+            $db = \App\Core\Database::getConnection();
+            $stmt = $db->prepare('SELECT c.ecole_id FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id WHERE i.eleve_id = :id ORDER BY i.date_inscription DESC LIMIT 1');
+            $stmt->execute([':id' => $eleve['id']]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($row && !empty($row['ecole_id'])) {
+                $ecoleId = (int) $row['ecole_id'];
+            }
+        }
+
+        // fallback to parent's ecole
+        if (empty($ecoleId) && !empty($eleve['parent_id'])) {
+            $db = \App\Core\Database::getConnection();
+            $stmt = $db->prepare('SELECT ecole_id FROM parents WHERE id = :pid LIMIT 1');
+            $stmt->execute([':pid' => $eleve['parent_id']]);
+            $prow = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($prow && !empty($prow['ecole_id'])) {
+                $ecoleId = (int) $prow['ecole_id'];
+            }
+        }
+
+        if (empty($ecoleId)) {
+            throw new \RuntimeException('Cannot determine ecole_id for eleve ' . $eleve['id']);
         }
 
         $identifiant = $eleve['matricule'] ?: 'eleve' . $eleve['id'] . '@school.local';
@@ -124,7 +185,7 @@ class Eleve
         return \App\Models\User::findOrCreateForReference([
             'role' => 'eleve_ecole',
             'reference_id' => $eleve['id'],
-            'ecole_id' => $eleve['ecole_id'] ?? null,
+            'ecole_id' => $ecoleId,
             'identifiant' => $identifiant,
             'mot_de_passe' => $password,
             'nom_complet' => trim(($eleve['prenom'] ?? '') . ' ' . ($eleve['nom'] ?? '')),

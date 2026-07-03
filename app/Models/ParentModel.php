@@ -33,6 +33,16 @@ class ParentModel
         return $parent ?: null;
     }
 
+    public static function findByIdAndSchool(int $id, int $ecoleId): ?array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare('SELECT * FROM parents WHERE id = :id AND ecole_id = :ecole_id LIMIT 1');
+        $stmt->execute([':id' => $id, ':ecole_id' => $ecoleId]);
+        $parent = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $parent ?: null;
+    }
+
     public static function create(array $data): ?array
     {
         $db = Database::getConnection();
@@ -57,6 +67,10 @@ class ParentModel
         if (!$parent) {
             throw new \RuntimeException('Parent not found');
         }
+        $ecoleId = $parent['ecole_id'] ?? null;
+        if (empty($ecoleId)) {
+            throw new \RuntimeException('Parent ' . $parent['id'] . ' has no ecole_id');
+        }
 
         $identifiant = $parent['email'] ?: $parent['telephone'] ?: 'parent' . $parent['id'] . '@local';
         $password = bin2hex(random_bytes(4));
@@ -64,7 +78,7 @@ class ParentModel
         return \App\Models\User::findOrCreateForReference([
             'role' => 'parent_ecole',
             'reference_id' => $parent['id'],
-            'ecole_id' => $parent['ecole_id'] ?? null,
+            'ecole_id' => $ecoleId,
             'identifiant' => $identifiant,
             'mot_de_passe' => $password,
             'nom_complet' => $parent['nom_responsable'] ?? $identifiant,

@@ -165,6 +165,22 @@ if (!empty($modules) && is_array($modules)) {
         }
     }
 }
+
+$brandName = 'AdminKC';
+$brandLogo = BASE_URL . '/assets/favicon.ico';
+$school = null;
+if (!empty($user['ecole_id'])) {
+    $school = \App\Models\Ecole::findById((int) $user['ecole_id']);
+}
+if (!empty($school['nom_etablissement'])) {
+    $brandName = $school['nom_etablissement'];
+}
+if (!empty($school['logo_url'])) {
+    $brandLogo = htmlspecialchars($school['logo_url'], ENT_QUOTES, 'UTF-8');
+    if (strpos($brandLogo, 'http') !== 0 && strpos($brandLogo, '/') !== 0) {
+        $brandLogo = BASE_URL . '/' . ltrim($brandLogo, '/');
+    }
+}
 ?>
   <div class="app-wrapper">
     <nav class="app-header navbar navbar-expand bg-body">
@@ -295,8 +311,8 @@ if (!empty($modules) && is_array($modules)) {
 
     <aside class="app-sidebar">
       <a href="<?= BASE_URL ?>/dashboard" class="brand-link d-flex align-items-center p-3">
-        <img src="<?= BASE_URL ?>/assets/favicon.ico" alt="Logo" class="me-2 rounded-circle" style="width:36px;height:36px;">
-        <span class="brand-text h5 mb-0">AdminKC</span>
+        <img src="<?= htmlspecialchars($brandLogo) ?>" alt="Logo <?= htmlspecialchars($brandName) ?>" class="me-2 rounded-circle" style="width:36px;height:36px;object-fit:cover;">
+        <span class="brand-text h5 mb-0"><?= htmlspecialchars($brandName) ?></span>
       </a>
 
       <div class="sidebar p-3">
@@ -313,6 +329,21 @@ if (!empty($modules) && is_array($modules)) {
             <span class="small text-muted"><?= htmlspecialchars($roleLabel ?? '') ?></span>
           </div>
         </div>
+
+        <?php if (($role ?? '') === 'comptable_école'): ?>
+          <div class="card bg-secondary bg-opacity-10 border-0 mb-3">
+            <div class="card-body p-3">
+              <h6 class="card-title mb-2">Responsabilités</h6>
+              <ul class="small mb-0 ps-3">
+                <li>Gérer les paiements des élèves</li>
+                <li>Traiter la paie des agents</li>
+                <li>Valider les dérogations</li>
+                <li>Planifier les recouvrements</li>
+                <li>Créer les frais et leur devise</li>
+              </ul>
+            </div>
+          </div>
+        <?php endif; ?>
 
         <div class="mb-3">
           <div class="input-group">

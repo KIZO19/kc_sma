@@ -95,6 +95,10 @@ class Controller
             'comptable_école' => [
                 ['name' => 'Inscriptions', 'path' => '/inscriptions', 'icon' => 'bi-person-plus'],
                 ['name' => 'Facturation', 'path' => '/facturation', 'icon' => 'bi-receipt'],
+                ['name' => 'Frais', 'path' => '/frais', 'icon' => 'bi-tag'],
+                ['name' => 'Devises', 'path' => '/devises', 'icon' => 'bi-currency-exchange'],
+                ['name' => 'Dérogations', 'path' => '/derogations', 'icon' => 'bi-file-earmark-check'],
+                ['name' => 'Recouvrements', 'path' => '/recouvrements', 'icon' => 'bi-cash-stack'],
                 ['name' => 'Caisses & Banques', 'path' => '/comptes', 'icon' => 'bi-bank'],
                 ['name' => 'Paiements', 'path' => '/paiements', 'icon' => 'bi-currency-dollar'],
                 ['name' => 'Rapports', 'path' => '/rapports', 'icon' => 'bi-file-earmark-bar-graph'],

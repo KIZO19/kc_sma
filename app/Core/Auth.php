@@ -50,6 +50,26 @@ class Auth
         return !self::check();
     }
 
+    public static function getSchoolId(): ?int
+    {
+        $user = self::user();
+        return isset($user['ecole_id']) && $user['ecole_id'] !== null ? (int) $user['ecole_id'] : null;
+    }
+
+    public static function requireSchoolScope(int $ecoleId): void
+    {
+        if (self::guest()) {
+            self::requireAuth();
+            return;
+        }
+
+        $currentSchoolId = self::getSchoolId();
+        if ($currentSchoolId !== null && $currentSchoolId !== $ecoleId) {
+            header('Location: ' . BASE_URL . '/error/accessDenied');
+            exit;
+        }
+    }
+
     public static function logout(): void
     {
         self::start();
