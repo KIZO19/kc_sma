@@ -73,4 +73,32 @@ class FraisScolaire
 
         return false;
     }
+
+    public static function findById(int $id): ?array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare('SELECT f.*, c.nom_classe, s.annee AS annee_scolaire FROM frais_scolaires f LEFT JOIN classes c ON c.id = f.classe_id LEFT JOIN annees_scolaires s ON s.id = f.annee_scolaire_id WHERE f.id = :id LIMIT 1');
+        $stmt->execute([':id' => $id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    public static function update(int $id, array $data): bool
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            'UPDATE frais_scolaires SET classe_id = :classe_id, type_frais = :type_frais, montant_total = :montant_total, annee_scolaire_id = :annee_scolaire_id, devise = :devise, scope = :scope, scope_id = :scope_id WHERE id = :id'
+        );
+
+        return (bool) $stmt->execute([
+            ':classe_id' => $data['classe_id'] ?? null,
+            ':type_frais' => $data['type_frais'],
+            ':montant_total' => $data['montant_total'],
+            ':annee_scolaire_id' => $data['annee_scolaire_id'],
+            ':devise' => $data['devise'],
+            ':scope' => $data['scope'] ?? 'class',
+            ':scope_id' => $data['scope_id'] ?? null,
+            ':id' => $id,
+        ]);
+    }
 }

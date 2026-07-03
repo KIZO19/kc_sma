@@ -260,4 +260,144 @@ class FraisController extends Controller
             'XOF' => 'XOF - Franc CFA BCEAO',
         ];
     }
+
+    public function show(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(self::MANAGEMENT_ROLES);
+
+        $user = Auth::refresh() ?: Auth::user();
+        $role = $user['role'] ?? 'default';
+        $modules = $this->getModulesForRole($role);
+
+        $id = (int) ($_GET['id'] ?? 0);
+        if ($id <= 0) {
+            $this->redirect('/frais');
+            return;
+        }
+
+        $fee = FraisScolaire::findById($id);
+        if (!$fee) {
+            $this->redirect('/error/notFound');
+            return;
+        }
+
+        $this->view('frais/show', [
+            'title' => APP_NAME . ' - Détail frais',
+            'user' => $user,
+            'role' => $role,
+            'roleLabel' => User::getRoleLabel($role),
+            'modules' => $modules,
+            'fee' => $fee,
+        ]);
+    }
+
+    public function edit(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(self::MANAGEMENT_ROLES);
+
+        $user = Auth::refresh() ?: Auth::user();
+        $role = $user['role'] ?? 'default';
+        $modules = $this->getModulesForRole($role);
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
+
+        $id = (int) ($_GET['id'] ?? 0);
+        if ($id <= 0) {
+            $this->redirect('/frais');
+            return;
+        }
+
+        $fee = FraisScolaire::findById($id);
+        if (!$fee) {
+            $this->redirect('/error/notFound');
+            return;
+        }
+
+        $classes = $ecoleId > 0 ? Classe::getAllBySchool($ecoleId) : [];
+        $years = $ecoleId > 0 ? AnneeScolaire::getAllBySchool($ecoleId) : [];
+        $options = $ecoleId > 0 ? Option::getAll() : [];
+        $sections = $ecoleId > 0 ? Section::getAll() : [];
+
+        $this->view('frais/edit', [
+            'title' => APP_NAME . ' - Modifier frais',
+            'user' => $user,
+            'role' => $role,
+            'roleLabel' => User::getRoleLabel($role),
+            'modules' => $modules,
+            'fee' => $fee,
+            'classes' => $classes,
+            'years' => $years,
+            'options' => $options,
+            'sections' => $sections,
+            'currencies' => $this->getCurrencyOptions(),
+        ]);
+    }
+
+    public function update(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(self::MANAGEMENT_ROLES);
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->redirect('/frais');
+            return;
+        }
+
+        $user = Auth::refresh() ?: Auth::user();
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
+
+        $id = (int) ($_POST['id'] ?? 0);
+        $typeFrais = trim($_POST['type_frais'] ?? '');
+        $montantTotal = trim($_POST['montant_total'] ?? '');
+        $classeId = (int) ($_POST['classe_id'] ?? 0);
+        $anneeScolaireId = (int) ($_POST['annee_scolaire_id'] ?? 0);
+        $scope = trim($_POST['scope'] ?? 'class');
+        $scopeId = (int) ($_POST['scope_id'] ?? 0);
+        $devise = trim($_POST['devise'] ?? '');
+
+        $errors = [];
+        if ($id <= 0) $errors[] = 'Frais invalide.';
+        if ($typeFrais === '') $errors[] = 'Le type de frais est requis.';
+        if ($montantTotal === '' || !is_numeric($montantTotal) || (float) $montantTotal < 0) $errors[] = 'Le montant total doit être un nombre positif.';
+
+        $allowedScopes = ['class', 'option', 'section', 'school'];
+        if (!in_array($scope, $allowedScopes, true)) $errors[] = 'Portée de frais invalide.';
+
+        if ($scope === 'class' && $classeId <= 0) $errors[] = 'La classe est requise pour cette portée.';
+        if ($scope !== 'class') $classeId = 0;
+
+        if ($anneeScolaireId <= 0) {
+            $active = AnneeScolaire::getActiveBySchool($ecoleId);
+            if ($active) $anneeScolaireId = (int) $active['id'];
+            else $errors[] = 'L\'année scolaire est requise.';
+        }
+
+        if ($devise === '') $errors[] = 'La devise est requise.';
+
+        if (!empty($errors)) {
+            $_SESSION['frais_errors'] = $errors;
+            $_SESSION['frais_old'] = $_POST;
+            $this->redirect('/frais/edit?id=' . $id);
+            return;
+        }
+
+        $ok = FraisScolaire::update($id, [
+            'classe_id' => $classeId ?: null,
+            'type_frais' => $typeFrais,
+            'montant_total' => (float) $montantTotal,
+            'annee_scolaire_id' => $anneeScolaireId,
+            'devise' => $devise,
+            'scope' => $scope,
+            'scope_id' => $scope === 'class' ? $classeId : ($scope === 'option' || $scope === 'section' ? $scopeId : null),
+        ]);
+
+        if ($ok) {
+            $_SESSION['frais_success'] = 'Frais mis à jour avec succès.';
+        } else {
+            $_SESSION['frais_errors'] = ['Impossible de mettre à jour le frais.'];
+        }
+
+        $this->redirect('/frais');
+    }
 }
