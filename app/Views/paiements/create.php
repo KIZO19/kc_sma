@@ -33,8 +33,18 @@
               </div>
 
               <div class="mb-3">
-                <label class="form-label">Libellé</label>
-                <input type="text" name="libelle" class="form-control" value="Paiement frais scolaires">
+                <label class="form-label">Motif / Frais</label>
+                <select name="frais_id" id="fraisSelect" class="form-select">
+                  <option value="">-- Sélectionner le motif --</option>
+                  <?php foreach (($fees ?? []) as $f): ?>
+                    <option value="<?= (int) $f['id'] ?>" data-amount="<?= htmlspecialchars($f['montant_total'] ?? '') ?>"><?= htmlspecialchars($f['type_frais'] . ' - ' . ($f['nom_classe'] ?? '') ) ?> (<?= htmlspecialchars($f['devise'] ?? '') ?>)</option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label">Libellé (optionnel)</label>
+                <input type="text" name="libelle" id="libelleInput" class="form-control" value="">
               </div>
 
               <div class="mb-3">
@@ -69,3 +79,24 @@
   </div>
 </section>
 <?php require __DIR__ . '/../partials/app_footer.php'; ?>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const fraisSelect = document.getElementById('fraisSelect');
+    const libelleInput = document.getElementById('libelleInput');
+    const montantInput = document.querySelector('input[name="montant"]');
+    if (!fraisSelect) return;
+
+    fraisSelect.addEventListener('change', function () {
+      const opt = fraisSelect.selectedOptions[0];
+      if (!opt) return;
+      const amount = opt.dataset.amount || '';
+      if (amount && montantInput && (montantInput.value === '' || parseFloat(montantInput.value) === 0)) {
+        montantInput.value = amount;
+      }
+      // prefill libelle if empty
+      if (libelleInput && libelleInput.value.trim() === '') {
+        libelleInput.value = opt.textContent.trim();
+      }
+    });
+  });
+</script>

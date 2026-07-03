@@ -19,16 +19,34 @@ class PaiementsController extends Controller
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
 
-        $this->view('pages/page', [
+        $db = \App\Core\Database::getConnection();
+        // list recent payment écritures (type CREDIT) for this school
+        $sql = 'SELECT ece.*, ce.eleve_id, el.nom, el.postnom, el.prenom, cb.nom_compte, u.nom_complet AS agent_nom FROM ecritures_comptables_eleves ece '
+            . 'INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id '
+            . 'INNER JOIN eleves el ON ce.eleve_id = el.id '
+            . 'LEFT JOIN caisses_banques cb ON ece.caisse_banque_id = cb.id '
+            . 'LEFT JOIN utilisateurs u ON ece.agent_saisie_id = u.reference_id AND u.role NOT IN (\'eleve_ecole\', \'parent_ecole\') '
+            . 'WHERE ece.type_mouvement = :type ';
+
+        // scope by school if user not super_admin
+        $params = [':type' => 'CREDIT'];
+        if (($user['role'] ?? '') !== 'super_admin') {
+            $sql .= 'AND (el.ecole_id = :ecole OR EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id WHERE i.eleve_id = el.id AND c.ecole_id = :ecole)) ';
+            $params[':ecole'] = (int) ($user['ecole_id'] ?? 0);
+        }
+
+        $sql .= 'ORDER BY ece.date_operation DESC LIMIT 200';
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        $payments = $stmt->fetchAll();
+
+        $this->view('paiements/index', [
             'title' => APP_NAME . ' - Paiements',
             'user' => $user,
             'role' => $role,
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $modules,
-            'pageTitle' => 'Paiements',
-            'pageDescription' => 'Gérez les paiements et les reçus des élèves.',
-            'pageContent' => 'Suivi des paiements scolaires, des plans de recouvrement et des écritures de trésorerie.',
-            'pageNotes' => 'Page accessible aux services financiers et à l’administration. Le comptable planifie les recouvrements et gère les paiements.',
+            'payments' => $payments,
         ]);
     }
 
@@ -60,6 +78,14 @@ class PaiementsController extends Controller
         $stmt->execute([':ecole_id' => $user['ecole_id'] ?? 0]);
         $caisses = $stmt->fetchAll();
 
+        // Fetch fees for this school to populate motif picklist
+        $fees = [];
+        try {
+            $fees = \App\Models\FraisScolaire::getAllBySchool((int) ($user['ecole_id'] ?? 0));
+        } catch (\Throwable $e) {
+            // ignore, view will show empty list
+        }
+
         $this->view('paiements/create', [
             'title' => APP_NAME . ' - Enregistrer paiement',
             'user' => $user,
@@ -69,6 +95,7 @@ class PaiementsController extends Controller
             'eleve' => $eleve,
             'compte' => $compte,
             'caisses' => $caisses,
+            'fees' => $fees,
         ]);
     }
 
@@ -88,7 +115,21 @@ class PaiementsController extends Controller
 
         $eleveId = (int) ($_POST['eleve_id'] ?? 0);
         $montant = (float) ($_POST['montant'] ?? 0);
-        $libelle = trim($_POST['libelle'] ?? 'Paiement élève');
+        $fraisId = !empty($_POST['frais_id']) ? (int) $_POST['frais_id'] : null;
+        $libelle = '';
+        if ($fraisId) {
+            $fee = \App\Models\FraisScolaire::findById($fraisId);
+            if ($fee) {
+                $libelle = $fee['type_frais'] . ' - ' . number_format((float) ($fee['montant_total'] ?? 0), 2) . ' ' . ($fee['devise'] ?? '');
+                // if montant not provided, use fee amount as default
+                if ($montant <= 0) {
+                    $montant = (float) ($fee['montant_total'] ?? 0);
+                }
+            }
+        }
+        if ($libelle === '') {
+            $libelle = trim($_POST['libelle'] ?? 'Paiement élève');
+        }
         $caisseId = !empty($_POST['caisse_id']) ? (int) $_POST['caisse_id'] : null;
 
         if ($eleveId <= 0 || $montant <= 0) {
@@ -117,9 +158,10 @@ class PaiementsController extends Controller
 
         $reference = 'REC-' . date('YmdHis') . '-' . random_int(100, 999);
 
-        $stmt = $db->prepare('INSERT INTO ecritures_comptables_eleves (compte_eleve_id, frais_id, caisse_banque_id, type_mouvement, montant, reference_recu, libelle, agent_saisie_id) VALUES (:compte, NULL, :caisse, :type, :montant, :ref, :libelle, :agent)');
+        $stmt = $db->prepare('INSERT INTO ecritures_comptables_eleves (compte_eleve_id, frais_id, caisse_banque_id, type_mouvement, montant, reference_recu, libelle, agent_saisie_id) VALUES (:compte, :frais, :caisse, :type, :montant, :ref, :libelle, :agent)');
         $stmt->execute([
             ':compte' => $compteId,
+            ':frais' => $fraisId,
             ':caisse' => $caisseId,
             ':type' => 'CREDIT',
             ':montant' => $montant,
