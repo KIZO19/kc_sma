@@ -6,7 +6,10 @@ use App\Core\Auth;
 use App\Core\Controller;
 use App\Models\Eleve;
 use App\Models\AnneeScolaire;
+use App\Models\Classe;
 use App\Models\Ecole;
+use App\Models\Inscription;
+use App\Models\Option;
 use App\Models\ParentModel;
 use App\Models\Section;
 use App\Models\User;
@@ -34,6 +37,7 @@ class InscriptionsController extends Controller
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
         $pendingStudents = $ecoleId > 0 ? Eleve::getPendingBySchool($ecoleId) : Eleve::getPending();
         $sections = Section::getAll();
+        $options = Option::getAll();
 
         $this->view('inscriptions/index', [
             'title' => APP_NAME . ' - Dossiers d’inscription',
@@ -43,6 +47,7 @@ class InscriptionsController extends Controller
             'modules' => $modules,
             'pendingStudents' => $pendingStudents,
             'sections' => $sections,
+            'options' => $options,
             'canSubmit' => in_array($role, self::SUBMISSION_ROLES, true),
             'canEdit' => in_array($role, self::SUBMISSION_ROLES, true),
             'canApprove' => in_array($role, ['super_admin', 'sec_école'], true),
@@ -61,9 +66,25 @@ class InscriptionsController extends Controller
         $parents = $ecoleId > 0 ? ParentModel::getAllBySchool($ecoleId) : [];
         $sections = Section::getAll();
         $selectedSection = null;
+        $selectedOption = null;
         $sectionId = (int) ($_GET['section_id'] ?? 0);
+        $optionId = (int) ($_GET['option_id'] ?? 0);
         if ($sectionId > 0) {
             $selectedSection = Section::findById($sectionId);
+        }
+        if ($optionId > 0) {
+            $selectedOption = Option::findById($optionId);
+        }
+
+        $classes = [];
+        if ($ecoleId > 0) {
+            if ($selectedSection && $selectedOption) {
+                $classes = Classe::getAllBySchoolSectionAndOption($ecoleId, $selectedSection['id'], $selectedOption['id']);
+            } elseif ($selectedSection) {
+                $classes = Classe::getAllBySchoolAndSection($ecoleId, $selectedSection['id']);
+            } else {
+                $classes = Classe::getAllBySchool($ecoleId);
+            }
         }
         $oldInput = $_SESSION['inscriptions_old'] ?? [];
         unset($_SESSION['inscriptions_old']);
@@ -75,7 +96,9 @@ class InscriptionsController extends Controller
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $modules,
             'parents' => $parents,
+            'classes' => $classes,
             'selectedSection' => $selectedSection,
+            'selectedOption' => $selectedOption,
             'oldInput' => $oldInput,
         ]);
     }
@@ -97,6 +120,7 @@ class InscriptionsController extends Controller
             $matricule = trim($_POST['matricule'] ?? '');
             $parentChoice = trim($_POST['parent_choice'] ?? 'existing');
             $parentId = (int) ($_POST['parent_id'] ?? 0);
+            $classeId = (int) ($_POST['classe_id'] ?? 0);
             $newParentName = trim($_POST['new_parent_nom_responsable'] ?? '');
             $newParentTelephone = trim($_POST['new_parent_telephone'] ?? '');
             $newParentEmail = trim($_POST['new_parent_email'] ?? '');
@@ -119,12 +143,23 @@ class InscriptionsController extends Controller
                 $matricule = $this->generateMatricule($nom . ' ' . $postnom);
             }
 
+            if ($classeId <= 0) {
+                $errors[] = 'La classe associée est requise pour l’inscription.';
+            }
+
             if ($parentChoice === 'new') {
                 if ($newParentName === '') {
                     $errors[] = 'Le nom du parent/tuteur est requis lorsque vous créez un nouveau parent.';
                 }
                 if ($newParentTelephone === '') {
                     $errors[] = 'Le téléphone du parent/tuteur est requis lorsque vous créez un nouveau parent.';
+                }
+            }
+
+            if (empty($errors)) {
+                $selectedClass = Classe::findById($classeId);
+                if (!$selectedClass || (int) ($selectedClass['ecole_id'] ?? 0) !== $ecoleId) {
+                    $errors[] = 'La classe sélectionnée est invalide ou n’appartient pas à votre école.';
                 }
             }
 
@@ -190,6 +225,17 @@ class InscriptionsController extends Controller
                     );
                     Eleve::updateMatricule((int) $newStudent['id'], $generatedMatricule);
                     $newStudent['matricule'] = $generatedMatricule;
+                }
+
+                if ($newStudent) {
+                    $activeYear = AnneeScolaire::getActiveBySchool($ecoleId);
+                    if ($activeYear) {
+                        Inscription::create([
+                            'eleve_id' => (int) $newStudent['id'],
+                            'classe_id' => $classeId,
+                            'annee_scolaire_id' => (int) $activeYear['id'],
+                        ]);
+                    }
                 }
 
                 // Handle optional student photo upload (saved to public/uploads/avatars/eleve_{id}.{ext})

@@ -51,6 +51,15 @@ BEGIN
     EXECUTE st2;
     DEALLOCATE PREPARE st2;
   END IF;
+
+  SELECT COUNT(*) INTO cnt2 FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'utilisateurs' AND COLUMN_NAME = 'section_id';
+  IF cnt2 = 0 THEN
+    SET @u = 'ALTER TABLE `utilisateurs` ADD COLUMN `section_id` INT DEFAULT NULL COMMENT \'Section affectée à l\'utilisateur pour ses responsabilités\'';
+    PREPARE st2 FROM @u;
+    EXECUTE st2;
+    DEALLOCATE PREPARE st2;
+  END IF;
 END$$
 DELIMITER ;
 

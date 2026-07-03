@@ -143,7 +143,11 @@
                 <p>Sélectionnez la section dans laquelle vous souhaitez créer une inscription.</p>
                 <div class="list-group">
                   <?php foreach ($sections as $section): ?>
-                    <a href="<?= BASE_URL ?>/inscriptions/create?section_id=<?= (int) $section['id'] ?>" class="list-group-item list-group-item-action">
+                    <?php $isSecondary = mb_strtolower($section['nom_section'], 'UTF-8') === 'secondaire'; ?>
+                    <a href="<?= $isSecondary ? 'javascript:void(0)' : BASE_URL . '/inscriptions/create?section_id=' . (int) $section['id'] ?>"
+                       class="list-group-item list-group-item-action<?= $isSecondary ? ' secondary-section-item' : '' ?>"
+                       data-section-id="<?= (int) $section['id'] ?>"
+                       data-section-name="<?= htmlspecialchars($section['nom_section'], ENT_QUOTES, 'UTF-8') ?>">
                       <?= htmlspecialchars($section['nom_section']) ?>
                     </a>
                   <?php endforeach; ?>
@@ -157,4 +161,63 @@
           </div>
         </div>
       <?php endif; ?>
+
+      <?php if (!empty($options)): ?>
+        <div class="modal fade" id="optionSelectModal" tabindex="-1" aria-labelledby="optionSelectModalLabel" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title" id="optionSelectModalLabel">Choisir une option</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+              </div>
+              <div class="modal-body">
+                <p>Sélectionnez l’option dans laquelle l’élève doit être inscrit en secondaire.</p>
+                <div class="list-group" id="optionListGroup">
+                  <?php foreach ($options as $option): ?>
+                    <a href="#" class="list-group-item list-group-item-action option-choice-item" data-option-id="<?= (int) $option['id'] ?>">
+                      <?= htmlspecialchars($option['nom_option']) ?>
+                    </a>
+                  <?php endforeach; ?>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      <?php endif; ?>
+
+      <script>
+        document.addEventListener('DOMContentLoaded', function () {
+          const optionModalElement = document.getElementById('optionSelectModal');
+          const optionItems = document.querySelectorAll('.option-choice-item');
+          let selectedSecondarySectionId = null;
+
+          const sectionLinks = document.querySelectorAll('.secondary-section-item');
+          sectionLinks.forEach(function (link) {
+            link.addEventListener('click', function (event) {
+              event.preventDefault();
+              selectedSecondarySectionId = this.dataset.sectionId;
+              if (optionModalElement) {
+                const modal = new bootstrap.Modal(optionModalElement);
+                modal.show();
+                return;
+              }
+              window.location.href = '<?= BASE_URL ?>/inscriptions/create?section_id=' + encodeURIComponent(selectedSecondarySectionId);
+            });
+          });
+
+          optionItems.forEach(function (link) {
+            link.addEventListener('click', function (event) {
+              event.preventDefault();
+              if (!selectedSecondarySectionId) {
+                return;
+              }
+              const optionId = this.dataset.optionId;
+              window.location.href = '<?= BASE_URL ?>/inscriptions/create?section_id=' + encodeURIComponent(selectedSecondarySectionId) + '&option_id=' + encodeURIComponent(optionId);
+            });
+          });
+        });
+      </script>
 <?php require __DIR__ . '/../partials/app_footer.php'; ?>

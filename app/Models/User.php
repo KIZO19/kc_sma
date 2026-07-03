@@ -76,11 +76,33 @@ class User
             $params[':ecole_id'] = $data['ecole_id'];
         }
 
+        $defaultSection = self::getDefaultSectionIdForRole($data['role']);
+        if (isset($data['section_id'])) {
+            $sectionId = $data['section_id'];
+        } else {
+            $sectionId = $defaultSection;
+        }
+
+        if ($sectionId !== null) {
+            $fields[] = 'section_id';
+            $placeholders[] = ':section_id';
+            $params[':section_id'] = $sectionId;
+        }
+
         $sql = 'INSERT INTO utilisateurs (' . implode(', ', $fields) . ', created_at) VALUES (' . implode(', ', $placeholders) . ', NOW())';
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
 
         return self::findById((int) $db->lastInsertId());
+    }
+
+    private static function getDefaultSectionIdForRole(string $role): ?int
+    {
+        return match ($role) {
+            'préfet_école', 'DE_école', 'DD_école' => 3,
+            'DP_école', 'DA_école' => 2,
+            default => null,
+        };
     }
 
     public static function getAvailableEcoleAdmins(): array
@@ -150,6 +172,19 @@ class User
             $fields[] = 'ecole_id';
             $placeholders[] = ':ecole_id';
             $params[':ecole_id'] = $data['ecole_id'];
+        }
+
+        $defaultSection = self::getDefaultSectionIdForRole($data['role']);
+        if (isset($data['section_id'])) {
+            $sectionId = $data['section_id'];
+        } else {
+            $sectionId = $defaultSection;
+        }
+
+        if ($sectionId !== null) {
+            $fields[] = 'section_id';
+            $placeholders[] = ':section_id';
+            $params[':section_id'] = $sectionId;
         }
 
         // Hash password if it doesn't look hashed yet

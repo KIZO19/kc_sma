@@ -54,24 +54,30 @@ $oldInput = $oldInput ?? [];
                     <?php if (!empty($selectedSection)): ?>
                       <div class="alert alert-info">
                         Section sélectionnée : <strong><?= htmlspecialchars($selectedSection['nom_section']) ?></strong>
+                        <?php if (!empty($selectedOption)): ?>
+                          <br>Option sélectionnée : <strong><?= htmlspecialchars($selectedOption['nom_option']) ?></strong>
+                        <?php endif; ?>
                       </div>
                       <input type="hidden" name="section_id" value="<?= (int) $selectedSection['id'] ?>">
+                      <?php if (!empty($selectedOption)): ?>
+                        <input type="hidden" name="option_id" value="<?= (int) $selectedOption['id'] ?>">
+                      <?php endif; ?>
                     <?php endif; ?>
                     <div class="row">
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Nom</label>
-                        <input type="text" name="nom" class="form-control" required value="<?= htmlspecialchars($oldInput['nom'] ?? '') ?>">
+                        <input id="nom-input" type="text" name="nom" class="form-control" required value="<?= htmlspecialchars($oldInput['nom'] ?? '') ?>">
                       </div>
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Postnom</label>
-                        <input type="text" name="postnom" class="form-control" required value="<?= htmlspecialchars($oldInput['postnom'] ?? '') ?>">
+                        <input id="postnom-input" type="text" name="postnom" class="form-control" required value="<?= htmlspecialchars($oldInput['postnom'] ?? '') ?>">
                       </div>
                     </div>
 
                     <div class="row">
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Prénom</label>
-                        <input type="text" name="prenom" class="form-control" value="<?= htmlspecialchars($oldInput['prenom'] ?? '') ?>">
+                        <input id="prenom-input" type="text" name="prenom" class="form-control" value="<?= htmlspecialchars($oldInput['prenom'] ?? '') ?>">
                       </div>
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Genre</label>
@@ -83,18 +89,56 @@ $oldInput = $oldInput ?? [];
                       </div>
                     </div>
 
-                    <div class="row">
+                    <div class="row align-items-end">
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Date de naissance</label>
-                        <input type="date" name="date_naissance" class="form-control" required value="<?= htmlspecialchars($oldInput['date_naissance'] ?? '') ?>">
+                        <input id="date-naissance-input" type="date" name="date_naissance" class="form-control" required value="<?= htmlspecialchars($oldInput['date_naissance'] ?? '') ?>">
                       </div>
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Matricule (optionnel)</label>
-                        <input type="text" name="matricule" class="form-control" placeholder="Généré automatiquement si vide" value="<?= htmlspecialchars($oldInput['matricule'] ?? '') ?>">
+                        <div class="input-group">
+                          <input id="matricule-input" type="text" name="matricule" class="form-control" placeholder="Généré automatiquement si vide" value="<?= htmlspecialchars($oldInput['matricule'] ?? '') ?>">
+                          <button id="generate-matricule-btn" type="button" class="btn btn-outline-secondary">Aperçu</button>
+                        </div>
+                        <div id="matricule-preview" class="form-text text-muted mt-1">Aperçu du matricule généré disponible après saisie du nom et du postnom.</div>
                       </div>
                     </div>
 
                     <div class="mb-3">
+                      <label class="form-label">Classe</label>
+                      <select name="classe_id" class="form-select" required>
+                        <option value="">Sélectionnez une classe</option>
+                        <?php if (!empty($classes)): ?>
+                          <?php foreach ($classes as $classe): ?>
+                            <option value="<?= (int) $classe['id'] ?>" <?= ((int) ($oldInput['classe_id'] ?? 0) === (int) $classe['id']) ? 'selected' : '' ?>>
+                              <?= htmlspecialchars($classe['nom_classe']) ?>
+                              <?php if (!empty($classe['nom_section'])): ?>
+                                - <?= htmlspecialchars($classe['nom_section']) ?>
+                              <?php endif; ?>
+                              <?php if (!empty($classe['nom_option'])): ?>
+                                <?= htmlspecialchars($classe['nom_option']) ? ' (' . htmlspecialchars($classe['nom_option']) . ')' : '' ?>
+                              <?php endif; ?>
+                            </option>
+                          <?php endforeach; ?>
+                        <?php else: ?>
+                          <option value="">Aucune classe disponible</option>
+                        <?php endif; ?>
+                      </select>
+                      <small class="form-text text-muted">Sélectionnez la classe où l’élève doit être inscrit.</small>
+                    </div>
+
+                    <div class="mb-3">
+                      <label class="form-label">Parent / tuteur</label>
+                      <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="parent_choice" id="parent-choice-existing" value="existing" <?= (($oldInput['parent_choice'] ?? 'existing') === 'existing') ? 'checked' : '' ?>>
+                        <label class="form-check-label" for="parent-choice-existing">Parent existant</label>
+                      </div>
+                      <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="parent_choice" id="parent-choice-new" value="new" <?= (($oldInput['parent_choice'] ?? 'existing') === 'new') ? 'checked' : '' ?>>
+                        <label class="form-check-label" for="parent-choice-new">Créer nouveau parent</label>
+                      </div>
+                    </div>
+                    <div class="mb-3 parent-choice-existing-section<?= (($oldInput['parent_choice'] ?? 'existing') === 'new') ? ' d-none' : '' ?>">
                       <label class="form-label">Parent lié</label>
                       <select name="parent_id" class="form-select">
                         <option value="">Aucun parent lié</option>
@@ -106,7 +150,7 @@ $oldInput = $oldInput ?? [];
                       </select>
                       <small class="form-text text-muted">Sélectionnez un parent existant pour lier l’élève.</small>
                     </div>
-                    <div class="mb-4 p-3 bg-light rounded border">
+                    <div class="mb-4 p-3 bg-light rounded border parent-choice-new-section<?= (($oldInput['parent_choice'] ?? 'existing') === 'new') ? '' : ' d-none' ?>">
                       <h5 class="mb-3">Créer un nouveau parent/tuteur</h5>
                       <p class="text-muted small">Remplissez ces champs uniquement si le parent n’existe pas encore.</p>
                       <div class="row">
@@ -160,6 +204,7 @@ $oldInput = $oldInput ?? [];
                         <select name="secteur" id="secteur-select" class="form-select">
                           <option value="">Sélectionnez un secteur</option>
                         </select>
+
                       </div>
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Groupement</label>
@@ -239,6 +284,11 @@ $oldInput = $oldInput ?? [];
           const secteurSelect = document.getElementById('secteur-select');
           const groupementSelect = document.getElementById('groupement-select');
           const villageSelect = document.getElementById('village-select');
+          const matriculePreviewText = document.getElementById('matricule-preview');
+          const nomInput = document.getElementById('nom-input');
+          const postnomInput = document.getElementById('postnom-input');
+          const prenomInput = document.getElementById('prenom-input');
+          const matriculeButton = document.getElementById('generate-matricule-btn');
 
           function populate(select, items, selected) {
             select.innerHTML = '<option value="">Sélectionnez</option>';
@@ -248,6 +298,32 @@ $oldInput = $oldInput ?? [];
               opt.textContent = it;
               if (selected && selected === it) opt.selected = true;
               select.appendChild(opt);
+            });
+          }
+
+          function fetchJson(url) {
+            return fetch(url, { credentials: 'same-origin' }).then(function (r) { return r.json(); }).catch(function () {
+              try {
+                const u = new URL(url, location.origin);
+                const pathname = u.pathname || '';
+                const params = Object.fromEntries(u.searchParams.entries());
+                if (pathname.endsWith('/inscriptions/provinces')) return Promise.resolve(LOCAL_LOCATIONS.provinces || []);
+                if (pathname.endsWith('/inscriptions/territoires')) {
+                  return Promise.resolve(LOCAL_LOCATIONS.territoires[params.province] || []);
+                }
+                if (pathname.endsWith('/inscriptions/secteurs')) {
+                  return Promise.resolve(LOCAL_LOCATIONS.secteurs[params.territoire] || []);
+                }
+                if (pathname.endsWith('/inscriptions/groupements')) {
+                  return Promise.resolve(LOCAL_LOCATIONS.groupements[params.secteur] || []);
+                }
+                if (pathname.endsWith('/inscriptions/villages')) {
+                  return Promise.resolve(LOCAL_LOCATIONS.villages[params.groupement] || []);
+                }
+              } catch (e) {
+                // ignore
+              }
+              return Promise.resolve([]);
             });
           }
 
@@ -275,31 +351,52 @@ $oldInput = $oldInput ?? [];
             }
           };
 
-          function fetchJson(url) {
-            return fetch(url, { credentials: 'same-origin' }).then(function (r) { return r.json(); }).catch(function () {
-              // offline fallback: parse URL and return local data
-              try {
-                const u = new URL(url, location.origin);
-                const pathname = u.pathname || '';
-                const params = Object.fromEntries(u.searchParams.entries());
-                if (pathname.endsWith('/inscriptions/provinces')) return Promise.resolve(LOCAL_LOCATIONS.provinces || []);
-                if (pathname.endsWith('/inscriptions/territoires')) {
-                  return Promise.resolve(LOCAL_LOCATIONS.territoires[params.province] || []);
+          function updateMatriculePreview() {
+            if (!nomInput || !postnomInput || !matriculePreviewText) {
+              return;
+            }
+            const nom = nomInput.value.trim();
+            const postnom = postnomInput.value.trim();
+            const prenom = prenomInput ? prenomInput.value.trim() : '';
+            if (!nom || !postnom) {
+              matriculePreviewText.textContent = 'Saisissez le nom et le postnom pour générer un aperçu du matricule.';
+              return;
+            }
+            const params = new URLSearchParams({ nom: nom, postnom: postnom, prenom: prenom });
+            matriculePreviewText.textContent = 'Génération en cours…';
+            fetch(baseUrl + '/inscriptions/matricule-preview?' + params.toString(), { credentials: 'same-origin' })
+              .then(function (response) {
+                return response.json();
+              })
+              .then(function (data) {
+                if (data && data.matricule) {
+                  matriculePreviewText.textContent = 'Aperçu du matricule : ' + data.matricule;
+                } else if (data && data.error) {
+                  matriculePreviewText.textContent = 'Erreur : ' + data.error;
+                } else {
+                  matriculePreviewText.textContent = 'Impossible de générer le matricule pour le moment.';
                 }
-                if (pathname.endsWith('/inscriptions/secteurs')) {
-                  return Promise.resolve(LOCAL_LOCATIONS.secteurs[params.territoire] || []);
-                }
-                if (pathname.endsWith('/inscriptions/groupements')) {
-                  return Promise.resolve(LOCAL_LOCATIONS.groupements[params.secteur] || []);
-                }
-                if (pathname.endsWith('/inscriptions/villages')) {
-                  return Promise.resolve(LOCAL_LOCATIONS.villages[params.groupement] || []);
-                }
-              } catch (e) {
-                // ignore
-              }
-              return Promise.resolve([]);
+              })
+              .catch(function () {
+                matriculePreviewText.textContent = 'Impossible de générer le matricule pour le moment.';
+              });
+          }
+
+          if (matriculeButton) {
+            matriculeButton.addEventListener('click', function (event) {
+              event.preventDefault();
+              updateMatriculePreview();
             });
+          }
+
+          if (nomInput) {
+            nomInput.addEventListener('blur', updateMatriculePreview);
+          }
+          if (postnomInput) {
+            postnomInput.addEventListener('blur', updateMatriculePreview);
+          }
+          if (prenomInput) {
+            prenomInput.addEventListener('blur', updateMatriculePreview);
           }
 
           // Load provinces
@@ -311,7 +408,6 @@ $oldInput = $oldInput ?? [];
 
           provinceSelect && provinceSelect.addEventListener('change', function () {
             const val = this.value;
-            // clear downstream
             populate(territoireSelect, [], null);
             populate(secteurSelect, [], null);
             populate(groupementSelect, [], null);
