@@ -240,8 +240,9 @@ if (!empty($school['logo_url'])) {
             <a class="nav-link" id="navbarSearchToggle" href="#" role="button"><i class="bi bi-search"></i></a>
           </li>
           <li class="nav-item navbar-search d-none" id="navbarSearchForm">
-            <form class="d-flex" role="search">
-              <input class="form-control form-control-navbar me-2" type="search" placeholder="Recherche" aria-label="Recherche">
+            <form class="d-flex" role="search" id="globalSearchForm">
+              <input class="form-control form-control-navbar me-2" type="search" name="q" id="globalSearchInput" placeholder="Recherche" aria-label="Recherche">
+              <button class="btn btn-navbar" type="submit"><i class="bi bi-search"></i></button>
               <button class="btn btn-navbar" type="button" id="navbarSearchClose"><i class="bi bi-x-lg"></i></button>
             </form>
           </li>

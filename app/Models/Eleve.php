@@ -10,12 +10,16 @@ class Eleve
     public static function create(array $data): ?array
     {
         $db = Database::getConnection();
-        $stmt = $db->prepare(
-            'INSERT INTO eleves (matricule, nom, postnom, prenom, genre, lieu_naissance, nationalite, adresse, date_naissance, parent_id, ecole_id, nom_pere, nom_mere, province_origine, territoire, secteur, groupement, village, num_permanent, photo, statut_eleve)
-             VALUES (:matricule, :nom, :postnom, :prenom, :genre, :lieu_naissance, :nationalite, :adresse, :date_naissance, :parent_id, :ecole_id, :nom_pere, :nom_mere, :province_origine, :territoire, :secteur, :groupement, :village, :num_permanent, :photo, :statut_eleve)'
-        );
+        $fields = ['matricule', 'nom', 'postnom', 'prenom', 'genre', 'lieu_naissance', 'nationalite', 'adresse', 'date_naissance', 'parent_id', 'nom_pere', 'nom_mere', 'province_origine', 'territoire', 'secteur', 'groupement', 'village', 'num_permanent', 'photo', 'statut_eleve'];
+        $placeholders = [':matricule', ':nom', ':postnom', ':prenom', ':genre', ':lieu_naissance', ':nationalite', ':adresse', ':date_naissance', ':parent_id', ':nom_pere', ':nom_mere', ':province_origine', ':territoire', ':secteur', ':groupement', ':village', ':num_permanent', ':photo', ':statut_eleve'];
+        if (array_key_exists('ecole_id', $data)) {
+            $fields[] = 'ecole_id';
+            $placeholders[] = ':ecole_id';
+        }
 
-        $stmt->execute([
+        $stmt = $db->prepare('INSERT INTO eleves (' . implode(', ', $fields) . ') VALUES (' . implode(', ', $placeholders) . ')');
+
+        $params = [
             ':matricule' => $data['matricule'] ?? null,
             ':nom' => $data['nom'],
             ':postnom' => $data['postnom'],
@@ -26,7 +30,6 @@ class Eleve
             ':adresse' => $data['adresse'] ?? null,
             ':date_naissance' => $data['date_naissance'],
             ':parent_id' => !empty($data['parent_id']) ? $data['parent_id'] : null,
-            ':ecole_id' => !empty($data['ecole_id']) ? $data['ecole_id'] : null,
             ':nom_pere' => $data['nom_pere'] ?? null,
             ':nom_mere' => $data['nom_mere'] ?? null,
             ':province_origine' => $data['province_origine'] ?? null,
@@ -37,7 +40,25 @@ class Eleve
             ':num_permanent' => $data['num_permanent'] ?? null,
             ':photo' => $data['photo'] ?? null,
             ':statut_eleve' => $data['statut_eleve'] ?? 'inactif',
-        ]);
+        ];
+
+        if (array_key_exists('ecole_id', $data)) {
+            $params[':ecole_id'] = !empty($data['ecole_id']) ? $data['ecole_id'] : null;
+        }
+
+        try {
+            $stmt->execute($params);
+        } catch (\PDOException $e) {
+            if (stripos($e->getMessage(), 'Unknown column') !== false && stripos($e->getMessage(), 'ecole_id') !== false) {
+                unset($params[':ecole_id']);
+                $fields = array_filter($fields, fn($field) => $field !== 'ecole_id');
+                $placeholders = array_filter($placeholders, fn($placeholder) => $placeholder !== ':ecole_id');
+                $stmt = $db->prepare('INSERT INTO eleves (' . implode(', ', $fields) . ') VALUES (' . implode(', ', $placeholders) . ')');
+                $stmt->execute($params);
+            } else {
+                throw $e;
+            }
+        }
 
         return self::findById((int) $db->lastInsertId());
     }
@@ -62,7 +83,7 @@ class Eleve
             'SELECT e.*, p.nom_responsable AS parent_nom_responsable '
             . 'FROM eleves e '
             . 'LEFT JOIN parents p ON e.parent_id = p.id '
-            . 'WHERE e.statut_eleve = :statut AND (p.ecole_id = :ecole_id OR EXISTS ('
+            . 'WHERE e.statut_eleve = :statut AND (e.ecole_id = :ecole_id OR p.ecole_id = :ecole_id OR EXISTS ('
             . 'SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id '
             . 'WHERE i.eleve_id = e.id AND c.ecole_id = :ecole_id)) '
             . 'ORDER BY e.id DESC'
@@ -71,14 +92,108 @@ class Eleve
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public static function update(int $id, array $data): bool
+    public static function getAll(): array
     {
         $db = Database::getConnection();
         $stmt = $db->prepare(
-            'UPDATE eleves SET matricule = :matricule, nom = :nom, postnom = :postnom, prenom = :prenom, genre = :genre, lieu_naissance = :lieu_naissance, nationalite = :nationalite, adresse = :adresse, date_naissance = :date_naissance, parent_id = :parent_id, nom_pere = :nom_pere, nom_mere = :nom_mere, province_origine = :province_origine, territoire = :territoire, secteur = :secteur, groupement = :groupement, village = :village, num_permanent = :num_permanent, photo = :photo WHERE id = :id'
+            'SELECT e.*, p.nom_responsable AS parent_nom_responsable '
+            . 'FROM eleves e '
+            . 'LEFT JOIN parents p ON e.parent_id = p.id '
+            . 'ORDER BY e.nom ASC, e.postnom ASC, e.prenom ASC'
         );
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 
-        return $stmt->execute([
+    public static function getAllBySchool(int $ecoleId): array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            'SELECT DISTINCT e.*, p.nom_responsable AS parent_nom_responsable '
+            . 'FROM eleves e '
+            . 'LEFT JOIN parents p ON e.parent_id = p.id '
+            . 'WHERE e.ecole_id = :ecole_id OR p.ecole_id = :ecole_id OR EXISTS ('
+            . 'SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id '
+            . 'WHERE i.eleve_id = e.id AND c.ecole_id = :ecole_id) '
+            . 'ORDER BY e.nom ASC, e.postnom ASC, e.prenom ASC'
+        );
+        $stmt->execute([':ecole_id' => $ecoleId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function getAccount(int $eleveId): ?array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare('SELECT * FROM comptes_eleves WHERE eleve_id = :eleve ORDER BY annee_scolaire_id DESC LIMIT 1');
+        $stmt->execute([':eleve' => $eleveId]);
+        $compte = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $compte ?: null;
+    }
+
+    public static function getAccountingEntries(int $eleveId): array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            'SELECT ece.* FROM ecritures_comptables_eleves ece '
+            . 'INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id '
+            . 'WHERE ce.eleve_id = :eleve ORDER BY ece.date_operation DESC'
+        );
+        $stmt->execute([':eleve' => $eleveId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function getNotes(int $eleveId): array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            'SELECT n.*, ev.attribution_cours_id, ev.periode_id, ev.type_evaluation, ev.date_evaluation, ev.ponderation_max '
+            . 'FROM notes n LEFT JOIN evaluations ev ON n.evaluation_id = ev.id '
+            . 'WHERE n.eleve_id = :eleve ORDER BY ev.date_evaluation DESC'
+        );
+        $stmt->execute([':eleve' => $eleveId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function getDiscipline(int $eleveId): array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare('SELECT * FROM discipline_eleves WHERE eleve_id = :eleve ORDER BY date_evenement DESC');
+        $stmt->execute([':eleve' => $eleveId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function update(int $id, array $data): bool
+    {
+        $db = Database::getConnection();
+        $fields = [
+            'matricule = :matricule',
+            'nom = :nom',
+            'postnom = :postnom',
+            'prenom = :prenom',
+            'genre = :genre',
+            'lieu_naissance = :lieu_naissance',
+            'nationalite = :nationalite',
+            'adresse = :adresse',
+            'date_naissance = :date_naissance',
+            'parent_id = :parent_id',
+            'nom_pere = :nom_pere',
+            'nom_mere = :nom_mere',
+            'province_origine = :province_origine',
+            'territoire = :territoire',
+            'secteur = :secteur',
+            'groupement = :groupement',
+            'village = :village',
+            'num_permanent = :num_permanent',
+            'photo = :photo',
+        ];
+        if (array_key_exists('ecole_id', $data)) {
+            $fields[] = 'ecole_id = :ecole_id';
+        }
+
+        $sql = 'UPDATE eleves SET ' . implode(', ', $fields) . ' WHERE id = :id';
+        $stmt = $db->prepare($sql);
+
+        $params = [
             ':matricule' => $data['matricule'] ?? null,
             ':nom' => $data['nom'],
             ':postnom' => $data['postnom'],
@@ -99,7 +214,24 @@ class Eleve
             ':num_permanent' => $data['num_permanent'] ?? null,
             ':photo' => $data['photo'] ?? null,
             ':id' => $id,
-        ]);
+        ];
+        if (array_key_exists('ecole_id', $data)) {
+            $params[':ecole_id'] = !empty($data['ecole_id']) ? $data['ecole_id'] : null;
+        }
+
+        try {
+            return $stmt->execute($params);
+        } catch (\PDOException $e) {
+            if (stripos($e->getMessage(), 'Unknown column') !== false && stripos($e->getMessage(), 'ecole_id') !== false) {
+                unset($params[':ecole_id']);
+                $fields = array_filter($fields, fn($field) => stripos($field, 'ecole_id') === false);
+                $sql = 'UPDATE eleves SET ' . implode(', ', $fields) . ' WHERE id = :id';
+                $stmt = $db->prepare($sql);
+                return $stmt->execute($params);
+            }
+
+            throw $e;
+        }
     }
 
     public static function updateMatricule(int $id, string $matricule): bool

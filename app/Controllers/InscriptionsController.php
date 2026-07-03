@@ -50,7 +50,7 @@ class InscriptionsController extends Controller
             'options' => $options,
             'canSubmit' => in_array($role, self::SUBMISSION_ROLES, true),
             'canEdit' => in_array($role, self::SUBMISSION_ROLES, true),
-            'canApprove' => in_array($role, ['super_admin', 'sec_école'], true),
+            'canApprove' => in_array($role, ['super_admin', 'sec_école', 'préfet_école', 'DP_école', 'comptable_école'], true),
         ]);
     }
 
@@ -529,13 +529,21 @@ class InscriptionsController extends Controller
     public function approve(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['super_admin', 'sec_école']);
+        Auth::requireRoles(['super_admin', 'sec_école', 'préfet_école', 'DP_école', 'comptable_école']);
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $user = Auth::refresh() ?: Auth::user();
+            $role = $user['role'] ?? 'default';
+            $ecoleId = (int) ($user['ecole_id'] ?? 0);
             $eleveId = (int) ($_POST['eleve_id'] ?? 0);
+
             if ($eleveId > 0) {
-                Eleve::approve($eleveId);
-                $_SESSION['inscriptions_success'] = 'Inscription validée par le secrétaire.';
+                if ($role === 'super_admin' || $ecoleId <= 0 || Eleve::findByIdAndSchool($eleveId, $ecoleId)) {
+                    Eleve::approve($eleveId);
+                    $_SESSION['inscriptions_success'] = 'Inscription validée par le personnel autorisé.';
+                } else {
+                    $_SESSION['inscriptions_errors'] = ['Vous n’êtes pas autorisé(e) à valider cette inscription.'];
+                }
             }
         }
 

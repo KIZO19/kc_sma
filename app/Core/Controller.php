@@ -95,6 +95,7 @@ class Controller
             ],
             'comptable_école' => [
                 ['name' => 'Inscriptions', 'path' => '/inscriptions', 'icon' => 'bi-person-plus'],
+                ['name' => 'Élèves', 'path' => '/eleves', 'icon' => 'bi-person-badge'],
                 ['name' => 'Facturation', 'path' => '/facturation', 'icon' => 'bi-receipt'],
                 ['name' => 'Frais', 'path' => '/frais', 'icon' => 'bi-tag'],
                 ['name' => 'Devises', 'path' => '/devises', 'icon' => 'bi-currency-exchange'],
