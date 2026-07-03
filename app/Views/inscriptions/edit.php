@@ -199,8 +199,53 @@ $student = $student ?? [];
             });
           }
 
+          const LOCAL_LOCATIONS = {
+            provinces: ['Kinshasa','Nord-Kivu','Sud-Kivu','Haut-Katanga','Kongo Central','Équateur','Maniema','Ituri'],
+            territoires: {
+              'Kinshasa': ['Funa','Kalamu','Kasa-Vubu','Lingwala'],
+              'Nord-Kivu': ['Goma','Beni','Masisi','Rutshuru'],
+              'Sud-Kivu': ['Uvira','Bukavu','Fizi'],
+              'Haut-Katanga': ['Lubumbashi','Kambove','Likasi'],
+              'Kongo Central': ['Matadi','Boma','Kimpese']
+            },
+            secteurs: {
+              'Goma': ['Sector 1','Sector 2'],
+              'Beni': ['Beni-Centre','Mabalako'],
+              'Lubumbashi': ['Kawama','Katanga-Centre']
+            },
+            groupements: {
+              'Sector 1': ['Group A','Group B'],
+              'Beni-Centre': ['Group X','Group Y']
+            },
+            villages: {
+              'Group A': ['Village 1','Village 2'],
+              'Group X': ['Village X1','Village X2']
+            }
+          };
+
           function fetchJson(url) {
-            return fetch(url, { credentials: 'same-origin' }).then(function (r) { return r.json(); });
+            return fetch(url, { credentials: 'same-origin' }).then(function (r) { return r.json(); }).catch(function () {
+              try {
+                const u = new URL(url, location.origin);
+                const pathname = u.pathname || '';
+                const params = Object.fromEntries(u.searchParams.entries());
+                if (pathname.endsWith('/inscriptions/provinces')) return Promise.resolve(LOCAL_LOCATIONS.provinces || []);
+                if (pathname.endsWith('/inscriptions/territoires')) {
+                  return Promise.resolve(LOCAL_LOCATIONS.territoires[params.province] || []);
+                }
+                if (pathname.endsWith('/inscriptions/secteurs')) {
+                  return Promise.resolve(LOCAL_LOCATIONS.secteurs[params.territoire] || []);
+                }
+                if (pathname.endsWith('/inscriptions/groupements')) {
+                  return Promise.resolve(LOCAL_LOCATIONS.groupements[params.secteur] || []);
+                }
+                if (pathname.endsWith('/inscriptions/villages')) {
+                  return Promise.resolve(LOCAL_LOCATIONS.villages[params.groupement] || []);
+                }
+              } catch (e) {
+              }
+              return Promise.resolve([]);
+            });
           }
 
           const initialProvince = '<?= htmlspecialchars($oldInput['province_origine'] ?? $student['province_origine'] ?? '') ?>';

@@ -329,6 +329,7 @@ class InscriptionsController extends Controller
     // AJAX endpoints for cascading location selects
     public function provinces(): void
     {
+        Auth::requireAuth();
         header('Content-Type: application/json');
         $provinces = [
             'Kinshasa', 'Nord-Kivu', 'Sud-Kivu', 'Haut-Katanga', 'Kongo Central', 'Équateur', 'Maniema', 'Ituri'
@@ -339,6 +340,7 @@ class InscriptionsController extends Controller
 
     public function territoires(): void
     {
+        Auth::requireAuth();
         header('Content-Type: application/json');
         $province = trim($_GET['province'] ?? '');
         $map = [
@@ -355,6 +357,7 @@ class InscriptionsController extends Controller
 
     public function secteurs(): void
     {
+        Auth::requireAuth();
         header('Content-Type: application/json');
         $territoire = trim($_GET['territoire'] ?? '');
         $map = [
@@ -369,6 +372,7 @@ class InscriptionsController extends Controller
 
     public function groupements(): void
     {
+        Auth::requireAuth();
         header('Content-Type: application/json');
         $secteur = trim($_GET['secteur'] ?? '');
         $map = [
@@ -382,6 +386,7 @@ class InscriptionsController extends Controller
 
     public function villages(): void
     {
+        Auth::requireAuth();
         header('Content-Type: application/json');
         $groupement = trim($_GET['groupement'] ?? '');
         $map = [
