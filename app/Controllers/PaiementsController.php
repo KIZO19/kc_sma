@@ -6,6 +6,7 @@ use App\Core\Auth;
 use App\Core\Controller;
 use App\Core\Database;
 use App\Models\Eleve;
+use App\Models\FraisScolaire;
 use App\Models\User;
 
 class PaiementsController extends Controller
@@ -19,14 +20,20 @@ class PaiementsController extends Controller
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
         $eleveId = !empty($_GET['eleve_id']) ? (int) $_GET['eleve_id'] : null;
+        $fraisId = !empty($_GET['frais_id']) ? (int) $_GET['frais_id'] : null;
         if ($eleveId && ($role !== 'super_admin') && (int) ($user['ecole_id'] ?? 0) > 0) {
             if (!Eleve::findByIdAndSchool($eleveId, (int) $user['ecole_id'])) {
                 $eleveId = null;
             }
         }
 
-        $payments = $this->fetchPaymentsForUser($user, 0, $eleveId);
+        $payments = $this->fetchPaymentsForUser($user, 0, $eleveId, $fraisId);
         $eleveFilter = $eleveId ? Eleve::findById($eleveId) : null;
+        $fraisFilter = $fraisId ? FraisScolaire::findById($fraisId) : null;
+
+        $userSchool = (int) ($user['ecole_id'] ?? 0);
+        $students = $userSchool > 0 ? Eleve::getAllBySchool($userSchool) : Eleve::getAll();
+        $fees = $userSchool > 0 ? FraisScolaire::getAllBySchool($userSchool) : [];
 
         $this->view('paiements/index', [
             'title' => APP_NAME . ' - Paiements',
@@ -35,6 +42,12 @@ class PaiementsController extends Controller
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $modules,
             'payments' => $payments,
+            'eleveFilter' => $eleveFilter,
+            'fraisFilter' => $fraisFilter,
+            'eleveId' => $eleveId,
+            'fraisId' => $fraisId,
+            'students' => $students,
+            'fees' => $fees,
         ]);
     }
 
@@ -44,9 +57,16 @@ class PaiementsController extends Controller
         Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école', 'sec_école']);
 
         $user = Auth::refresh() ?: Auth::user();
+        $eleveId = !empty($_GET['eleve_id']) ? (int) $_GET['eleve_id'] : null;
+        $fraisId = !empty($_GET['frais_id']) ? (int) $_GET['frais_id'] : null;
+        if ($eleveId && ($user['role'] ?? '') !== 'super_admin' && (int) ($user['ecole_id'] ?? 0) > 0) {
+            if (!Eleve::findByIdAndSchool($eleveId, (int) $user['ecole_id'])) {
+                $eleveId = null;
+            }
+        }
 
         $format = strtolower(trim($_GET['format'] ?? 'csv'));
-        $payments = $this->fetchPaymentsForUser($user);
+        $payments = $this->fetchPaymentsForUser($user, 0, $eleveId, $fraisId);
 
         if ($format === 'csv' || $format === 'excel') {
             // output CSV (works with Excel). For `excel` we set XLS content-disposition for convenience.
@@ -107,12 +127,13 @@ class PaiementsController extends Controller
 
         $user = Auth::refresh() ?: Auth::user();
         $eleveId = !empty($_GET['eleve_id']) ? (int) $_GET['eleve_id'] : null;
+        $fraisId = !empty($_GET['frais_id']) ? (int) $_GET['frais_id'] : null;
         if ($eleveId && ($user['role'] ?? '') !== 'super_admin' && (int) ($user['ecole_id'] ?? 0) > 0) {
             if (!Eleve::findByIdAndSchool($eleveId, (int) $user['ecole_id'])) {
                 $eleveId = null;
             }
         }
-        $payments = $this->fetchPaymentsForUser($user, 0, $eleveId);
+        $payments = $this->fetchPaymentsForUser($user, 0, $eleveId, $fraisId);
 
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(['payments' => $payments], JSON_UNESCAPED_UNICODE);
@@ -127,7 +148,7 @@ class PaiementsController extends Controller
         return ob_get_clean() ?: '';
     }
 
-    private function fetchPaymentsForUser(array $user, int $limit = 0, ?int $eleveId = null): array
+    private function fetchPaymentsForUser(array $user, int $limit = 0, ?int $eleveId = null, ?int $fraisId = null): array
     {
         $db = \App\Core\Database::getConnection();
         $sql = 'SELECT ece.id, ece.reference_recu, ece.date_operation, ece.montant, ece.libelle, ce.eleve_id, el.nom, el.postnom, el.prenom, cb.nom_compte, u.nom_complet AS agent_nom, fs.devise AS frais_devise, COALESCE(fs.devise, ecole.devise_principale, \'USD\') AS transaction_devise '
@@ -148,6 +169,10 @@ class PaiementsController extends Controller
         if ($eleveId !== null) {
             $sql .= 'AND ce.eleve_id = :eleveId ';
             $params[':eleveId'] = $eleveId;
+        }
+        if ($fraisId !== null) {
+            $sql .= 'AND ece.frais_id = :fraisId ';
+            $params[':fraisId'] = $fraisId;
         }
 
         $sql .= 'ORDER BY ece.date_operation DESC';
@@ -259,7 +284,11 @@ class PaiementsController extends Controller
         $eleve = null;
         $students = [];
         if ($eleveId > 0) {
-            $eleve = Eleve::findById($eleveId);
+            if (($user['role'] ?? '') !== 'super_admin' && (int) ($user['ecole_id'] ?? 0) > 0) {
+                $eleve = Eleve::findByIdAndSchool($eleveId, (int) $user['ecole_id']);
+            } else {
+                $eleve = Eleve::findById($eleveId);
+            }
             if (!$eleve) {
                 header('Location: ' . BASE_URL . '/error/notFound');
                 exit;
@@ -359,8 +388,23 @@ class PaiementsController extends Controller
         $errors = [];
         $fee = null;
         $db = Database::getConnection();
+
+        if ($eleveId <= 0) {
+            $errors[] = 'Élève invalide.';
+        } elseif (($user['role'] ?? '') !== 'super_admin' && (int) ($user['ecole_id'] ?? 0) > 0) {
+            if (!Eleve::findByIdAndSchool($eleveId, (int) $user['ecole_id'])) {
+                $errors[] = 'Élève invalide ou hors périmètre.';
+            }
+        }
+
+        if (empty($fraisId)) {
+            $errors[] = 'Un frais scolaire doit être sélectionné.';
+        }
+
         if ($fraisId) {
-            $fee = \App\Models\FraisScolaire::findById($fraisId);
+            $fee = (($user['role'] ?? '') !== 'super_admin' && (int) ($user['ecole_id'] ?? 0) > 0)
+                ? \App\Models\FraisScolaire::findByIdAndSchool($fraisId, (int) $user['ecole_id'])
+                : \App\Models\FraisScolaire::findById($fraisId);
             if ($fee) {
                 $feeTotal = (float) ($fee['montant_total'] ?? 0);
                 $paid = 0.0;
@@ -393,6 +437,8 @@ class PaiementsController extends Controller
                 } elseif ($montant > $feeTotal) {
                     $errors[] = 'Le montant saisi ne peut pas être supérieur au montant total du frais scolaire sélectionné.';
                 }
+            } elseif (($user['role'] ?? '') !== 'super_admin' && (int) ($user['ecole_id'] ?? 0) > 0) {
+                $errors[] = 'Le frais scolaire sélectionné est invalide pour votre école.';
             }
         }
 
@@ -400,6 +446,12 @@ class PaiementsController extends Controller
             $libelle = trim($_POST['libelle'] ?? 'Paiement élève');
         }
         $caisseId = !empty($_POST['caisse_id']) ? (int) $_POST['caisse_id'] : null;
+
+        if ($eleveId <= 0 || $montant <= 0) {
+            if (!in_array('Élève invalide.', $errors, true)) {
+                $errors[] = 'Élève ou montant invalide.';
+            }
+        }
 
         if ($eleveId <= 0 || $montant <= 0) {
             $errors[] = 'Élève ou montant invalide.';
@@ -449,6 +501,14 @@ class PaiementsController extends Controller
         ]);
 
         $ecritureId = (int) $db->lastInsertId();
+
+        $legacyStmt = $db->prepare('INSERT INTO paiements_eleves (eleve_id, frais_id, montant_paye, date_paiement) VALUES (:eleve, :frais, :montant, :date_paiement)');
+        $legacyStmt->execute([
+            ':eleve' => $eleveId,
+            ':frais' => $fraisId,
+            ':montant' => $montant,
+            ':date_paiement' => date('Y-m-d H:i:s'),
+        ]);
 
         // Update compte solde_debiteur (subtract payment)
         $upd = $db->prepare('UPDATE comptes_eleves SET solde_debiteur = solde_debiteur - :montant WHERE id = :id');
@@ -509,6 +569,21 @@ class PaiementsController extends Controller
         }
 
         if (!$data) {
+            header('Location: ' . BASE_URL . '/error/notFound');
+            exit;
+        }
+
+        // Ensure user can only view receipts for élèves in their school (unless super_admin)
+        try {
+            $userSchool = (int) ($user['ecole_id'] ?? 0);
+            if (($user['role'] ?? '') !== 'super_admin' && $userSchool > 0) {
+                $paymentEleveId = (int) ($data['eleve_id'] ?? 0);
+                if ($paymentEleveId <= 0 || !Eleve::findByIdAndSchool($paymentEleveId, $userSchool)) {
+                    header('Location: ' . BASE_URL . '/error/notFound');
+                    exit;
+                }
+            }
+        } catch (\Throwable $e) {
             header('Location: ' . BASE_URL . '/error/notFound');
             exit;
         }

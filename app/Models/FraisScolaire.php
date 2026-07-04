@@ -83,6 +83,23 @@ class FraisScolaire
         return $row ?: null;
     }
 
+    public static function findByIdAndSchool(int $id, int $ecoleId): ?array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            'SELECT f.*, c.nom_classe, s.annee AS annee_scolaire '
+            . 'FROM frais_scolaires f '
+            . 'LEFT JOIN classes c ON c.id = f.classe_id '
+            . 'LEFT JOIN annees_scolaires s ON s.id = f.annee_scolaire_id '
+            . 'WHERE f.id = :id AND ('
+            . 'c.ecole_id = :ecole_id OR f.scope IN (\'option\', \'section\', \'school\')) '
+            . 'LIMIT 1'
+        );
+        $stmt->execute([':id' => $id, ':ecole_id' => $ecoleId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
     public static function update(int $id, array $data): bool
     {
         $db = Database::getConnection();

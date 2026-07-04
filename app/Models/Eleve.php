@@ -112,7 +112,7 @@ class Eleve
             'SELECT DISTINCT e.*, p.nom_responsable AS parent_nom_responsable '
             . 'FROM eleves e '
             . 'LEFT JOIN parents p ON e.parent_id = p.id '
-            . 'WHERE e.ecole_id = :ecole_id OR p.ecole_id = :ecole_id OR EXISTS ('
+            . 'WHERE e.ecole_id = :ecole_id OR EXISTS ('
             . 'SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id '
             . 'WHERE i.eleve_id = e.id AND c.ecole_id = :ecole_id) '
             . 'ORDER BY e.nom ASC, e.postnom ASC, e.prenom ASC'
@@ -272,8 +272,7 @@ class Eleve
         $db = Database::getConnection();
         $stmt = $db->prepare(
             'SELECT e.* FROM eleves e '
-            . 'LEFT JOIN parents p ON e.parent_id = p.id '
-            . 'WHERE e.id = :id AND (p.ecole_id = :ecole_id OR EXISTS ('
+            . 'WHERE e.id = :id AND (e.ecole_id = :ecole_id OR EXISTS ('
             . 'SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id '
             . 'WHERE i.eleve_id = e.id AND c.ecole_id = :ecole_id)) '
             . 'LIMIT 1'

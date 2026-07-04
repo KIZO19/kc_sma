@@ -19,52 +19,88 @@
 <section class="content">
   <div class="container-fluid">
     <div class="row mb-3">
-      <div class="col-md-6">
+      <div class="col-md-4">
         <div class="input-group">
           <span class="input-group-text"><i class="bi bi-search"></i></span>
           <input id="paymentSearch" type="search" class="form-control" placeholder="Rechercher dans les paiements..." aria-label="Recherche paiements">
         </div>
       </div>
+      <div class="col-md-4">
+        <select id="eleveFilter" class="form-select">
+          <option value="">Tous les élèves</option>
+          <?php foreach (($students ?? []) as $student): ?>
+            <option value="<?= (int) $student['id'] ?>" <?= (!empty($eleveId) && (int) $eleveId === (int) $student['id']) ? 'selected' : '' ?>><?= htmlspecialchars(trim(($student['prenom'] ?? '') . ' ' . ($student['nom'] ?? '') . ' ' . ($student['postnom'] ?? ''))) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <select id="fraisFilter" class="form-select">
+          <option value="">Tous les frais</option>
+          <?php foreach (($fees ?? []) as $fee): ?>
+            <option value="<?= (int) $fee['id'] ?>" <?= (!empty($fraisId) && (int) $fraisId === (int) $fee['id']) ? 'selected' : '' ?>><?= htmlspecialchars(trim(($fee['type_frais'] ?? '') . ' - ' . ($fee['nom_classe'] ?? '') . ' ' . ($fee['scope_label'] ?? ''))) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
       <div class="col-md-6 text-end">
           <?php if (in_array($role, ['super_admin','comptable_école'], true)): ?>
-            <a href="<?= BASE_URL ?>/paiements/create" class="btn btn-success">Enregistrer paiement</a>
+            <a href="<?= BASE_URL ?>/paiements/create<?= !empty($eleveId) ? '?eleve_id=' . (int) $eleveId : '' ?>" class="btn btn-success">Enregistrer paiement</a>
           <?php endif; ?>
           <div class="btn-group ms-2" role="group">
-            <a href="<?= BASE_URL ?>/paiements/export?format=csv" class="btn btn-outline-secondary">Export CSV</a>
-            <a href="<?= BASE_URL ?>/paiements/export?format=excel" class="btn btn-outline-secondary">Export Excel</a>
-            <a href="<?= BASE_URL ?>/paiements/export?format=pdf" class="btn btn-outline-secondary">Export PDF</a>
+            <button id="resetFilters" type="button" class="btn btn-outline-secondary">Réinitialiser filtres</button>
+            <a href="<?= BASE_URL ?>/paiements/export?format=csv<?= (!empty($eleveId) ? '&eleve_id=' . (int) $eleveId : '') . (!empty($fraisId) ? '&frais_id=' . (int) $fraisId : '') ?>" class="btn btn-outline-secondary export-filtered" data-format="csv">Export CSV</a>
+            <a href="<?= BASE_URL ?>/paiements/export?format=excel<?= (!empty($eleveId) ? '&eleve_id=' . (int) $eleveId : '') . (!empty($fraisId) ? '&frais_id=' . (int) $fraisId : '') ?>" class="btn btn-outline-secondary export-filtered" data-format="excel">Export Excel</a>
+            <a href="<?= BASE_URL ?>/paiements/export?format=pdf<?= (!empty($eleveId) ? '&eleve_id=' . (int) $eleveId : '') . (!empty($fraisId) ? '&frais_id=' . (int) $fraisId : '') ?>" class="btn btn-outline-secondary export-filtered" data-format="pdf">Export PDF</a>
           </div>
       </div>
     </div>
-
-    <div class="card card-outline card-primary">
-      <div class="card-body p-0">
-        <div class="table-responsive">
-          <table id="paymentsDataGrid" class="table table-sm table-striped mb-0">
-            <thead class="table-light">
-              <tr><th>#</th><th>Réf reçu</th><th>Élève</th><th>Date</th><th>Montant</th><th>Caisse</th><th>Agent</th><th>Action</th></tr>
-            </thead>
-            <tbody>
-              <?php if (empty($payments)): ?>
-                <tr><td colspan="8" class="text-center py-4">Aucun paiement enregistré.</td></tr>
-              <?php else: ?>
-                <?php foreach ($payments as $i => $p): ?>
-                  <tr>
-                    <td><?= $i+1 ?></td>
-                    <td><?= htmlspecialchars($p['reference_recu'] ?? '-') ?></td>
-                    <td><?= htmlspecialchars(($p['prenom'] ?? '') . ' ' . ($p['nom'] ?? '') . ' ' . ($p['postnom'] ?? '')) ?></td>
-                    <td><?= htmlspecialchars($p['date_operation'] ?? '') ?></td>
-                    <td><?= htmlspecialchars($p['montant_affiche'] ?? number_format((float) ($p['montant'] ?? 0), 2)) ?></td>
-                    <td><?= htmlspecialchars($p['nom_compte'] ?? $p['nom_compte']) ?></td>
-                    <td><?= htmlspecialchars($p['agent_nom'] ?? '') ?></td>
-                    <td>
-                      <a href="<?= BASE_URL ?>/paiements/receipt?id=<?= urlencode($p['id']) ?>" class="btn btn-sm btn-outline-primary">Reçu</a>
-                    </td>
-                  </tr>
-                <?php endforeach; ?>
-              <?php endif; ?>
-            </tbody>
-          </table>
+    <?php if (!empty($eleveFilter)): ?>
+      <div class="alert alert-info py-2">
+        Affichage des paiements pour l'élève <strong><?= htmlspecialchars(($eleveFilter['prenom'] ?? '') . ' ' . ($eleveFilter['nom'] ?? '') . ' ' . ($eleveFilter['postnom'] ?? '')) ?></strong>.
+      </div>
+    <?php endif; ?>
+    <div class="row">
+      <div class="col-12">
+        <div class="card card-outline card-secondary">
+          <div class="card-body table-responsive p-0">
+            <table id="paymentsDataGrid" class="table table-striped table-hover table-bordered mb-0">
+              <thead class="table-dark">
+                <tr>
+                  <th style="width: 50px;">#</th>
+                  <th data-sort-key="reference_recu" class="sortable">Réf reçu</th>
+                  <th data-sort-key="eleve" class="sortable">Élève</th>
+                  <th data-sort-key="libelle" class="sortable">Motif / Frais</th>
+                  <th data-sort-key="date_operation" class="sortable">Date opération</th>
+                  <th data-sort-key="montant" class="sortable">Montant</th>
+                  <th data-sort-key="frais_devise" class="sortable">Devise</th>
+                  <th data-sort-key="nom_compte" class="sortable">Caisse / Compte</th>
+                  <th data-sort-key="agent_nom" class="sortable">Agent</th>
+                  <th style="width: 110px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <?php if (empty($payments)): ?>
+                  <tr><td colspan="10" class="text-center py-4">Aucun paiement enregistré.</td></tr>
+                <?php else: ?>
+                  <?php foreach ($payments as $i => $p): ?>
+                    <tr>
+                      <td><?= $i + 1 ?></td>
+                      <td data-key="reference_recu"><?= htmlspecialchars($p['reference_recu'] ?? '-') ?></td>
+                      <td data-key="eleve"><?= htmlspecialchars(trim(($p['prenom'] ?? '') . ' ' . ($p['nom'] ?? '') . ' ' . ($p['postnom'] ?? ''))) ?></td>
+                      <td data-key="libelle"><?= htmlspecialchars($p['libelle'] ?? '-') ?></td>
+                      <td data-key="date_operation"><?= htmlspecialchars($p['date_operation'] ?? '') ?></td>
+                      <td data-key="montant"><?= htmlspecialchars($p['montant_affiche'] ?? number_format((float) ($p['montant'] ?? 0), 2)) ?></td>
+                      <td data-key="frais_devise"><?= htmlspecialchars($p['frais_devise'] ?? ($p['transaction_devise'] ?? 'USD')) ?></td>
+                      <td data-key="nom_compte"><?= htmlspecialchars($p['nom_compte'] ?? '') ?></td>
+                      <td data-key="agent_nom"><?= htmlspecialchars($p['agent_nom'] ?? '') ?></td>
+                      <td>
+                        <a href="<?= BASE_URL ?>/paiements/receipt?id=<?= urlencode($p['id']) ?>" class="btn btn-sm btn-outline-primary">Reçu</a>
+                      </td>
+                    </tr>
+                  <?php endforeach; ?>
+                <?php endif; ?>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -85,7 +121,11 @@
     </div>
     <script>
       document.addEventListener('DOMContentLoaded', function () {
+        const initialEleveId = <?= json_encode($eleveId ?? null) ?>;
+        const initialFraisId = <?= json_encode($fraisId ?? null) ?>;
         const searchInput = document.getElementById('paymentSearch');
+        const eleveFilterSelect = document.getElementById('eleveFilter');
+        const fraisFilterSelect = document.getElementById('fraisFilter');
         const table = document.getElementById('paymentsDataGrid');
         const prevPageButton = document.getElementById('prevPage');
         const nextPageButton = document.getElementById('nextPage');
@@ -94,16 +134,35 @@
         if (!table || !prevPageButton || !nextPageButton || !pageInfo || !pageSizeSelect) return;
 
         const tbody = table.tBodies[0];
-        const originalRows = Array.from(tbody.querySelectorAll('tr'));
+        let originalRows = Array.from(tbody.querySelectorAll('tr'));
         let filteredRows = originalRows.slice();
         let currentPage = 1;
         let pageSize = parseInt(pageSizeSelect.value, 10);
+        let currentSort = { key: null, direction: 1 };
+
+        const sortableHeaders = Array.from(table.querySelectorAll('th.sortable'));
+        sortableHeaders.forEach(function (header) {
+          header.style.cursor = 'pointer';
+          header.addEventListener('click', function () {
+            const sortKey = header.dataset.sortKey;
+            if (!sortKey) return;
+            if (currentSort.key === sortKey) {
+              currentSort.direction *= -1;
+            } else {
+              currentSort.key = sortKey;
+              currentSort.direction = 1;
+            }
+            sortableHeaders.forEach(h => h.classList.remove('sorted-asc', 'sorted-desc'));
+            header.classList.add(currentSort.direction === 1 ? 'sorted-asc' : 'sorted-desc');
+            applySearch();
+          });
+        });
 
         function createNoDataRow() {
           const row = document.createElement('tr');
           row.className = 'no-data-row';
           const cell = document.createElement('td');
-          cell.colSpan = 8;
+          cell.colSpan = 10;
           cell.className = 'text-center py-4';
           cell.textContent = 'Aucune donnée correspondante trouvée.';
           row.appendChild(cell);
@@ -132,28 +191,98 @@
           nextPageButton.disabled = currentPage >= totalPages;
         }
 
+        function sortRows(rows) {
+          if (!currentSort.key) return rows;
+          const key = currentSort.key;
+          const direction = currentSort.direction;
+          return rows.slice().sort(function (a, b) {
+            const aText = a.querySelector(`td[data-key="${key}"]`)?.textContent?.trim().toLowerCase() || '';
+            const bText = b.querySelector(`td[data-key="${key}"]`)?.textContent?.trim().toLowerCase() || '';
+            const aNum = parseFloat(aText.replace(/[^0-9.-]+/g, ''));
+            const bNum = parseFloat(bText.replace(/[^0-9.-]+/g, ''));
+            if (!isNaN(aNum) && !isNaN(bNum)) {
+              return (aNum - bNum) * direction;
+            }
+            if (aText < bText) return -1 * direction;
+            if (aText > bText) return 1 * direction;
+            return 0;
+          });
+        }
+
         function applySearch() {
           const filter = (searchInput && searchInput.value) ? searchInput.value.toLowerCase() : '';
           filteredRows = originalRows.filter(function (row) {
             if (row.classList.contains('no-data-row')) return false;
             return row.textContent.toLowerCase().includes(filter);
           });
+          filteredRows = sortRows(filteredRows);
           currentPage = 1;
           renderTable();
         }
 
-        if (searchInput) searchInput.addEventListener('input', applySearch);
+        const exportLinks = Array.from(document.querySelectorAll('.export-filtered'));
+
+        function updateExportLinks() {
+          const params = new URLSearchParams();
+          if (eleveFilterSelect && eleveFilterSelect.value) {
+            params.set('eleve_id', eleveFilterSelect.value);
+          } else if (initialEleveId) {
+            params.set('eleve_id', initialEleveId);
+          }
+          if (fraisFilterSelect && fraisFilterSelect.value) {
+            params.set('frais_id', fraisFilterSelect.value);
+          } else if (initialFraisId) {
+            params.set('frais_id', initialFraisId);
+          }
+          exportLinks.forEach(function (link) {
+            const format = link.dataset.format;
+            link.href = '<?= BASE_URL ?>/paiements/export?format=' + encodeURIComponent(format) + (params.toString() ? '&' + params.toString() : '');
+          });
+        }
+
+        const resetFiltersButton = document.getElementById('resetFilters');
+
+        if (searchInput) searchInput.addEventListener('input', function () { currentPage = 1; applySearch(); });
+        if (eleveFilterSelect) eleveFilterSelect.addEventListener('change', function () { currentPage = 1; updateExportLinks(); fetchPaymentsAndUpdate(); });
+        if (fraisFilterSelect) fraisFilterSelect.addEventListener('change', function () { currentPage = 1; updateExportLinks(); fetchPaymentsAndUpdate(); });
+        if (resetFiltersButton) {
+          resetFiltersButton.addEventListener('click', function () {
+            if (eleveFilterSelect) eleveFilterSelect.value = '';
+            if (fraisFilterSelect) fraisFilterSelect.value = '';
+            if (searchInput) searchInput.value = '';
+            updateExportLinks();
+            currentPage = 1;
+            fetchPaymentsAndUpdate();
+            applySearch();
+          });
+        }
         prevPageButton.addEventListener('click', function () { if (currentPage > 1) { currentPage -= 1; renderTable(); } });
         nextPageButton.addEventListener('click', function () { const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize)); if (currentPage < totalPages) { currentPage += 1; renderTable(); } });
         pageSizeSelect.addEventListener('change', function () { pageSize = parseInt(this.value, 10); currentPage = 1; renderTable(); });
 
+        updateExportLinks();
         renderTable();
 
         // Polling: refresh payments every 5 seconds
         let lastDataHash = null;
+        function buildPaymentsListUrl() {
+          const url = new URL('<?= BASE_URL ?>/paiements/listJson', window.location.origin);
+          if (eleveFilterSelect && eleveFilterSelect.value) {
+            url.searchParams.set('eleve_id', eleveFilterSelect.value);
+          } else if (initialEleveId) {
+            url.searchParams.set('eleve_id', initialEleveId);
+          }
+          if (fraisFilterSelect && fraisFilterSelect.value) {
+            url.searchParams.set('frais_id', fraisFilterSelect.value);
+          } else if (initialFraisId) {
+            url.searchParams.set('frais_id', initialFraisId);
+          }
+          return url.toString();
+        }
+
         async function fetchPaymentsAndUpdate() {
           try {
-            const res = await fetch('<?= BASE_URL ?>/paiements/listJson');
+            const res = await fetch(buildPaymentsListUrl());
             if (!res.ok) return;
             const json = await res.json();
             const payments = json.payments || [];
@@ -162,12 +291,14 @@
               const tr = document.createElement('tr');
               tr.innerHTML = `
                 <td>${idx+1}</td>
-                <td>${(p.reference_recu||'-')}</td>
-                <td>${((p.prenom||'') + ' ' + (p.nom||'') + ' ' + (p.postnom||'')).trim()}</td>
-                <td>${p.date_operation || ''}</td>
-                <td>${p.montant_affiche || Number(p.montant||0).toFixed(2)}</td>
-                <td>${p.nom_compte || ''}</td>
-                <td>${p.agent_nom || ''}</td>
+                <td data-key="reference_recu">${(p.reference_recu||'-')}</td>
+                <td data-key="eleve">${((p.prenom||'') + ' ' + (p.nom||'') + ' ' + (p.postnom||'')).trim()}</td>
+                <td data-key="libelle">${p.libelle || '-'}</td>
+                <td data-key="date_operation">${p.date_operation || ''}</td>
+                <td data-key="montant">${p.montant_affiche || Number(p.montant||0).toFixed(2)}</td>
+                <td data-key="frais_devise">${p.frais_devise || (p.transaction_devise || 'USD')}</td>
+                <td data-key="nom_compte">${p.nom_compte || ''}</td>
+                <td data-key="agent_nom">${p.agent_nom || ''}</td>
                 <td><a href="<?= BASE_URL ?>/paiements/receipt?id=${encodeURIComponent(p.id)}" class="btn btn-sm btn-outline-primary">Reçu</a></td>
               `;
               return tr;

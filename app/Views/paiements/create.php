@@ -62,13 +62,15 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
 
               <div class="mb-3">
                 <label class="form-label">Motif / Frais</label>
-                <select name="frais_id" id="fraisSelect" class="form-select">
+                <select name="frais_id" id="fraisSelect" class="form-select" required>
                   <option value="">-- Sélectionner le motif --</option>
                   <?php foreach (($fees ?? []) as $f): ?>
                     <option value="<?= (int) $f['id'] ?>" data-amount="<?= htmlspecialchars($f['montant_total'] ?? '') ?>" data-remaining="<?= htmlspecialchars($f['remaining'] ?? '') ?>" data-devise="<?= htmlspecialchars($f['devise'] ?? 'USD') ?>" <?= ((int) ($oldInput['frais_id'] ?? 0) === (int) $f['id']) ? 'selected' : '' ?>><?= htmlspecialchars($f['type_frais'] . ' - ' . ($f['nom_classe'] ?? '') ) ?> (<?= htmlspecialchars($f['devise'] ?? '') ?>)</option>
                   <?php endforeach; ?>
                 </select>
               </div>
+
+              <div id="feeSummary" class="alert alert-info py-2 mb-3 d-none"></div>
 
               <div class="mb-3">
                 <label class="form-label">Libellé (optionnel)</label>
@@ -117,6 +119,7 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
     const libelleInput = document.getElementById('libelleInput');
     const montantInput = document.querySelector('input[name="montant"]');
     const montantHint = document.getElementById('montantHint');
+    const feeSummary = document.getElementById('feeSummary');
     const paiementForm = document.querySelector('form[action="<?= BASE_URL ?>/paiements/store"]');
     if (!fraisSelect || !montantInput || !montantHint || !paiementForm) return;
 
@@ -128,12 +131,23 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
         montantHint.classList.remove('text-danger');
         montantInput.min = 0;
         montantInput.max = '';
+        if (feeSummary) {
+          feeSummary.classList.add('d-none');
+          feeSummary.textContent = '';
+        }
         return;
       }
 
       const feeAmount = parseFloat(opt.dataset.amount || '0');
       const feeRemaining = parseFloat(opt.dataset.remaining || '0');
       const feeDevise = opt.dataset.devise || 'USD';
+      if (feeSummary) {
+        feeSummary.classList.remove('d-none');
+        feeSummary.textContent = feeRemaining > 0
+          ? `Frais sélectionné : reste à payer ${feeRemaining.toFixed(2)} ${feeDevise} sur ${feeAmount.toFixed(2)} ${feeDevise}.`
+          : `Frais sélectionné : montant total ${feeAmount.toFixed(2)} ${feeDevise}.`;
+      }
+
       if (feeAmount > 0) {
         if (feeRemaining > 0) {
           montantHint.textContent = `Montant autorisé : entre ${feeRemaining.toFixed(2)} et ${feeAmount.toFixed(2)} ${feeDevise}.`;
@@ -152,6 +166,17 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
         montantInput.min = 0;
         montantInput.max = '';
       }
+    }
+
+    function selectDefaultFee() {
+      const options = Array.from(fraisSelect.options).slice(1);
+      const preferred = options.find((option) => parseFloat(option.dataset.remaining || '0') > 0) || options[0];
+      if (!preferred) return;
+      if (!fraisSelect.value) {
+        fraisSelect.value = preferred.value;
+      }
+      const event = new Event('change', { bubbles: true });
+      fraisSelect.dispatchEvent(event);
     }
 
     fraisSelect.addEventListener('change', function () {
@@ -195,6 +220,10 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
       }
     });
 
-    updateMontantHint();
+    if (!fraisSelect.value) {
+      selectDefaultFee();
+    } else {
+      updateMontantHint();
+    }
   });
 </script>
