@@ -148,7 +148,7 @@ $devises = $devises ?? [];
 </section>
 <?php require __DIR__ . '/../partials/app_footer.php'; ?>
 <script>
-  document.addEventListener('DOMContentLoaded', function () {
+  function initDeviseEditor() {
     const editButtons = document.querySelectorAll('.edit-rate-btn');
     const deviseId = document.getElementById('deviseId');
     const deviseCode = document.getElementById('deviseCode');
@@ -157,13 +157,23 @@ $devises = $devises ?? [];
     const deviseActif = document.getElementById('deviseActif');
     const resetButton = document.getElementById('resetDeviseForm');
 
+    if (!deviseId || !deviseCode || !deviseLabel || !deviseRate || !deviseActif) {
+      return;
+    }
+
     editButtons.forEach(function (button) {
       button.addEventListener('click', function () {
-        deviseId.value = this.dataset.id || '0';
-        deviseCode.value = this.dataset.code || '';
-        deviseLabel.value = this.dataset.libelle || '';
-        deviseRate.value = this.dataset.taux || '1.000000';
-        deviseActif.checked = this.dataset.actif === '1';
+        const id = button.getAttribute('data-id') || '0';
+        const code = button.getAttribute('data-code') || '';
+        const libelle = button.getAttribute('data-libelle') || '';
+        const taux = button.getAttribute('data-taux') || '1.000000';
+        const actif = button.getAttribute('data-actif') || '0';
+
+        deviseId.value = id;
+        deviseCode.value = code;
+        deviseLabel.value = libelle;
+        deviseRate.value = taux;
+        deviseActif.checked = actif === '1';
         deviseCode.focus();
       });
     });
@@ -177,5 +187,11 @@ $devises = $devises ?? [];
         deviseActif.checked = true;
       });
     }
-  });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initDeviseEditor);
+  } else {
+    initDeviseEditor();
+  }
 </script>

@@ -53,7 +53,15 @@ class PaiementsController extends Controller
             fputcsv($out, ['Réf reçu', 'Élève', 'Date', 'Montant', 'Caisse', 'Agent', 'Libellé']);
             foreach ($payments as $p) {
                 $name = trim(($p['prenom'] ?? '') . ' ' . ($p['nom'] ?? '') . ' ' . ($p['postnom'] ?? ''));
-                fputcsv($out, [$p['reference_recu'] ?? '', $name, $p['date_operation'] ?? '', (float) ($p['montant'] ?? 0), $p['nom_compte'] ?? '', $p['agent_nom'] ?? '', $p['libelle'] ?? '']);
+                fputcsv($out, [
+                    $p['reference_recu'] ?? '',
+                    $name,
+                    $p['date_operation'] ?? '',
+                    $p['montant_affiche'] ?? number_format((float) ($p['montant'] ?? 0), 2),
+                    $p['nom_compte'] ?? '',
+                    $p['agent_nom'] ?? '',
+                    $p['libelle'] ?? '',
+                ]);
             }
             fclose($out);
             exit;
@@ -110,11 +118,12 @@ class PaiementsController extends Controller
     private function fetchPaymentsForUser(array $user, int $limit = 0): array
     {
         $db = \App\Core\Database::getConnection();
-        $sql = 'SELECT ece.id, ece.reference_recu, ece.date_operation, ece.montant, ece.libelle, ce.eleve_id, el.nom, el.postnom, el.prenom, cb.nom_compte, u.nom_complet AS agent_nom '
+        $sql = 'SELECT ece.id, ece.reference_recu, ece.date_operation, ece.montant, ece.libelle, ce.eleve_id, el.nom, el.postnom, el.prenom, cb.nom_compte, u.nom_complet AS agent_nom, fs.devise AS frais_devise '
             . 'FROM ecritures_comptables_eleves ece '
             . 'INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id '
             . 'INNER JOIN eleves el ON ce.eleve_id = el.id '
             . 'LEFT JOIN caisses_banques cb ON ece.caisse_banque_id = cb.id '
+            . 'LEFT JOIN frais_scolaires fs ON ece.frais_id = fs.id '
             . 'LEFT JOIN utilisateurs u ON ece.agent_saisie_id = u.reference_id AND u.role NOT IN (\'eleve_ecole\', \'parent_ecole\') '
             . 'WHERE ece.type_mouvement = :type ';
 
@@ -141,7 +150,7 @@ class PaiementsController extends Controller
 
         // Also include legacy paiements_eleves table if present
         try {
-            $legacySql = 'SELECT pe.id AS legacy_id, pe.eleve_id, pe.frais_id, pe.montant_paye AS montant, pe.date_paiement AS date_operation, fs.type_frais AS libelle_frais, el.nom, el.postnom, el.prenom '
+            $legacySql = 'SELECT pe.id AS legacy_id, pe.eleve_id, pe.frais_id, pe.montant_paye AS montant, pe.date_paiement AS date_operation, fs.type_frais AS libelle_frais, fs.devise AS frais_devise, el.nom, el.postnom, el.prenom '
                 . 'FROM paiements_eleves pe '
                 . 'INNER JOIN eleves el ON pe.eleve_id = el.id '
                 . 'LEFT JOIN frais_scolaires fs ON pe.frais_id = fs.id '
@@ -180,6 +189,7 @@ class PaiementsController extends Controller
                     'prenom' => $l['prenom'] ?? null,
                     'nom_compte' => null,
                     'agent_nom' => null,
+                    'frais_devise' => $l['frais_devise'] ?? 'USD',
                 ];
             }
         } catch (\Throwable $e) {
@@ -192,6 +202,20 @@ class PaiementsController extends Controller
             $tb = strtotime($b['date_operation'] ?? '1970-01-01 00:00:00');
             return $tb <=> $ta;
         });
+
+        foreach ($records as &$rec) {
+            $currency = strtoupper(trim($rec['frais_devise'] ?? 'USD')) ?: 'USD';
+            $rec['transaction_devise'] = $currency;
+            $rec['montant_usd_equivalent'] = $currency !== 'USD'
+                ? \App\Models\Devise::convertToUsd((float) ($rec['montant'] ?? 0), $currency)
+                : null;
+            $rec['montant_affiche'] = \App\Models\Devise::formatAmountWithCurrency(
+                (float) ($rec['montant'] ?? 0),
+                $currency,
+                $rec['montant_usd_equivalent']
+            );
+        }
+        unset($rec);
 
         if ($limit > 0) {
             return array_slice($records, 0, $limit);

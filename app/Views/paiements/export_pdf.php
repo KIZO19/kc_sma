@@ -22,7 +22,7 @@
             <td><?= htmlspecialchars($p['reference_recu'] ?? '') ?></td>
             <td><?= htmlspecialchars((($p['prenom'] ?? '') . ' ' . ($p['nom'] ?? '') . ' ' . ($p['postnom'] ?? ''))) ?></td>
             <td><?= htmlspecialchars($p['date_operation'] ?? '') ?></td>
-            <td><?= number_format((float) ($p['montant'] ?? 0), 2) ?></td>
+            <td><?= htmlspecialchars($p['montant_affiche'] ?? number_format((float) ($p['montant'] ?? 0), 2)) ?></td>
             <td><?= htmlspecialchars($p['nom_compte'] ?? '') ?></td>
             <td><?= htmlspecialchars($p['agent_nom'] ?? '') ?></td>
             <td><?= htmlspecialchars($p['libelle'] ?? '') ?></td>

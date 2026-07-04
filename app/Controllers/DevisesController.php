@@ -80,6 +80,16 @@ class DevisesController extends Controller
             }
 
             if (empty($errors)) {
+                $existing = Devise::findByCode($code);
+                if ($id === 0 && $existing !== null) {
+                    $errors[] = 'Le code de la devise « ' . htmlspecialchars($code, ENT_QUOTES, 'UTF-8') . ' » existe déjà.';
+                }
+                if ($id > 0 && $existing !== null && (int) $existing['id'] !== $id) {
+                    $errors[] = 'Le code de la devise « ' . htmlspecialchars($code, ENT_QUOTES, 'UTF-8') . ' » est déjà utilisé par un autre taux.';
+                }
+            }
+
+            if (empty($errors)) {
                 if ($id > 0) {
                     if (!Devise::update($id, ['code' => $code, 'libelle' => $libelle, 'taux' => $taux, 'actif' => $actif])) {
                         $errors[] = 'Impossible de mettre à jour le taux de change.';

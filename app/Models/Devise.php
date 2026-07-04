@@ -88,21 +88,60 @@ class Devise
         self::ensureTableExists();
         $db = Database::getConnection();
         $stmt = $db->prepare('SELECT * FROM devises WHERE code = :code LIMIT 1');
-        $stmt->execute([':code' => $code]);
+        $stmt->execute([':code' => strtoupper(trim($code))]);
 
         return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    public static function getRateFor(string $code): ?float
+    {
+        $devise = self::findByCode($code);
+        if (!$devise || !isset($devise['taux'])) {
+            return null;
+        }
+        return (float) $devise['taux'];
+    }
+
+    public static function convertToUsd(float $amount, string $code): float
+    {
+        $currency = strtoupper(trim($code));
+        if ($currency === '' || $currency === 'USD') {
+            return round($amount, 2);
+        }
+
+        $rate = self::getRateFor($currency);
+        if ($rate === null || $rate <= 0) {
+            return round($amount, 2);
+        }
+
+        return round($amount * $rate, 2);
+    }
+
+    public static function formatAmountWithCurrency(float $amount, string $currency, ?float $usdEquivalent = null): string
+    {
+        $currency = strtoupper(trim($currency)) ?: 'USD';
+        $formatted = number_format($amount, 2, '.', ' ');
+        if ($currency !== 'USD' && $usdEquivalent !== null) {
+            return sprintf('%s %s (≈ %s USD)', $formatted, $currency, number_format($usdEquivalent, 2, '.', ' '));
+        }
+        return sprintf('%s %s', $formatted, $currency);
     }
 
     public static function create(array $data): bool
     {
         self::ensureTableExists();
+        $code = strtoupper(trim($data['code'] ?? ''));
+        if ($code === '' || self::findByCode($code) !== null) {
+            return false;
+        }
+
         $db = Database::getConnection();
         $stmt = $db->prepare(
             'INSERT INTO devises (code, libelle, taux, actif) VALUES (:code, :libelle, :taux, :actif)'
         );
 
         return (bool) $stmt->execute([
-            ':code' => strtoupper(trim($data['code'] ?? '')),
+            ':code' => $code,
             ':libelle' => trim($data['libelle'] ?? ''),
             ':taux' => (float) ($data['taux'] ?? 0),
             ':actif' => isset($data['actif']) ? (int) $data['actif'] : 1,
@@ -112,13 +151,19 @@ class Devise
     public static function update(int $id, array $data): bool
     {
         self::ensureTableExists();
+        $code = strtoupper(trim($data['code'] ?? ''));
+        $existing = self::findByCode($code);
+        if ($existing !== null && (int) $existing['id'] !== $id) {
+            return false;
+        }
+
         $db = Database::getConnection();
         $stmt = $db->prepare(
             'UPDATE devises SET code = :code, libelle = :libelle, taux = :taux, actif = :actif WHERE id = :id'
         );
 
         return (bool) $stmt->execute([
-            ':code' => strtoupper(trim($data['code'] ?? '')),
+            ':code' => $code,
             ':libelle' => trim($data['libelle'] ?? ''),
             ':taux' => (float) ($data['taux'] ?? 0),
             ':actif' => isset($data['actif']) ? (int) $data['actif'] : 1,

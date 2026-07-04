@@ -45,7 +45,10 @@
                 <div class="pos-row"><div>Date:</div><div><?= htmlspecialchars($ecriture['date_operation'] ?? '') ?></div></div>
                 <div class="pos-row"><div>Motif:</div><div><?= htmlspecialchars($ecriture['libelle'] ?? '') ?></div></div>
                 <div class="pos-line"></div>
-                <div class="pos-row"><div>Montant</div><div class="pos-amount"><?= number_format((float) ($ecriture['montant'] ?? 0), 2) ?></div></div>
+                <div class="pos-row"><div>Montant</div><div class="pos-amount"><?= htmlspecialchars($ecriture['montant_affiche'] ?? number_format((float) ($ecriture['montant'] ?? 0), 2)) ?></div></div>
+                <?php if (!empty($ecriture['montant_usd_equivalent']) && strtoupper(trim($ecriture['transaction_devise'] ?? 'USD')) !== 'USD'): ?>
+                  <div class="pos-row"><div>Equivalent USD</div><div><?= number_format((float) $ecriture['montant_usd_equivalent'], 2) ?> USD</div></div>
+                <?php endif; ?>
                 <div class="pos-line"></div>
                 <div class="pos-row"><div>Solde élève</div><div><?= number_format($solde, 2) ?></div></div>
                 <div class="pos-row"><div>Dette due</div><div><?= number_format($dette, 2) ?></div></div>
