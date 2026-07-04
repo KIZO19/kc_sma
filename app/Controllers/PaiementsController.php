@@ -18,9 +18,15 @@ class PaiementsController extends Controller
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
+        $eleveId = !empty($_GET['eleve_id']) ? (int) $_GET['eleve_id'] : null;
+        if ($eleveId && ($role !== 'super_admin') && (int) ($user['ecole_id'] ?? 0) > 0) {
+            if (!Eleve::findByIdAndSchool($eleveId, (int) $user['ecole_id'])) {
+                $eleveId = null;
+            }
+        }
 
-        // fetch a large history so the page can retracer tous les paiements
-        $payments = $this->fetchPaymentsForUser($user);
+        $payments = $this->fetchPaymentsForUser($user, 0, $eleveId);
+        $eleveFilter = $eleveId ? Eleve::findById($eleveId) : null;
 
         $this->view('paiements/index', [
             'title' => APP_NAME . ' - Paiements',
@@ -100,7 +106,13 @@ class PaiementsController extends Controller
         Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école', 'sec_école', 'parent_ecole']);
 
         $user = Auth::refresh() ?: Auth::user();
-        $payments = $this->fetchPaymentsForUser($user);
+        $eleveId = !empty($_GET['eleve_id']) ? (int) $_GET['eleve_id'] : null;
+        if ($eleveId && ($user['role'] ?? '') !== 'super_admin' && (int) ($user['ecole_id'] ?? 0) > 0) {
+            if (!Eleve::findByIdAndSchool($eleveId, (int) $user['ecole_id'])) {
+                $eleveId = null;
+            }
+        }
+        $payments = $this->fetchPaymentsForUser($user, 0, $eleveId);
 
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(['payments' => $payments], JSON_UNESCAPED_UNICODE);
@@ -115,13 +127,14 @@ class PaiementsController extends Controller
         return ob_get_clean() ?: '';
     }
 
-    private function fetchPaymentsForUser(array $user, int $limit = 0): array
+    private function fetchPaymentsForUser(array $user, int $limit = 0, ?int $eleveId = null): array
     {
         $db = \App\Core\Database::getConnection();
-        $sql = 'SELECT ece.id, ece.reference_recu, ece.date_operation, ece.montant, ece.libelle, ce.eleve_id, el.nom, el.postnom, el.prenom, cb.nom_compte, u.nom_complet AS agent_nom, fs.devise AS frais_devise '
+        $sql = 'SELECT ece.id, ece.reference_recu, ece.date_operation, ece.montant, ece.libelle, ce.eleve_id, el.nom, el.postnom, el.prenom, cb.nom_compte, u.nom_complet AS agent_nom, fs.devise AS frais_devise, COALESCE(fs.devise, ecole.devise_principale, \'USD\') AS transaction_devise '
             . 'FROM ecritures_comptables_eleves ece '
             . 'INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id '
             . 'INNER JOIN eleves el ON ce.eleve_id = el.id '
+            . 'LEFT JOIN ecoles ecole ON el.ecole_id = ecole.id '
             . 'LEFT JOIN caisses_banques cb ON ece.caisse_banque_id = cb.id '
             . 'LEFT JOIN frais_scolaires fs ON ece.frais_id = fs.id '
             . 'LEFT JOIN utilisateurs u ON ece.agent_saisie_id = u.reference_id AND u.role NOT IN (\'eleve_ecole\', \'parent_ecole\') '
@@ -131,6 +144,10 @@ class PaiementsController extends Controller
         if (($user['role'] ?? '') !== 'super_admin') {
             $sql .= 'AND (el.ecole_id = :ecole OR EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id WHERE i.eleve_id = el.id AND c.ecole_id = :ecole)) ';
             $params[':ecole'] = (int) ($user['ecole_id'] ?? 0);
+        }
+        if ($eleveId !== null) {
+            $sql .= 'AND ce.eleve_id = :eleveId ';
+            $params[':eleveId'] = $eleveId;
         }
 
         $sql .= 'ORDER BY ece.date_operation DESC';
@@ -150,9 +167,10 @@ class PaiementsController extends Controller
 
         // Also include legacy paiements_eleves table if present
         try {
-            $legacySql = 'SELECT pe.id AS legacy_id, pe.eleve_id, pe.frais_id, pe.montant_paye AS montant, pe.date_paiement AS date_operation, fs.type_frais AS libelle_frais, fs.devise AS frais_devise, el.nom, el.postnom, el.prenom '
+            $legacySql = 'SELECT pe.id AS legacy_id, pe.eleve_id, pe.frais_id, pe.montant_paye AS montant, pe.date_paiement AS date_operation, fs.type_frais AS libelle_frais, fs.devise AS frais_devise, COALESCE(fs.devise, ecole.devise_principale, \'USD\') AS transaction_devise, el.nom, el.postnom, el.prenom '
                 . 'FROM paiements_eleves pe '
                 . 'INNER JOIN eleves el ON pe.eleve_id = el.id '
+                . 'LEFT JOIN ecoles ecole ON el.ecole_id = ecole.id '
                 . 'LEFT JOIN frais_scolaires fs ON pe.frais_id = fs.id '
                 . 'WHERE 1=1 ';
 
@@ -160,6 +178,10 @@ class PaiementsController extends Controller
             if (($user['role'] ?? '') !== 'super_admin') {
                 $legacySql .= 'AND (el.ecole_id = :ecole OR EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id WHERE i.eleve_id = el.id AND c.ecole_id = :ecole)) ';
                 $legacyParams[':ecole'] = (int) ($user['ecole_id'] ?? 0);
+            }
+            if ($eleveId !== null) {
+                $legacySql .= 'AND el.id = :eleveId ';
+                $legacyParams[':eleveId'] = $eleveId;
             }
             $legacySql .= 'ORDER BY pe.date_paiement DESC';
             if ($limit > 0) {
@@ -204,7 +226,7 @@ class PaiementsController extends Controller
         });
 
         foreach ($records as &$rec) {
-            $currency = strtoupper(trim($rec['frais_devise'] ?? 'USD')) ?: 'USD';
+            $currency = strtoupper(trim($rec['transaction_devise'] ?? $rec['frais_devise'] ?? 'USD')) ?: 'USD';
             $rec['transaction_devise'] = $currency;
             $rec['montant_usd_equivalent'] = $currency !== 'USD'
                 ? \App\Models\Devise::convertToUsd((float) ($rec['montant'] ?? 0), $currency)
@@ -259,6 +281,37 @@ class PaiementsController extends Controller
         $fees = [];
         try {
             $fees = \App\Models\FraisScolaire::getAllBySchool((int) ($user['ecole_id'] ?? 0));
+
+            if ($eleveId > 0 && !empty($fees)) {
+                $paymentsByFee = [];
+
+                try {
+                    $stmtPaid = $db->prepare('SELECT ece.frais_id, SUM(ece.montant) AS paid FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id WHERE ce.eleve_id = :eleve GROUP BY ece.frais_id');
+                    $stmtPaid->execute([':eleve' => $eleveId]);
+                    foreach ($stmtPaid->fetchAll() as $row) {
+                        $paymentsByFee[(int) ($row['frais_id'] ?? 0)] = (float) ($row['paid'] ?? 0);
+                    }
+                } catch (\Throwable $e) {
+                    // ignore legacy query issues
+                }
+
+                try {
+                    $stmtPaid2 = $db->prepare('SELECT pe.frais_id, SUM(pe.montant_paye) AS paid FROM paiements_eleves pe WHERE pe.eleve_id = :eleve GROUP BY pe.frais_id');
+                    $stmtPaid2->execute([':eleve' => $eleveId]);
+                    foreach ($stmtPaid2->fetchAll() as $row) {
+                        $feeId = (int) ($row['frais_id'] ?? 0);
+                        $paymentsByFee[$feeId] = ($paymentsByFee[$feeId] ?? 0.0) + (float) ($row['paid'] ?? 0);
+                    }
+                } catch (\Throwable $e) {
+                    // ignore legacy table issues
+                }
+
+                foreach ($fees as &$feeItem) {
+                    $paid = $paymentsByFee[(int) ($feeItem['id'] ?? 0)] ?? 0.0;
+                    $feeItem['remaining'] = max(0.0, (float) ($feeItem['montant_total'] ?? 0) - $paid);
+                }
+                unset($feeItem);
+            }
         } catch (\Throwable $e) {
             // ignore, view will show empty list
         }
@@ -294,24 +347,72 @@ class PaiementsController extends Controller
         $montant = (float) ($_POST['montant'] ?? 0);
         $fraisId = !empty($_POST['frais_id']) ? (int) $_POST['frais_id'] : null;
         $libelle = '';
+        $caisseId = !empty($_POST['caisse_id']) ? (int) $_POST['caisse_id'] : null;
+        $oldInput = [
+            'eleve_id' => $eleveId,
+            'montant' => $montant,
+            'frais_id' => $fraisId,
+            'libelle' => trim($_POST['libelle'] ?? ''),
+            'caisse_id' => $caisseId,
+        ];
+
+        $errors = [];
+        $fee = null;
+        $db = Database::getConnection();
         if ($fraisId) {
             $fee = \App\Models\FraisScolaire::findById($fraisId);
             if ($fee) {
-                $libelle = $fee['type_frais'] . ' - ' . number_format((float) ($fee['montant_total'] ?? 0), 2) . ' ' . ($fee['devise'] ?? '');
-                // if montant not provided, use fee amount as default
+                $feeTotal = (float) ($fee['montant_total'] ?? 0);
+                $paid = 0.0;
+                try {
+                    $stmtPaid = $db->prepare('SELECT SUM(ece.montant) AS paid FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id WHERE ce.eleve_id = :eleve AND ece.frais_id = :frais');
+                    $stmtPaid->execute([':eleve' => $eleveId, ':frais' => $fraisId]);
+                    $paid += (float) ($stmtPaid->fetchColumn() ?: 0);
+                } catch (\Throwable $e) {
+                    // ignore missing legacy or query issues
+                }
+                try {
+                    $stmtPaid2 = $db->prepare('SELECT SUM(pe.montant_paye) AS paid FROM paiements_eleves pe WHERE pe.eleve_id = :eleve AND pe.frais_id = :frais');
+                    $stmtPaid2->execute([':eleve' => $eleveId, ':frais' => $fraisId]);
+                    $paid += (float) ($stmtPaid2->fetchColumn() ?: 0);
+                } catch (\Throwable $e) {
+                    // ignore missing legacy table
+                }
+
+                $remaining = max(0.0, $feeTotal - $paid);
                 if ($montant <= 0) {
-                    $montant = (float) ($fee['montant_total'] ?? 0);
+                    $montant = $remaining > 0 ? $remaining : $feeTotal;
+                }
+
+                $libelle = $fee['type_frais'] . ' - ' . number_format($feeTotal, 2) . ' ' . ($fee['devise'] ?? '');
+
+                if ($remaining <= 0) {
+                    $errors[] = 'Ce frais est déjà soldé pour cet élève.';
+                } elseif ($montant < $remaining) {
+                    $errors[] = 'Le montant saisi doit être au moins le reste à payer pour ce frais. Reste à payer : ' . number_format($remaining, 2) . ' ' . ($fee['devise'] ?? 'USD') . '.';
+                } elseif ($montant > $feeTotal) {
+                    $errors[] = 'Le montant saisi ne peut pas être supérieur au montant total du frais scolaire sélectionné.';
                 }
             }
         }
+
         if ($libelle === '') {
             $libelle = trim($_POST['libelle'] ?? 'Paiement élève');
         }
         $caisseId = !empty($_POST['caisse_id']) ? (int) $_POST['caisse_id'] : null;
 
         if ($eleveId <= 0 || $montant <= 0) {
-            $_SESSION['flash_error'] = 'Élève ou montant invalide.';
-            header('Location: ' . BASE_URL . '/paiements');
+            $errors[] = 'Élève ou montant invalide.';
+        }
+
+        if (!empty($errors)) {
+            $_SESSION['paiements_errors'] = $errors;
+            $_SESSION['paiements_old'] = $oldInput;
+            $redirectUrl = BASE_URL . '/paiements/create';
+            if ($eleveId > 0) {
+                $redirectUrl .= '?eleve_id=' . urlencode($eleveId);
+            }
+            header('Location: ' . $redirectUrl);
             exit;
         }
 

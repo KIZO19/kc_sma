@@ -165,7 +165,7 @@
                 <td>${(p.reference_recu||'-')}</td>
                 <td>${((p.prenom||'') + ' ' + (p.nom||'') + ' ' + (p.postnom||'')).trim()}</td>
                 <td>${p.date_operation || ''}</td>
-                <td>${Number(p.montant||0).toFixed(2)}</td>
+                <td>${p.montant_affiche || Number(p.montant||0).toFixed(2)}</td>
                 <td>${p.nom_compte || ''}</td>
                 <td>${p.agent_nom || ''}</td>
                 <td><a href="<?= BASE_URL ?>/paiements/receipt?id=${encodeURIComponent(p.id)}" class="btn btn-sm btn-outline-primary">Reçu</a></td>
