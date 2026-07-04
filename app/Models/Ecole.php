@@ -260,4 +260,15 @@ class Ecole
             return false;
         }
     }
+
+    public static function updateDefaultCurrency(int $id, string $currency): bool
+    {
+        try {
+            $db = Database::getConnection();
+            $stmt = $db->prepare('UPDATE ecoles SET devise_principale = :devise WHERE id = :id');
+            return $stmt->execute([':devise' => strtoupper(trim($currency)), ':id' => $id]);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
 }

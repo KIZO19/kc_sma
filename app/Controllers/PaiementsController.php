@@ -20,7 +20,7 @@ class PaiementsController extends Controller
         $modules = $this->getModulesForRole($role);
 
         // fetch a large history so the page can retracer tous les paiements
-        $payments = $this->fetchPaymentsForUser($user, 10000);
+        $payments = $this->fetchPaymentsForUser($user);
 
         $this->view('paiements/index', [
             'title' => APP_NAME . ' - Paiements',
@@ -40,7 +40,7 @@ class PaiementsController extends Controller
         $user = Auth::refresh() ?: Auth::user();
 
         $format = strtolower(trim($_GET['format'] ?? 'csv'));
-        $payments = $this->fetchPaymentsForUser($user, 10000);
+        $payments = $this->fetchPaymentsForUser($user);
 
         if ($format === 'csv' || $format === 'excel') {
             // output CSV (works with Excel). For `excel` we set XLS content-disposition for convenience.
@@ -92,7 +92,7 @@ class PaiementsController extends Controller
         Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école', 'sec_école', 'parent_ecole']);
 
         $user = Auth::refresh() ?: Auth::user();
-        $payments = $this->fetchPaymentsForUser($user, 10000);
+        $payments = $this->fetchPaymentsForUser($user);
 
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(['payments' => $payments], JSON_UNESCAPED_UNICODE);
@@ -107,7 +107,7 @@ class PaiementsController extends Controller
         return ob_get_clean() ?: '';
     }
 
-    private function fetchPaymentsForUser(array $user, int $limit = 200): array
+    private function fetchPaymentsForUser(array $user, int $limit = 0): array
     {
         $db = \App\Core\Database::getConnection();
         $sql = 'SELECT ece.id, ece.reference_recu, ece.date_operation, ece.montant, ece.libelle, ce.eleve_id, el.nom, el.postnom, el.prenom, cb.nom_compte, u.nom_complet AS agent_nom '
@@ -124,9 +124,14 @@ class PaiementsController extends Controller
             $params[':ecole'] = (int) ($user['ecole_id'] ?? 0);
         }
 
-        $sql .= 'ORDER BY ece.date_operation DESC LIMIT :limit';
+        $sql .= 'ORDER BY ece.date_operation DESC';
+        if ($limit > 0) {
+            $sql .= ' LIMIT :limit';
+        }
         $stmt = $db->prepare($sql);
-        $stmt->bindValue(':limit', $limit, \PDO::PARAM_INT);
+        if ($limit > 0) {
+            $stmt->bindValue(':limit', $limit, \PDO::PARAM_INT);
+        }
         foreach ($params as $key => $value) {
             $stmt->bindValue($key, $value, is_int($value) ? \PDO::PARAM_INT : \PDO::PARAM_STR);
         }
@@ -147,9 +152,14 @@ class PaiementsController extends Controller
                 $legacySql .= 'AND (el.ecole_id = :ecole OR EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id WHERE i.eleve_id = el.id AND c.ecole_id = :ecole)) ';
                 $legacyParams[':ecole'] = (int) ($user['ecole_id'] ?? 0);
             }
-            $legacySql .= 'ORDER BY pe.date_paiement DESC LIMIT :limit';
+            $legacySql .= 'ORDER BY pe.date_paiement DESC';
+            if ($limit > 0) {
+                $legacySql .= ' LIMIT :limit';
+            }
             $lstmt = $db->prepare($legacySql);
-            $lstmt->bindValue(':limit', $limit, \PDO::PARAM_INT);
+            if ($limit > 0) {
+                $lstmt->bindValue(':limit', $limit, \PDO::PARAM_INT);
+            }
             foreach ($legacyParams as $k => $v) {
                 $lstmt->bindValue($k, $v, is_int($v) ? \PDO::PARAM_INT : \PDO::PARAM_STR);
             }
@@ -183,7 +193,11 @@ class PaiementsController extends Controller
             return $tb <=> $ta;
         });
 
-        return array_slice($records, 0, $limit);
+        if ($limit > 0) {
+            return array_slice($records, 0, $limit);
+        }
+
+        return $records;
     }
 
     public function create(): void
