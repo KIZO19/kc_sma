@@ -58,7 +58,7 @@
                     <td><?= htmlspecialchars($p['nom_compte'] ?? $p['nom_compte']) ?></td>
                     <td><?= htmlspecialchars($p['agent_nom'] ?? '') ?></td>
                     <td>
-                      <a href="<?= BASE_URL ?>/paiements/receipt?id=<?= (int) $p['id'] ?>" class="btn btn-sm btn-outline-primary">Reçu</a>
+                      <a href="<?= BASE_URL ?>/paiements/receipt?id=<?= urlencode($p['id']) ?>" class="btn btn-sm btn-outline-primary">Reçu</a>
                     </td>
                   </tr>
                 <?php endforeach; ?>

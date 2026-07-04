@@ -28,7 +28,26 @@
                   <p><strong>Nom:</strong> <?= htmlspecialchars($eleve['nom'] ?? '-') ?></p>
                   <p><strong>Postnom:</strong> <?= htmlspecialchars($eleve['postnom'] ?? '-') ?></p>
                   <p><strong>Prénom:</strong> <?= htmlspecialchars($eleve['prenom'] ?? '-') ?></p>
-                  <p><strong>Date de naissance:</strong> <?= htmlspecialchars($eleve['date_naissance'] ?? '-') ?></p>
+                    <?php
+                    $dobRaw = $eleve['date_naissance'] ?? null;
+                    $ageDisplay = '-';
+                    if (!empty($dobRaw)) {
+                      try {
+                        $dobDt = new \DateTime($dobRaw);
+                        $nowDt = new \DateTime();
+                        $diff = $nowDt->diff($dobDt);
+                        $ageDisplay = $diff->y . ' ans';
+                        if ($diff->y === 0 && $diff->m > 0) {
+                          $ageDisplay = $diff->m . ' mois';
+                        } elseif ($diff->y === 0 && $diff->m === 0) {
+                          $ageDisplay = $diff->d . ' jours';
+                        }
+                      } catch (\Exception $e) {
+                        $ageDisplay = '-';
+                      }
+                    }
+                    ?>
+                    <p><strong>Date de naissance:</strong> <?= htmlspecialchars($dobRaw ?? '-') ?> <small class="text-muted">(Âge: <?= htmlspecialchars($ageDisplay) ?>)</small></p>
                   <p><strong>Adresse:</strong> <?= nl2br(htmlspecialchars($eleve['adresse'] ?? '-')) ?></p>
                   <p><strong>Parent/Tuteur:</strong> <?= htmlspecialchars($eleve['nom_pere'] ?? ($eleve['parent_nom_responsable'] ?? '-')) ?></p>
                 </div>
@@ -42,11 +61,16 @@
                     <p>
                       <a href="#ecritures" class="btn btn-sm btn-outline-primary">Voir écritures</a>
                       <?php if (in_array($role, ['super_admin','comptable_école'], true)): ?>
-                        <a href="<?= BASE_URL ?>/paiements/create?eleve_id=<?= (int) $eleve['id'] ?>" class="btn btn-sm btn-success">Enregistrer paiement</a>
+                        <a href="<?= BASE_URL ?>/paiements/create?eleve_id=<?= (int) ($eleve['id'] ?? 0) ?>" class="btn btn-sm btn-success">Enregistrer paiement</a>
                       <?php endif; ?>
                     </p>
                   <?php else: ?>
                     <div class="alert alert-info">Aucun compte trouvé pour cet élève.</div>
+                    <p>
+                      <?php if (in_array($role, ['super_admin','comptable_école'], true)): ?>
+                        <a href="<?= BASE_URL ?>/paiements/create?eleve_id=<?= (int) ($eleve['id'] ?? 0) ?>" class="btn btn-sm btn-success">Enregistrer paiement</a>
+                      <?php endif; ?>
+                    </p>
                   <?php endif; ?>
                 </div>
               </div>

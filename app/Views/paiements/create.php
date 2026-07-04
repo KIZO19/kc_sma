@@ -21,11 +21,23 @@
   <div class="container-fluid">
     <div class="row">
       <div class="col-md-6">
-        <div class="card card-outline card-primary">
+            <div class="card card-outline card-primary">
           <div class="card-header"><h3 class="card-title">Détails paiement</h3></div>
           <div class="card-body">
             <form method="post" action="<?= BASE_URL ?>/paiements/store">
-              <input type="hidden" name="eleve_id" value="<?= (int) $eleve['id'] ?>">
+              <?php if (!empty($eleve)): ?>
+                <input type="hidden" name="eleve_id" value="<?= (int) $eleve['id'] ?>">
+              <?php else: ?>
+                <div class="mb-3">
+                  <label class="form-label">Élève</label>
+                  <select name="eleve_id" class="form-select" required>
+                    <option value="">-- Sélectionner un élève --</option>
+                    <?php foreach (($students ?? []) as $s): ?>
+                      <option value="<?= (int) $s['id'] ?>"><?= htmlspecialchars(($s['prenom'] ?? '') . ' ' . ($s['nom'] ?? '') . ' ' . ($s['postnom'] ?? '')) ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                </div>
+              <?php endif; ?>
 
               <div class="mb-3">
                 <label class="form-label">Montant</label>
@@ -51,15 +63,19 @@
                 <label class="form-label">Caisse / Compte</label>
                 <select name="caisse_id" class="form-select">
                   <option value="">-- Sélectionner --</option>
-                  <?php foreach ($caisses as $c): ?>
+                  <?php foreach (($caisses ?? []) as $c): ?>
                     <option value="<?= (int) $c['id'] ?>"><?= htmlspecialchars($c['nom_compte']) ?> (<?= htmlspecialchars($c['type_compte']) ?>)</option>
                   <?php endforeach; ?>
                 </select>
               </div>
 
-              <div class="d-flex gap-2">
+                <div class="d-flex gap-2">
                 <button class="btn btn-primary" type="submit">Enregistrer et imprimer reçu</button>
-                <a href="<?= BASE_URL ?>/eleves/show?id=<?= (int) $eleve['id'] ?>" class="btn btn-secondary">Retour</a>
+                <?php if (!empty($eleve)): ?>
+                  <a href="<?= BASE_URL ?>/eleves/show?id=<?= (int) $eleve['id'] ?>" class="btn btn-secondary">Retour</a>
+                <?php else: ?>
+                  <a href="<?= BASE_URL ?>/paiements" class="btn btn-secondary">Retour</a>
+                <?php endif; ?>
               </div>
             </form>
           </div>
