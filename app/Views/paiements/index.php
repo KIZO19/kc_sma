@@ -148,6 +148,48 @@
         pageSizeSelect.addEventListener('change', function () { pageSize = parseInt(this.value, 10); currentPage = 1; renderTable(); });
 
         renderTable();
+
+        // Polling: refresh payments every 5 seconds
+        let lastDataHash = null;
+        async function fetchPaymentsAndUpdate() {
+          try {
+            const res = await fetch('<?= BASE_URL ?>/paiements/listJson');
+            if (!res.ok) return;
+            const json = await res.json();
+            const payments = json.payments || [];
+            // build rows from payments
+            const newRows = payments.map((p, idx) => {
+              const tr = document.createElement('tr');
+              tr.innerHTML = `
+                <td>${idx+1}</td>
+                <td>${(p.reference_recu||'-')}</td>
+                <td>${((p.prenom||'') + ' ' + (p.nom||'') + ' ' + (p.postnom||'')).trim()}</td>
+                <td>${p.date_operation || ''}</td>
+                <td>${Number(p.montant||0).toFixed(2)}</td>
+                <td>${p.nom_compte || ''}</td>
+                <td>${p.agent_nom || ''}</td>
+                <td><a href="<?= BASE_URL ?>/paiements/receipt?id=${encodeURIComponent(p.id)}" class="btn btn-sm btn-outline-primary">Reçu</a></td>
+              `;
+              return tr;
+            });
+
+            // compute a simple hash to detect changes
+            const hash = payments.map(p => (p.id+'|'+p.date_operation+'|'+p.montant)).join('\n');
+            if (hash !== lastDataHash) {
+              lastDataHash = hash;
+              // update originalRows and filteredRows
+              originalRows.length = 0;
+              newRows.forEach(r => originalRows.push(r));
+              applySearch();
+            }
+          } catch (e) {
+            // ignore errors
+          }
+        }
+
+        // start polling
+        fetchPaymentsAndUpdate();
+        setInterval(fetchPaymentsAndUpdate, 5000);
       });
     </script>
   </div>

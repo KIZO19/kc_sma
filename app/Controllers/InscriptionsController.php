@@ -244,6 +244,91 @@ class InscriptionsController extends Controller
                     }
                 }
 
+                // After creating the inscription, assign applicable fees to the student's account
+                try {
+                    $db = \App\Core\Database::getConnection();
+                    $activeYear = $activeYear ?? AnneeScolaire::getActiveBySchool($ecoleId);
+                    $yearId = $activeYear['id'] ?? null;
+                    $studentId = (int) ($newStudent['id'] ?? 0);
+                    if ($studentId > 0 && $yearId) {
+                        // load class details to determine option/section
+                        $classRec = Classe::findById($classeId);
+                        $classOption = (int) ($classRec['option_id'] ?? 0);
+                        $classSection = (int) ($classRec['section_id'] ?? 0);
+
+                        // fetch fees for the school and filter by applicability and year
+                        $schoolIdForFees = $studentSchoolId > 0 ? $studentSchoolId : ($ecoleId > 0 ? $ecoleId : 0);
+                        $fees = \App\Models\FraisScolaire::getAllBySchool((int) $schoolIdForFees);
+
+                        // determine agent id for ecritures
+                        $agentId = $user['reference_id'] ?? null;
+                        if (empty($agentId)) {
+                            $agstmt = $db->prepare('SELECT id FROM agents WHERE ecole_id = :ecole LIMIT 1');
+                            $agstmt->execute([':ecole' => $ecoleId]);
+                            $found = $agstmt->fetch(\PDO::FETCH_ASSOC);
+                            $agentId = $found['id'] ?? null;
+                        }
+                        if (empty($agentId)) $agentId = 1;
+
+                        // ensure compte exists for this student and year
+                        $cstmt = $db->prepare('SELECT id, solde_debiteur FROM comptes_eleves WHERE eleve_id = :eleve AND annee_scolaire_id = :annee LIMIT 1');
+                        $cstmt->execute([':eleve' => $studentId, ':annee' => $yearId]);
+                        $compte = $cstmt->fetch(\PDO::FETCH_ASSOC);
+                        if (!$compte) {
+                            $ist = $db->prepare('INSERT INTO comptes_eleves (eleve_id, annee_scolaire_id, solde_debiteur) VALUES (:eleve, :annee, 0.00)');
+                            $ist->execute([':eleve' => $studentId, ':annee' => $yearId]);
+                            $compteId = (int) $db->lastInsertId();
+                            $currentBalance = 0.00;
+                        } else {
+                            $compteId = (int) $compte['id'];
+                            $currentBalance = (float) $compte['solde_debiteur'];
+                        }
+
+                        foreach ($fees as $f) {
+                            $apply = false;
+                            $scope = $f['scope'] ?? 'class';
+                            $scopeId = isset($f['scope_id']) ? (int) $f['scope_id'] : null;
+                            // only consider fees for the active year
+                            if (!empty($f['annee_scolaire_id']) && (int) $f['annee_scolaire_id'] !== (int) $yearId) {
+                                continue;
+                            }
+                            if ($scope === 'class') {
+                                if (!empty($f['classe_id']) && (int) $f['classe_id'] === $classeId) $apply = true;
+                            } elseif ($scope === 'option') {
+                                if (!empty($scopeId) && $scopeId === $classOption) $apply = true;
+                            } elseif ($scope === 'section') {
+                                if (!empty($scopeId) && $scopeId === $classSection) $apply = true;
+                            } elseif ($scope === 'school') {
+                                $apply = true;
+                            }
+
+                            if ($apply) {
+                                $montant = (float) ($f['montant_total'] ?? 0);
+                                if ($montant <= 0) continue;
+                                $libelle = 'Facturation inscription: ' . ($f['type_frais'] ?? 'Frais');
+                                $est = $db->prepare('INSERT INTO ecritures_comptables_eleves (compte_eleve_id, frais_id, caisse_banque_id, type_mouvement, montant, reference_recu, libelle, agent_saisie_id) VALUES (:compte, :frais, NULL, :type, :montant, NULL, :libelle, :agent)');
+                                $est->execute([
+                                    ':compte' => $compteId,
+                                    ':frais' => $f['id'] ?? null,
+                                    ':type' => 'DEBIT',
+                                    ':montant' => $montant,
+                                    ':libelle' => $libelle,
+                                    ':agent' => $agentId,
+                                ]);
+
+                                $currentBalance += $montant;
+                            }
+                        }
+
+                        // update compte balance if changed
+                        $ust = $db->prepare('UPDATE comptes_eleves SET solde_debiteur = :solde WHERE id = :id');
+                        $ust->execute([':solde' => $currentBalance, ':id' => $compteId]);
+                    }
+                } catch (\Throwable $e) {
+                    error_log('InscriptionsController::assign fees error: ' . $e->getMessage());
+                    // non-blocking: continue without failing the inscription
+                }
+
                 // Handle optional student photo upload (saved to public/uploads/avatars/eleve_{id}.{ext})
                 if ($newStudent && !empty($_FILES['photo']['name']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
                     $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png'];

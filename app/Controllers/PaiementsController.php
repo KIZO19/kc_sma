@@ -19,7 +19,8 @@ class PaiementsController extends Controller
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
 
-        $payments = $this->fetchPaymentsForUser($user, 200);
+        // fetch a large history so the page can retracer tous les paiements
+        $payments = $this->fetchPaymentsForUser($user, 10000);
 
         $this->view('paiements/index', [
             'title' => APP_NAME . ' - Paiements',
@@ -39,7 +40,7 @@ class PaiementsController extends Controller
         $user = Auth::refresh() ?: Auth::user();
 
         $format = strtolower(trim($_GET['format'] ?? 'csv'));
-        $payments = $this->fetchPaymentsForUser($user, 1000);
+        $payments = $this->fetchPaymentsForUser($user, 10000);
 
         if ($format === 'csv' || $format === 'excel') {
             // output CSV (works with Excel). For `excel` we set XLS content-disposition for convenience.
@@ -83,6 +84,19 @@ class PaiementsController extends Controller
 
         // unknown format => redirect back
         $this->redirect('/paiements');
+    }
+
+    public function listJson(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école', 'sec_école', 'parent_ecole']);
+
+        $user = Auth::refresh() ?: Auth::user();
+        $payments = $this->fetchPaymentsForUser($user, 10000);
+
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['payments' => $payments], JSON_UNESCAPED_UNICODE);
+        exit;
     }
 
     private function renderViewToString(string $viewPath, array $params = []): string
