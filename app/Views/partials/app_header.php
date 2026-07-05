@@ -14,7 +14,7 @@
   if (!empty($schoolForHeader['logo_url'])) {
       $faviconUrl = $schoolForHeader['logo_url'];
       if (strpos($faviconUrl, 'http') !== 0) {
-          $faviconUrl = rtrim(BASE_URL, '/') . '/' . ltrim($faviconUrl, '/');
+          $faviconUrl = '/kc_sma/public' . '/' . ltrim($faviconUrl, '/');
       }
       if (preg_match('/\.png$/i', $faviconUrl)) {
           $faviconMime = 'image/png';
@@ -203,7 +203,7 @@ if (!empty($schoolContext['nom_etablissement'])) {
 if (!empty($schoolContext['logo_url'])) {
     $brandLogo = $schoolContext['logo_url'];
     if (strpos($brandLogo, 'http') !== 0) {
-        $brandLogo = rtrim(BASE_URL, '/') . '/' . ltrim($brandLogo, '/');
+        $brandLogo = '/kc_sma/public' . '/' . ltrim($brandLogo, '/');
     }
 }
 ?>

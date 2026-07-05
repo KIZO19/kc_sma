@@ -52,6 +52,9 @@ class FraisController extends Controller
         $years = $ecoleId > 0 ? AnneeScolaire::getAllBySchool($ecoleId) : [];
         $activeYear = $ecoleId > 0 ? AnneeScolaire::getActiveBySchool($ecoleId) : null;
         $defaultYearId = $activeYear['id'] ?? 0;
+        if ($defaultYearId <= 0 && !empty($years)) {
+            $defaultYearId = (int) ($years[0]['id'] ?? 0);
+        }
         $school = $ecoleId > 0 ? \App\Models\Ecole::findById($ecoleId) : null;
         $schoolCurrency = $school['devise_principale'] ?? 'USD';
         $currencyOptions = $this->getCurrencyOptions();

@@ -19,6 +19,7 @@ class ClassesController extends Controller
 
     private const PRIMARY_ROLES = [
         'promoteur_école',
+        'préfet_école',
         'DE_école',
         'DA_école',
         'sec_école',
