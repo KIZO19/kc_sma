@@ -6,6 +6,13 @@ class Controller
 {
     protected function view(string $view, array $data = []): void
     {
+        $user = $data['user'] ?? null;
+        if (isset($data['title']) && is_string($data['title'])) {
+            $data['title'] = $this->resolvePageTitle($data['title'], $user);
+        } elseif (!isset($data['title'])) {
+            $data['title'] = $this->resolvePageTitle(APP_NAME, $user);
+        }
+
         extract($data);
         $viewFile = dirname(__DIR__) . '/Views/' . $view . '.php';
 
@@ -14,6 +21,31 @@ class Controller
         }
 
         require $viewFile;
+    }
+
+    protected function resolvePageTitle(string $title, ?array $user = null): string
+    {
+        $schoolName = APP_NAME;
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
+
+        if ($ecoleId > 0) {
+            $school = \App\Models\Ecole::findById($ecoleId);
+            if (!empty($school['nom_etablissement'])) {
+                $schoolName = $school['nom_etablissement'];
+            }
+        }
+
+        if ($title === APP_NAME) {
+            return $schoolName;
+        }
+
+        $prefix = APP_NAME . ' - ';
+        if (strpos($title, $prefix) === 0) {
+            $suffix = substr($title, strlen($prefix));
+            return $schoolName . ($suffix !== '' ? ' - ' . $suffix : '');
+        }
+
+        return $title;
     }
 
     protected function redirect(string $path): void

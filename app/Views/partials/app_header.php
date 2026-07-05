@@ -4,9 +4,22 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <?php $title = $title ?? APP_NAME; ?>
+  <?php
+  $faviconUrl = BASE_URL . '/assets/kc-logo.svg';
+  $school = null;
+  if (!empty($user['ecole_id'])) {
+      $school = \App\Models\Ecole::findById((int) $user['ecole_id']);
+  }
+  if (!empty($school['logo_url'])) {
+      $faviconUrl = $school['logo_url'];
+      if (strpos($faviconUrl, 'http') !== 0 && strpos($faviconUrl, '/') !== 0) {
+          $faviconUrl = BASE_URL . '/' . ltrim($faviconUrl, '/');
+      }
+  }
+  ?>
   <title><?= htmlspecialchars($title) ?></title>
-  <link rel="icon" href="<?= BASE_URL ?>/assets/favicon.ico" type="image/x-icon">
-  <link rel="alternate icon" href="<?= BASE_URL ?>/assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="<?= htmlspecialchars($faviconUrl) ?>" type="image/x-icon">
+  <link rel="alternate icon" href="<?= htmlspecialchars($faviconUrl) ?>" type="image/svg+xml">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" crossorigin="anonymous">
   <link rel="stylesheet" href="<?= BASE_URL ?>/assets/adminlte.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css" crossorigin="anonymous">
@@ -167,16 +180,16 @@ if (!empty($modules) && is_array($modules)) {
 }
 
 $brandName = 'AdminKC';
-$brandLogo = BASE_URL . '/assets/favicon.ico';
-$school = null;
-if (!empty($user['ecole_id'])) {
-    $school = \App\Models\Ecole::findById((int) $user['ecole_id']);
+$brandLogo = BASE_URL . '/assets/kc-logo.svg';
+$schoolContext = $school ?? null;
+if (!empty($user['ecole_id']) && (empty($schoolContext) || empty($schoolContext['id']))) {
+    $schoolContext = \App\Models\Ecole::findById((int) $user['ecole_id']);
 }
-if (!empty($school['nom_etablissement'])) {
-    $brandName = $school['nom_etablissement'];
+if (!empty($schoolContext['nom_etablissement'])) {
+    $brandName = $schoolContext['nom_etablissement'];
 }
-if (!empty($school['logo_url'])) {
-    $brandLogo = htmlspecialchars($school['logo_url'], ENT_QUOTES, 'UTF-8');
+if (!empty($schoolContext['logo_url'])) {
+    $brandLogo = htmlspecialchars($schoolContext['logo_url'], ENT_QUOTES, 'UTF-8');
     if (strpos($brandLogo, 'http') !== 0 && strpos($brandLogo, '/') !== 0) {
         $brandLogo = BASE_URL . '/' . ltrim($brandLogo, '/');
     }

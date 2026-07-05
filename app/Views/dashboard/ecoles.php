@@ -131,6 +131,9 @@ require __DIR__ . '/../partials/app_header.php'; ?>
                       <td><?= htmlspecialchars($school['plan_name'] ?? '-') ?></td>
                       <td><?= htmlspecialchars($school['date_fin'] ?? '-') ?></td>
                       <td>
+                        <?php if (($role ?? '') === 'super_admin'): ?>
+                          <a href="<?= BASE_URL ?>/ecoles/edit?id=<?= (int) $school['id'] ?>" class="btn btn-sm btn-outline-secondary me-2">Modifier</a>
+                        <?php endif; ?>
                         <form method="post" action="<?= BASE_URL ?>/ecoles/updateStatus" class="d-inline">
                           <input type="hidden" name="ecole_id" value="<?= (int) $school['id'] ?>">
                           <select name="statut_systeme" class="form-select form-select-sm d-inline w-auto me-2">
