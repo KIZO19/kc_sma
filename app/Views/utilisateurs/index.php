@@ -238,6 +238,5 @@ SCRIPT;
     </div>
   </div>
 </section>
-<?php endif; ?>
 
 <?php require __DIR__ . '/../partials/app_footer.php'; ?>

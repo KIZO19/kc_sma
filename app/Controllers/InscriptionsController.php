@@ -140,7 +140,13 @@ class InscriptionsController extends Controller
             }
 
             if (empty($matricule)) {
-                $matricule = $this->generateMatricule($nom . ' ' . $postnom);
+                $matricule = $this->generateUniqueMatricule($nom . ' ' . $postnom);
+            } else {
+                try {
+                    $matricule = $this->ensureUniqueMatricule($matricule);
+                } catch (\InvalidArgumentException $e) {
+                    $errors[] = $e->getMessage();
+                }
             }
 
             if ($classeId <= 0) {
@@ -194,40 +200,46 @@ class InscriptionsController extends Controller
                     $studentSchoolId = (int) $selectedClass['ecole_id'];
                 }
 
-                $newStudent = Eleve::create([
-                    'matricule' => $matricule,
-                    'nom' => $nom,
-                    'postnom' => $postnom,
-                    'prenom' => $prenom ?: null,
-                    'genre' => $genre,
-                    'lieu_naissance' => trim($_POST['lieu_naissance'] ?? null),
-                    'nationalite' => trim($_POST['nationalite'] ?? 'CONGOLAISE'),
-                    'adresse' => trim($_POST['adresse'] ?? null),
-                    'date_naissance' => $dateNaissance,
-                    'parent_id' => $parentId > 0 ? $parentId : null,
-                    'ecole_id' => $studentSchoolId > 0 ? $studentSchoolId : null,
-                    'nom_pere' => trim($_POST['nom_pere'] ?? null),
-                    'nom_mere' => trim($_POST['nom_mere'] ?? null),
-                    'province_origine' => trim($_POST['province_origine'] ?? null),
-                    'territoire' => trim($_POST['territoire'] ?? null),
-                    'secteur' => trim($_POST['secteur'] ?? null),
-                    'groupement' => trim($_POST['groupement'] ?? null),
-                    'village' => trim($_POST['village'] ?? null),
-                    'num_permanent' => trim($_POST['num_permanent'] ?? null),
-                    'statut_eleve' => 'inactif',
-                ]);
+                try {
+                    $newStudent = Eleve::create([
+                        'matricule' => $matricule,
+                        'nom' => $nom,
+                        'postnom' => $postnom,
+                        'prenom' => $prenom ?: null,
+                        'genre' => $genre,
+                        'lieu_naissance' => trim($_POST['lieu_naissance'] ?? null),
+                        'nationalite' => trim($_POST['nationalite'] ?? 'CONGOLAISE'),
+                        'adresse' => trim($_POST['adresse'] ?? null),
+                        'date_naissance' => $dateNaissance,
+                        'parent_id' => $parentId > 0 ? $parentId : null,
+                        'ecole_id' => $studentSchoolId > 0 ? $studentSchoolId : null,
+                        'nom_pere' => trim($_POST['nom_pere'] ?? null),
+                        'nom_mere' => trim($_POST['nom_mere'] ?? null),
+                        'province_origine' => trim($_POST['province_origine'] ?? null),
+                        'territoire' => trim($_POST['territoire'] ?? null),
+                        'secteur' => trim($_POST['secteur'] ?? null),
+                        'groupement' => trim($_POST['groupement'] ?? null),
+                        'village' => trim($_POST['village'] ?? null),
+                        'num_permanent' => trim($_POST['num_permanent'] ?? null),
+                        'statut_eleve' => 'inactif',
+                    ]);
+                } catch (\InvalidArgumentException $e) {
+                    $errors[] = $e->getMessage();
+                    $newStudent = null;
+                }
 
                 if ($newStudent && empty($newStudent['matricule'])) {
                     $school = Ecole::findById($ecoleId);
                     $activeYear = AnneeScolaire::getActiveBySchool($ecoleId);
                     $yearString = $activeYear['annee'] ?? date('Y') . '-' . (date('Y') + 1);
-                    $generatedMatricule = $this->generateMatriculeFromSchool(
+                    $generatedMatricule = $this->generateUniqueMatriculeFromSchool(
                         $school['nom_etablissement'] ?? 'ECOLE',
                         $nom,
                         $postnom,
                         $prenom,
                         (int) $newStudent['id'],
-                        $yearString
+                        $yearString,
+                        (int) $newStudent['id']
                     );
                     Eleve::updateMatricule((int) $newStudent['id'], $generatedMatricule);
                     $newStudent['matricule'] = $generatedMatricule;
@@ -501,6 +513,17 @@ class InscriptionsController extends Controller
                     'num_permanent' => trim($_POST['num_permanent'] ?? null),
                 ];
 
+                $existingStudent = Eleve::findById($eleveId);
+                $existingMatricule = $existingStudent['matricule'] ?? '';
+                if ($matricule === '') {
+                    $matricule = $existingMatricule;
+                }
+                try {
+                    $matricule = $this->ensureUniqueMatricule($matricule, $eleveId);
+                } catch (\InvalidArgumentException $e) {
+                    $errors[] = $e->getMessage();
+                }
+
                 // Optional photo upload during edit
                 if (!empty($_FILES['photo']['name']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
                     $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png'];
@@ -525,10 +548,14 @@ class InscriptionsController extends Controller
                     }
                 }
 
-                Eleve::update($eleveId, $updateData);
-                unset($_SESSION['inscriptions_old']);
-                $_SESSION['inscriptions_success'] = 'Les informations de l’inscription ont été mises à jour.';
-                $this->redirect('/inscriptions');
+                try {
+                    Eleve::update($eleveId, $updateData);
+                    unset($_SESSION['inscriptions_old']);
+                    $_SESSION['inscriptions_success'] = 'Les informations de l’inscription ont été mises à jour.';
+                    $this->redirect('/inscriptions');
+                } catch (\InvalidArgumentException $e) {
+                    $errors[] = $e->getMessage();
+                }
             }
 
             $_SESSION['inscriptions_errors'] = $errors;
@@ -633,6 +660,43 @@ class InscriptionsController extends Controller
         }
 
         $this->redirect('/inscriptions');
+    }
+
+    private function ensureUniqueMatricule(string $matricule, ?int $excludeId = null): string
+    {
+        $value = trim($matricule);
+        if ($value === '') {
+            return '';
+        }
+        if (Eleve::isMatriculeTaken($value, $excludeId)) {
+            throw new \InvalidArgumentException('Le matricule saisi est déjà utilisé.');
+        }
+
+        return $value;
+    }
+
+    private function generateUniqueMatricule(string $name, ?int $excludeId = null): string
+    {
+        $value = $this->generateMatricule($name);
+        $attempts = 0;
+        while (Eleve::isMatriculeTaken($value, $excludeId) && $attempts < 10) {
+            $value = $this->generateMatricule($name);
+            $attempts++;
+        }
+
+        return $value;
+    }
+
+    private function generateUniqueMatriculeFromSchool(string $schoolName, string $nom, string $postnom, string $prenom, int $eleveId, string $annee, ?int $excludeId = null): string
+    {
+        $value = $this->generateMatriculeFromSchool($schoolName, $nom, $postnom, $prenom, $eleveId, $annee);
+        $attempts = 0;
+        while (Eleve::isMatriculeTaken($value, $excludeId) && $attempts < 10) {
+            $value = $this->generateMatriculeFromSchool($schoolName, $nom, $postnom, $prenom, $eleveId, $annee);
+            $attempts++;
+        }
+
+        return $value;
     }
 
     private function generateMatricule(string $name): string

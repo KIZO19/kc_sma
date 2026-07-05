@@ -21,13 +21,28 @@ class ElevesController extends Controller
         $students = $ecoleId > 0 ? Eleve::getAllBySchool($ecoleId) : Eleve::getAll();
 
         $this->view('eleves/index', [
-            'title' => APP_NAME . ' - Élèves',
+            'title' => $this->buildSchoolPageTitle('Élèves', $user),
             'user' => $user,
             'role' => $role,
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $modules,
             'students' => $students,
         ]);
+    }
+
+    private function buildSchoolPageTitle(string $pageLabel, array $user): string
+    {
+        $schoolName = APP_NAME;
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
+
+        if ($ecoleId > 0) {
+            $school = \App\Models\Ecole::findById($ecoleId);
+            if (!empty($school['nom_etablissement'])) {
+                $schoolName = $school['nom_etablissement'];
+            }
+        }
+
+        return $schoolName . ' - ' . $pageLabel;
     }
 
     public function show(): void
@@ -62,7 +77,7 @@ class ElevesController extends Controller
         $discipline = \App\Models\Eleve::getDiscipline($eleveId);
 
         $this->view('eleves/show', [
-            'title' => APP_NAME . ' - Fiche élève',
+            'title' => $this->buildSchoolPageTitle('Fiche élève', $user),
             'user' => $user,
             'role' => $user['role'] ?? 'default',
             'roleLabel' => User::getRoleLabel($user['role'] ?? 'default'),

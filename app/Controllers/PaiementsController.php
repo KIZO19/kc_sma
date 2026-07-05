@@ -344,8 +344,29 @@ class PaiementsController extends Controller
             if ($db->inTransaction()) {
                 $db->rollBack();
             }
+            if ($e instanceof \PDOException && (stripos($e->getMessage(), 'duplicate entry') !== false || stripos($e->getMessage(), 'reference_recu') !== false)) {
+                throw new \RuntimeException('Le numéro de reçu est déjà utilisé. Veuillez réessayer.', 0, $e);
+            }
             throw $e;
         }
+    }
+
+    private function generateUniqueReceiptReference(\PDO $db): string
+    {
+        $base = 'REC-' . date('YmdHis');
+        $attempts = 0;
+
+        while ($attempts < 10) {
+            $reference = $base . '-' . random_int(100, 999);
+            $stmt = $db->prepare('SELECT id FROM ecritures_comptables_eleves WHERE reference_recu = :reference LIMIT 1');
+            $stmt->execute([':reference' => $reference]);
+            if (!$stmt->fetchColumn()) {
+                return $reference;
+            }
+            $attempts++;
+        }
+
+        throw new \RuntimeException('Impossible de générer un numéro de reçu unique.');
     }
 
     public function create(): void
@@ -557,8 +578,19 @@ class PaiementsController extends Controller
         $db = Database::getConnection();
 
         $compteId = $this->ensureStudentAccount($db, $eleveId, $userSchool);
-        $reference = 'REC-' . date('YmdHis') . '-' . random_int(100, 999);
-        $ecritureId = $this->persistPaymentEntry($db, $compteId, $eleveId, $fraisId, $caisseId, $montant, $libelle, $agentId, $reference);
+        $reference = $this->generateUniqueReceiptReference($db);
+        try {
+            $ecritureId = $this->persistPaymentEntry($db, $compteId, $eleveId, $fraisId, $caisseId, $montant, $libelle, $agentId, $reference);
+        } catch (\RuntimeException $e) {
+            $_SESSION['paiements_errors'] = [$e->getMessage()];
+            $_SESSION['paiements_old'] = $oldInput;
+            $redirectUrl = BASE_URL . '/paiements/create';
+            if ($eleveId > 0) {
+                $redirectUrl .= '?eleve_id=' . urlencode($eleveId);
+            }
+            header('Location: ' . $redirectUrl);
+            exit;
+        }
 
         header('Location: ' . BASE_URL . '/paiements/receipt?id=' . $ecritureId);
         exit;

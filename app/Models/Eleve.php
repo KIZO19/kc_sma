@@ -7,8 +7,41 @@ use PDO;
 
 class Eleve
 {
+    public static function findByMatricule(string $matricule, ?int $excludeId = null): ?array
+    {
+        $normalized = trim($matricule);
+        if ($normalized === '') {
+            return null;
+        }
+
+        $db = Database::getConnection();
+        $sql = 'SELECT * FROM eleves WHERE LOWER(TRIM(matricule)) = LOWER(TRIM(:matricule))';
+        $params = [':matricule' => $normalized];
+
+        if ($excludeId !== null) {
+            $sql .= ' AND id <> :exclude_id';
+            $params[':exclude_id'] = $excludeId;
+        }
+
+        $sql .= ' LIMIT 1';
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    public static function isMatriculeTaken(string $matricule, ?int $excludeId = null): bool
+    {
+        return self::findByMatricule($matricule, $excludeId) !== null;
+    }
+
     public static function create(array $data): ?array
     {
+        $matricule = isset($data['matricule']) ? trim((string) $data['matricule']) : '';
+        if ($matricule !== '' && self::isMatriculeTaken($matricule)) {
+            throw new \InvalidArgumentException('Le matricule est déjà utilisé.');
+        }
+
         $db = Database::getConnection();
         $fields = ['matricule', 'nom', 'postnom', 'prenom', 'genre', 'lieu_naissance', 'nationalite', 'adresse', 'date_naissance', 'parent_id', 'nom_pere', 'nom_mere', 'province_origine', 'territoire', 'secteur', 'groupement', 'village', 'num_permanent', 'photo', 'statut_eleve'];
         $placeholders = [':matricule', ':nom', ':postnom', ':prenom', ':genre', ':lieu_naissance', ':nationalite', ':adresse', ':date_naissance', ':parent_id', ':nom_pere', ':nom_mere', ':province_origine', ':territoire', ':secteur', ':groupement', ':village', ':num_permanent', ':photo', ':statut_eleve'];
@@ -20,7 +53,7 @@ class Eleve
         $stmt = $db->prepare('INSERT INTO eleves (' . implode(', ', $fields) . ') VALUES (' . implode(', ', $placeholders) . ')');
 
         $params = [
-            ':matricule' => $data['matricule'] ?? null,
+            ':matricule' => $matricule !== '' ? $matricule : null,
             ':nom' => $data['nom'],
             ':postnom' => $data['postnom'],
             ':prenom' => $data['prenom'] ?? null,
@@ -181,6 +214,14 @@ class Eleve
 
     public static function update(int $id, array $data): bool
     {
+        $matricule = array_key_exists('matricule', $data) ? trim((string) ($data['matricule'] ?? '')) : null;
+        if ($matricule !== null && $matricule !== '' && self::isMatriculeTaken($matricule, $id)) {
+            throw new \InvalidArgumentException('Le matricule est déjà utilisé.');
+        }
+        if ($matricule === '') {
+            $matricule = null;
+        }
+
         $db = Database::getConnection();
         $fields = [
             'matricule = :matricule',
@@ -211,7 +252,7 @@ class Eleve
         $stmt = $db->prepare($sql);
 
         $params = [
-            ':matricule' => $data['matricule'] ?? null,
+            ':matricule' => $matricule,
             ':nom' => $data['nom'],
             ':postnom' => $data['postnom'],
             ':prenom' => $data['prenom'] ?? null,
@@ -253,9 +294,17 @@ class Eleve
 
     public static function updateMatricule(int $id, string $matricule): bool
     {
+        $normalized = trim($matricule);
+        if ($normalized === '') {
+            return false;
+        }
+        if (self::isMatriculeTaken($normalized, $id)) {
+            throw new \InvalidArgumentException('Le matricule est déjà utilisé.');
+        }
+
         $db = Database::getConnection();
         $stmt = $db->prepare('UPDATE eleves SET matricule = :matricule WHERE id = :id');
-        return $stmt->execute([':matricule' => $matricule, ':id' => $id]);
+        return $stmt->execute([':matricule' => $normalized, ':id' => $id]);
     }
 
     public static function countPending(): int
