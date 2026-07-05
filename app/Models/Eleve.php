@@ -130,6 +130,23 @@ class Eleve
         return $compte ?: null;
     }
 
+    public static function getAccountForSchool(int $eleveId, int $ecoleId): ?array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            'SELECT ce.* '
+            . 'FROM comptes_eleves ce '
+            . 'INNER JOIN eleves e ON ce.eleve_id = e.id '
+            . 'WHERE ce.eleve_id = :eleve AND (e.ecole_id = :ecole_id OR EXISTS ('
+            . 'SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id '
+            . 'WHERE i.eleve_id = e.id AND c.ecole_id = :ecole_id)) '
+            . 'ORDER BY ce.annee_scolaire_id DESC LIMIT 1'
+        );
+        $stmt->execute([':eleve' => $eleveId, ':ecole_id' => $ecoleId]);
+        $compte = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $compte ?: null;
+    }
+
     public static function getAccountingEntries(int $eleveId): array
     {
         $db = Database::getConnection();

@@ -8,6 +8,7 @@ use App\Core\Database;
 use App\Models\Eleve;
 use App\Models\FraisScolaire;
 use App\Models\User;
+use App\Models\Eleve as EleveModel;
 
 class PaiementsController extends Controller
 {
@@ -163,7 +164,11 @@ class PaiementsController extends Controller
 
         $params = [':type' => 'CREDIT'];
         if (($user['role'] ?? '') !== 'super_admin') {
-            $sql .= 'AND (el.ecole_id = :ecole OR EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id WHERE i.eleve_id = el.id AND c.ecole_id = :ecole)) ';
+            $sql .= 'AND (
+                el.ecole_id = :ecole
+                OR EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id WHERE i.eleve_id = el.id AND c.ecole_id = :ecole)
+                OR EXISTS (SELECT 1 FROM frais_scolaires fs2 INNER JOIN classes c2 ON c2.id = fs2.classe_id WHERE fs2.id = ece.frais_id AND c2.ecole_id = :ecole)
+            ) ';
             $params[':ecole'] = (int) ($user['ecole_id'] ?? 0);
         }
         if ($eleveId !== null) {
@@ -201,7 +206,11 @@ class PaiementsController extends Controller
 
             $legacyParams = [];
             if (($user['role'] ?? '') !== 'super_admin') {
-                $legacySql .= 'AND (el.ecole_id = :ecole OR EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id WHERE i.eleve_id = el.id AND c.ecole_id = :ecole)) ';
+                $legacySql .= 'AND (
+                    el.ecole_id = :ecole
+                    OR EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id WHERE i.eleve_id = el.id AND c.ecole_id = :ecole)
+                    OR EXISTS (SELECT 1 FROM frais_scolaires fs2 INNER JOIN classes c2 ON c2.id = fs2.classe_id WHERE fs2.id = pe.frais_id AND c2.ecole_id = :ecole)
+                ) ';
                 $legacyParams[':ecole'] = (int) ($user['ecole_id'] ?? 0);
             }
             if ($eleveId !== null) {
@@ -269,6 +278,74 @@ class PaiementsController extends Controller
         }
 
         return $records;
+    }
+
+    private function ensureStudentAccount(\PDO $db, int $eleveId, int $ecoleId): int
+    {
+        $compte = $ecoleId > 0 ? EleveModel::getAccountForSchool($eleveId, $ecoleId) : EleveModel::getAccount($eleveId);
+        if ($compte) {
+            return (int) $compte['id'];
+        }
+
+        $stmtYear = $db->prepare('SELECT id FROM annees_scolaires WHERE est_active = 1 AND ecole_id = :ecole_id LIMIT 1');
+        $stmtYear->execute([':ecole_id' => $ecoleId]);
+        $year = $stmtYear->fetch();
+        $anneeId = $year['id'] ?? 1;
+
+        $ins = $db->prepare('INSERT INTO comptes_eleves (eleve_id, annee_scolaire_id, solde_debiteur) VALUES (:eleve, :annee, 0)');
+        $ins->execute([':eleve' => $eleveId, ':annee' => $anneeId]);
+        return (int) $db->lastInsertId();
+    }
+
+    private function persistPaymentEntry(\PDO $db, int $compteId, int $eleveId, ?int $fraisId, ?int $caisseId, float $montant, string $libelle, int $agentId, string $reference): int
+    {
+        $db->beginTransaction();
+        try {
+            $agentFkId = null;
+            if ($agentId > 0) {
+                $agentCheck = $db->prepare('SELECT id FROM agents WHERE id = :id LIMIT 1');
+                $agentCheck->execute([':id' => $agentId]);
+                if ($agentCheck->fetch()) {
+                    $agentFkId = $agentId;
+                }
+            }
+            if ($agentFkId === null) {
+                $fallbackAgent = $db->query('SELECT id FROM agents ORDER BY id LIMIT 1')->fetch();
+                $agentFkId = $fallbackAgent['id'] ?? null;
+            }
+
+            $stmt = $db->prepare('INSERT INTO ecritures_comptables_eleves (compte_eleve_id, frais_id, caisse_banque_id, type_mouvement, montant, reference_recu, libelle, agent_saisie_id) VALUES (:compte, :frais, :caisse, :type, :montant, :ref, :libelle, :agent)');
+            $stmt->execute([
+                ':compte' => $compteId,
+                ':frais' => $fraisId,
+                ':caisse' => $caisseId,
+                ':type' => 'CREDIT',
+                ':montant' => $montant,
+                ':ref' => $reference,
+                ':libelle' => $libelle,
+                ':agent' => $agentFkId,
+            ]);
+            $ecritureId = (int) $db->lastInsertId();
+
+            $legacyStmt = $db->prepare('INSERT INTO paiements_eleves (eleve_id, frais_id, montant_paye, date_paiement) VALUES (:eleve, :frais, :montant, :date_paiement)');
+            $legacyStmt->execute([
+                ':eleve' => $eleveId,
+                ':frais' => $fraisId,
+                ':montant' => $montant,
+                ':date_paiement' => date('Y-m-d H:i:s'),
+            ]);
+
+            $upd = $db->prepare('UPDATE comptes_eleves SET solde_debiteur = solde_debiteur - :montant WHERE id = :id');
+            $upd->execute([':montant' => $montant, ':id' => $compteId]);
+
+            $db->commit();
+            return $ecritureId;
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
     }
 
     public function create(): void
@@ -364,7 +441,12 @@ class PaiementsController extends Controller
         Auth::requireRoles(['super_admin', 'comptable_école']);
 
         $user = Auth::refresh() ?: Auth::user();
-        $agentId = $user['reference_id'] ?? null;
+        $agentId = null;
+        if (!empty($user['reference_id'])) {
+            $agentId = (int) $user['reference_id'];
+        } elseif (!empty($user['id'])) {
+            $agentId = (int) $user['id'];
+        }
 
         if (!$agentId) {
             $_SESSION['flash_error'] = 'Impossible d\'identifier l\'agent en cours. Assurez-vous d\'être connecté en tant qu\'agent.';
@@ -388,11 +470,15 @@ class PaiementsController extends Controller
         $errors = [];
         $fee = null;
         $db = Database::getConnection();
+        $userSchool = (int) ($user['ecole_id'] ?? 0);
 
         if ($eleveId <= 0) {
             $errors[] = 'Élève invalide.';
-        } elseif (($user['role'] ?? '') !== 'super_admin' && (int) ($user['ecole_id'] ?? 0) > 0) {
-            if (!Eleve::findByIdAndSchool($eleveId, (int) $user['ecole_id'])) {
+        } else {
+            $eleve = ($userSchool > 0 && ($user['role'] ?? '') !== 'super_admin')
+                ? Eleve::findByIdAndSchool($eleveId, $userSchool)
+                : Eleve::findById($eleveId);
+            if (!$eleve) {
                 $errors[] = 'Élève invalide ou hors périmètre.';
             }
         }
@@ -402,8 +488,8 @@ class PaiementsController extends Controller
         }
 
         if ($fraisId) {
-            $fee = (($user['role'] ?? '') !== 'super_admin' && (int) ($user['ecole_id'] ?? 0) > 0)
-                ? \App\Models\FraisScolaire::findByIdAndSchool($fraisId, (int) $user['ecole_id'])
+            $fee = (($user['role'] ?? '') !== 'super_admin' && $userSchool > 0)
+                ? \App\Models\FraisScolaire::findByIdAndSchool($fraisId, $userSchool)
                 : \App\Models\FraisScolaire::findById($fraisId);
             if ($fee) {
                 $feeTotal = (float) ($fee['montant_total'] ?? 0);
@@ -432,12 +518,12 @@ class PaiementsController extends Controller
 
                 if ($remaining <= 0) {
                     $errors[] = 'Ce frais est déjà soldé pour cet élève.';
-                } elseif ($montant < $remaining) {
-                    $errors[] = 'Le montant saisi doit être au moins le reste à payer pour ce frais. Reste à payer : ' . number_format($remaining, 2) . ' ' . ($fee['devise'] ?? 'USD') . '.';
+                } elseif ($montant > $remaining) {
+                    $errors[] = 'Le montant saisi ne peut pas dépasser le reste à payer pour ce frais. Reste à payer : ' . number_format($remaining, 2) . ' ' . ($fee['devise'] ?? 'USD') . '.';
                 } elseif ($montant > $feeTotal) {
                     $errors[] = 'Le montant saisi ne peut pas être supérieur au montant total du frais scolaire sélectionné.';
                 }
-            } elseif (($user['role'] ?? '') !== 'super_admin' && (int) ($user['ecole_id'] ?? 0) > 0) {
+            } elseif (($user['role'] ?? '') !== 'super_admin' && $userSchool > 0) {
                 $errors[] = 'Le frais scolaire sélectionné est invalide pour votre école.';
             }
         }
@@ -470,49 +556,9 @@ class PaiementsController extends Controller
 
         $db = Database::getConnection();
 
-        // Ensure compte exists
-        $compte = Eleve::getAccount($eleveId);
-        if (!$compte) {
-            // Create a compte (use latest active school year if available)
-            $stmtYear = $db->prepare('SELECT id FROM annees_scolaires WHERE est_active = 1 AND ecole_id = :ecole_id LIMIT 1');
-            $stmtYear->execute([':ecole_id' => $user['ecole_id'] ?? 0]);
-            $year = $stmtYear->fetch();
-            $anneeId = $year['id'] ?? 1;
-
-            $ins = $db->prepare('INSERT INTO comptes_eleves (eleve_id, annee_scolaire_id, solde_debiteur) VALUES (:eleve, :annee, 0)');
-            $ins->execute([':eleve' => $eleveId, ':annee' => $anneeId]);
-            $compteId = (int) $db->lastInsertId();
-        } else {
-            $compteId = (int) $compte['id'];
-        }
-
+        $compteId = $this->ensureStudentAccount($db, $eleveId, $userSchool);
         $reference = 'REC-' . date('YmdHis') . '-' . random_int(100, 999);
-
-        $stmt = $db->prepare('INSERT INTO ecritures_comptables_eleves (compte_eleve_id, frais_id, caisse_banque_id, type_mouvement, montant, reference_recu, libelle, agent_saisie_id) VALUES (:compte, :frais, :caisse, :type, :montant, :ref, :libelle, :agent)');
-        $stmt->execute([
-            ':compte' => $compteId,
-            ':frais' => $fraisId,
-            ':caisse' => $caisseId,
-            ':type' => 'CREDIT',
-            ':montant' => $montant,
-            ':ref' => $reference,
-            ':libelle' => $libelle,
-            ':agent' => $agentId,
-        ]);
-
-        $ecritureId = (int) $db->lastInsertId();
-
-        $legacyStmt = $db->prepare('INSERT INTO paiements_eleves (eleve_id, frais_id, montant_paye, date_paiement) VALUES (:eleve, :frais, :montant, :date_paiement)');
-        $legacyStmt->execute([
-            ':eleve' => $eleveId,
-            ':frais' => $fraisId,
-            ':montant' => $montant,
-            ':date_paiement' => date('Y-m-d H:i:s'),
-        ]);
-
-        // Update compte solde_debiteur (subtract payment)
-        $upd = $db->prepare('UPDATE comptes_eleves SET solde_debiteur = solde_debiteur - :montant WHERE id = :id');
-        $upd->execute([':montant' => $montant, ':id' => $compteId]);
+        $ecritureId = $this->persistPaymentEntry($db, $compteId, $eleveId, $fraisId, $caisseId, $montant, $libelle, $agentId, $reference);
 
         header('Location: ' . BASE_URL . '/paiements/receipt?id=' . $ecritureId);
         exit;

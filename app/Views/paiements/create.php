@@ -150,15 +150,16 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
 
       if (feeAmount > 0) {
         if (feeRemaining > 0) {
-          montantHint.textContent = `Montant autorisé : entre ${feeRemaining.toFixed(2)} et ${feeAmount.toFixed(2)} ${feeDevise}.`;
-          montantInput.min = feeRemaining;
+          montantHint.textContent = `Montant autorisé : jusqu'à ${feeRemaining.toFixed(2)} ${feeDevise} (vous pouvez payer partiellement).`;
+          montantInput.min = 0;
+          montantInput.max = feeRemaining;
         } else {
           montantHint.textContent = `Montant autorisé : jusqu'à ${feeAmount.toFixed(2)} ${feeDevise}.`;
           montantInput.min = 0;
+          montantInput.max = feeAmount;
         }
         montantHint.classList.add('text-muted');
         montantHint.classList.remove('text-danger');
-        montantInput.max = feeAmount;
       } else {
         montantHint.textContent = 'Veuillez saisir le montant du paiement. Si un motif est sélectionné, le montant doit respecter les limites du frais.';
         montantHint.classList.add('text-muted');
@@ -202,9 +203,9 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
       const devise = opt.dataset.devise || 'USD';
 
       if (feeAmount > 0) {
-        if (feeRemaining > 0 && amountValue < feeRemaining) {
+        if (amountValue > feeRemaining) {
           event.preventDefault();
-          montantHint.textContent = `Le montant ne peut pas être inférieur au reste à payer (${feeRemaining.toFixed(2)} ${devise}) pour ce frais.`;
+          montantHint.textContent = `Le montant ne peut pas dépasser le reste à payer (${feeRemaining.toFixed(2)} ${devise}) pour ce frais.`;
           montantHint.classList.add('text-danger');
           montantHint.classList.remove('text-muted');
           montantInput.focus();
