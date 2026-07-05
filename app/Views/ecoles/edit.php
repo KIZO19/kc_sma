@@ -43,10 +43,6 @@
                 <input type="text" name="nom_etablissement" class="form-control" value="<?= htmlspecialchars($school['nom_etablissement'] ?? '') ?>" required>
               </div>
               <div class="mb-3">
-                <label class="form-label">Identifiant</label>
-                <input type="text" name="identifiant" class="form-control" value="<?= htmlspecialchars($school['identifiant'] ?? '') ?>" required>
-              </div>
-              <div class="mb-3">
                 <label class="form-label">Email officiel</label>
                 <input type="email" name="email_officiel" class="form-control" value="<?= htmlspecialchars($school['email_officiel'] ?? '') ?>">
               </div>

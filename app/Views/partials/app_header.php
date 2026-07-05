@@ -6,20 +6,27 @@
   <?php $title = $title ?? APP_NAME; ?>
   <?php
   $faviconUrl = BASE_URL . '/assets/kc-logo.svg';
-  $school = null;
+  $faviconMime = 'image/svg+xml';
+  $schoolForHeader = null;
   if (!empty($user['ecole_id'])) {
-      $school = \App\Models\Ecole::findById((int) $user['ecole_id']);
+      $schoolForHeader = \App\Models\Ecole::findById((int) $user['ecole_id']);
   }
-  if (!empty($school['logo_url'])) {
-      $faviconUrl = $school['logo_url'];
-      if (strpos($faviconUrl, 'http') !== 0 && strpos($faviconUrl, '/') !== 0) {
-          $faviconUrl = BASE_URL . '/' . ltrim($faviconUrl, '/');
+  if (!empty($schoolForHeader['logo_url'])) {
+      $faviconUrl = $schoolForHeader['logo_url'];
+      if (strpos($faviconUrl, 'http') !== 0) {
+          $faviconUrl = rtrim(BASE_URL, '/') . '/' . ltrim($faviconUrl, '/');
+      }
+      if (preg_match('/\.png$/i', $faviconUrl)) {
+          $faviconMime = 'image/png';
+      } elseif (preg_match('/\.svg$/i', $faviconUrl)) {
+          $faviconMime = 'image/svg+xml';
       }
   }
   ?>
   <title><?= htmlspecialchars($title) ?></title>
-  <link rel="icon" href="<?= htmlspecialchars($faviconUrl) ?>" type="image/x-icon">
-  <link rel="alternate icon" href="<?= htmlspecialchars($faviconUrl) ?>" type="image/svg+xml">
+  <link rel="icon" href="<?= htmlspecialchars($faviconUrl) ?>" type="<?= htmlspecialchars($faviconMime) ?>">
+  <link rel="shortcut icon" href="<?= htmlspecialchars($faviconUrl) ?>" type="<?= htmlspecialchars($faviconMime) ?>">
+  <link rel="apple-touch-icon" href="<?= htmlspecialchars($faviconUrl) ?>">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" crossorigin="anonymous">
   <link rel="stylesheet" href="<?= BASE_URL ?>/assets/adminlte.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css" crossorigin="anonymous">
@@ -101,6 +108,11 @@
       color: var(--sidebar-text-active);
       border-bottom: 1px solid rgba(255,255,255,.08);
     }
+    .app-sidebar .school-context-card {
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: .6rem;
+    }
     .app-sidebar .sidebar {
       padding-top: 0.5rem;
     }
@@ -181,7 +193,7 @@ if (!empty($modules) && is_array($modules)) {
 
 $brandName = 'AdminKC';
 $brandLogo = BASE_URL . '/assets/kc-logo.svg';
-$schoolContext = $school ?? null;
+$schoolContext = $school ?? $schoolForHeader ?? null;
 if (!empty($user['ecole_id']) && (empty($schoolContext) || empty($schoolContext['id']))) {
     $schoolContext = \App\Models\Ecole::findById((int) $user['ecole_id']);
 }
@@ -189,9 +201,9 @@ if (!empty($schoolContext['nom_etablissement'])) {
     $brandName = $schoolContext['nom_etablissement'];
 }
 if (!empty($schoolContext['logo_url'])) {
-    $brandLogo = htmlspecialchars($schoolContext['logo_url'], ENT_QUOTES, 'UTF-8');
-    if (strpos($brandLogo, 'http') !== 0 && strpos($brandLogo, '/') !== 0) {
-        $brandLogo = BASE_URL . '/' . ltrim($brandLogo, '/');
+    $brandLogo = $schoolContext['logo_url'];
+    if (strpos($brandLogo, 'http') !== 0) {
+        $brandLogo = rtrim(BASE_URL, '/') . '/' . ltrim($brandLogo, '/');
     }
 }
 ?>
@@ -324,10 +336,12 @@ if (!empty($schoolContext['logo_url'])) {
     </nav>
 
     <aside class="app-sidebar">
-      <a href="<?= BASE_URL ?>/dashboard" class="brand-link d-flex align-items-center p-3">
-        <img src="<?= htmlspecialchars($brandLogo) ?>" alt="Logo <?= htmlspecialchars($brandName) ?>" class="me-2 rounded-circle" style="width:36px;height:36px;object-fit:cover;">
-        <span class="brand-text h5 mb-0"><?= htmlspecialchars($brandName) ?></span>
-      </a>
+      <div class="school-context-card p-3 mb-3">
+        <a href="<?= BASE_URL ?>/dashboard" class="brand-link d-flex align-items-center text-decoration-none p-0">
+          <img src="<?= htmlspecialchars($brandLogo) ?>" alt="Logo <?= htmlspecialchars($brandName) ?>" class="me-2 rounded-circle" style="width:36px;height:36px;object-fit:cover;">
+          <span class="brand-text h6 mb-0 fw-bold"><?= htmlspecialchars($brandName) ?></span>
+        </a>
+      </div>
 
       <div class="sidebar p-3">
         <div class="user-panel d-flex align-items-center mb-3">

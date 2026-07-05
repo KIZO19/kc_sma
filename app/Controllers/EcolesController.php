@@ -128,9 +128,7 @@ class EcolesController extends Controller
             }
 
             if (empty($errors)) {
-                if ($matricule === '') {
-                    $matricule = $this->generateMatricule($nom);
-                }
+                $matricule = $this->generateSchoolMatricule();
 
                 $ecoleId = Ecole::create([
                     'nom_etablissement' => $nom,
@@ -221,11 +219,18 @@ class EcolesController extends Controller
         }
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $school = Ecole::findById($id);
+            $matricule = trim($_POST['matricule'] ?? '');
+            if ($matricule === '' && (!empty($school['matricule']) || $school === null)) {
+                $matricule = $school['matricule'] ?? $this->generateSchoolMatricule();
+            } elseif ($matricule === '') {
+                $matricule = $this->generateSchoolMatricule();
+            }
+
             $data = [
                 'nom_etablissement' => trim($_POST['nom_etablissement'] ?? ''),
                 'email_officiel' => trim($_POST['email_officiel'] ?? ''),
-                'identifiant' => trim($_POST['identifiant'] ?? ''),
-                'matricule' => trim($_POST['matricule'] ?? ''),
+                'matricule' => $matricule,
                 'telephone_contact' => trim($_POST['telephone'] ?? ''),
                 'adresse' => trim($_POST['adresse'] ?? ''),
                 'statut_systeme' => $_POST['statut_systeme'] ?? null,
@@ -233,7 +238,6 @@ class EcolesController extends Controller
             $errors = [];
 
             if ($data['nom_etablissement'] === '') $errors[] = 'Le nom de l\'établissement est requis.';
-            if ($data['identifiant'] === '') $errors[] = 'L\'identifiant est requis.';
 
             // Handle optional logo upload
             if (!empty($_FILES['logo']['name'])) {
@@ -378,6 +382,25 @@ class EcolesController extends Controller
         $prefix = strtoupper(preg_replace('/[^A-Z0-9]/', '', mb_substr($name, 0, 6, 'UTF-8')));
         $prefix = $prefix === '' ? 'SCH' : $prefix;
         return sprintf('%s-%s-%s', $prefix, date('YmdHis'), substr(bin2hex(random_bytes(4)), 0, 6));
+    }
+
+    private function generateSchoolMatricule(): string
+    {
+        $chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        $length = strlen($chars);
+
+        for ($attempt = 0; $attempt < 20; $attempt++) {
+            $matricule = '';
+            for ($i = 0; $i < 5; $i++) {
+                $matricule .= $chars[random_int(0, $length - 1)];
+            }
+
+            if (!Ecole::findByMatricule($matricule)) {
+                return $matricule;
+            }
+        }
+
+        return 'SCH' . substr(bin2hex(random_bytes(2)), 0, 3);
     }
 
     private function uploadLogoFile(array $file): ?string

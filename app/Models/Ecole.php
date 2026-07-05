@@ -95,6 +95,19 @@ class Ecole
         }
     }
 
+    public static function findByMatricule(string $matricule): ?array
+    {
+        try {
+            $db = Database::getConnection();
+            $stmt = $db->prepare('SELECT * FROM ecoles WHERE matricule = :matricule LIMIT 1');
+            $stmt->execute([':matricule' => $matricule]);
+
+            return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
     public static function countBySystemStatus(string $status): int
     {
         try {
