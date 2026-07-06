@@ -35,9 +35,17 @@ class Eleve
         return self::findByMatricule($matricule, $excludeId) !== null;
     }
 
+    public static function isValidMatriculeFormat(string $matricule): bool
+    {
+        return preg_match('/^[A-Z]{4}\d{5}$/', trim($matricule)) === 1;
+    }
+
     public static function create(array $data): ?array
     {
-        $matricule = isset($data['matricule']) ? trim((string) $data['matricule']) : '';
+        $matricule = isset($data['matricule']) ? strtoupper(trim((string) $data['matricule'])) : '';
+        if ($matricule !== '' && !self::isValidMatriculeFormat($matricule)) {
+            throw new \InvalidArgumentException('Le matricule doit contenir 4 lettres majuscules suivies de 5 chiffres.');
+        }
         if ($matricule !== '' && self::isMatriculeTaken($matricule)) {
             throw new \InvalidArgumentException('Le matricule est déjà utilisé.');
         }
@@ -267,7 +275,10 @@ class Eleve
 
     public static function update(int $id, array $data): bool
     {
-        $matricule = array_key_exists('matricule', $data) ? trim((string) ($data['matricule'] ?? '')) : null;
+        $matricule = array_key_exists('matricule', $data) ? strtoupper(trim((string) ($data['matricule'] ?? ''))) : null;
+        if ($matricule !== null && $matricule !== '' && !self::isValidMatriculeFormat($matricule)) {
+            throw new \InvalidArgumentException('Le matricule doit contenir 4 lettres majuscules suivies de 5 chiffres.');
+        }
         if ($matricule !== null && $matricule !== '' && self::isMatriculeTaken($matricule, $id)) {
             throw new \InvalidArgumentException('Le matricule est déjà utilisé.');
         }
@@ -347,9 +358,12 @@ class Eleve
 
     public static function updateMatricule(int $id, string $matricule): bool
     {
-        $normalized = trim($matricule);
+        $normalized = strtoupper(trim($matricule));
         if ($normalized === '') {
             return false;
+        }
+        if (!self::isValidMatriculeFormat($normalized)) {
+            throw new \InvalidArgumentException('Le matricule doit contenir 4 lettres majuscules suivies de 5 chiffres.');
         }
         if (self::isMatriculeTaken($normalized, $id)) {
             throw new \InvalidArgumentException('Le matricule est déjà utilisé.');

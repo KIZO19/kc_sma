@@ -87,6 +87,7 @@ $student = $student ?? [];
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Matricule</label>
                         <input type="text" name="matricule" class="form-control" value="<?= htmlspecialchars($oldInput['matricule'] ?? $student['matricule']) ?>" placeholder="Si vide, un matricule sera généré automatiquement">
+                        <div class="form-text">Le matricule doit contenir 4 lettres majuscules suivies de 5 chiffres (ex. ABCD12345).</div>
                       </div>
                     </div>
 

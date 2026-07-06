@@ -94,7 +94,7 @@
                               <td><?= htmlspecialchars($student['matricule'] ?? 'N/A') ?></td>
                               <td><?= htmlspecialchars($student['nom']) ?></td>
                               <td><?= htmlspecialchars($student['prenom'] ?? '-') ?></td>
-                              <td><?= htmlspecialchars($student['date_naissance']) ?></td>
+                              <td><?= htmlspecialchars(formatDate($student['date_naissance'] ?? null)) ?></td>
                               <td><?= htmlspecialchars($student['parent_nom_responsable'] ?? '-') ?></td>
                               <td><span class="badge bg-warning">En attente</span></td>
                               <?php if ($canEdit || $canApprove): ?>
@@ -141,7 +141,7 @@
                                 <td><?= htmlspecialchars($student['matricule'] ?? 'N/A') ?></td>
                                 <td><?= htmlspecialchars($student['nom']) ?></td>
                                 <td><?= htmlspecialchars($student['prenom'] ?? '-') ?></td>
-                                <td><?= htmlspecialchars($student['date_naissance']) ?></td>
+                                <td><?= htmlspecialchars(formatDate($student['date_naissance'] ?? null)) ?></td>
                                 <td><?= htmlspecialchars($student['parent_nom_responsable'] ?? '-') ?></td>
                               </tr>
                             <?php endforeach; ?>

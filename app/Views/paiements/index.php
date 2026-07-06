@@ -87,7 +87,7 @@
                       <td data-key="reference_recu"><?= htmlspecialchars($p['reference_recu'] ?? '-') ?></td>
                       <td data-key="eleve"><?= htmlspecialchars(trim(($p['prenom'] ?? '') . ' ' . ($p['nom'] ?? '') . ' ' . ($p['postnom'] ?? ''))) ?></td>
                       <td data-key="libelle"><?= htmlspecialchars($p['libelle'] ?? '-') ?></td>
-                      <td data-key="date_operation"><?= htmlspecialchars($p['date_operation'] ?? '') ?></td>
+                      <td data-key="date_operation"><?= htmlspecialchars(formatDate($p['date_operation'] ?? null)) ?></td>
                       <td data-key="montant"><?= htmlspecialchars($p['montant_affiche'] ?? number_format((float) ($p['montant'] ?? 0), 2)) ?></td>
                       <td data-key="frais_devise"><?= htmlspecialchars($p['frais_devise'] ?? ($p['transaction_devise'] ?? 'USD')) ?></td>
                       <td data-key="nom_compte"><?= htmlspecialchars($p['nom_compte'] ?? '') ?></td>

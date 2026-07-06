@@ -100,7 +100,7 @@ $oldInput = $oldInput ?? [];
                           <input id="matricule-input" type="text" name="matricule" class="form-control" placeholder="Généré automatiquement si vide" value="<?= htmlspecialchars($oldInput['matricule'] ?? '') ?>">
                           <button id="generate-matricule-btn" type="button" class="btn btn-outline-secondary">Aperçu</button>
                         </div>
-                        <div id="matricule-preview" class="form-text text-muted mt-1">Aperçu du matricule généré disponible après saisie du nom et du postnom.</div>
+                        <div id="matricule-preview" class="form-text text-muted mt-1">Aperçu du matricule généré disponible après saisie du nom et du postnom. Format attendu : 4 lettres majuscules suivies de 5 chiffres (ex. ABCD12345).</div>
                       </div>
                     </div>
 

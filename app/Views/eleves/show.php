@@ -47,7 +47,7 @@
                       }
                     }
                     ?>
-                    <p><strong>Date de naissance:</strong> <?= htmlspecialchars($dobRaw ?? '-') ?> <small class="text-muted">(Âge: <?= htmlspecialchars($ageDisplay) ?>)</small></p>
+                    <p><strong>Date de naissance:</strong> <?= htmlspecialchars(formatDate($dobRaw ?? null)) ?> <small class="text-muted">(Âge: <?= htmlspecialchars($ageDisplay) ?>)</small></p>
                   <p><strong>Adresse:</strong> <?= nl2br(htmlspecialchars($eleve['adresse'] ?? '-')) ?></p>
                   <p><strong>Parent/Tuteur:</strong> <?= htmlspecialchars($eleve['nom_pere'] ?? ($eleve['parent_nom_responsable'] ?? '-')) ?></p>
                 </div>
@@ -93,7 +93,7 @@
                             <tr>
                               <td><?= $i+1 ?></td>
                               <td><?= htmlspecialchars($n['attribution_cours_id'] ?? 'N/A') ?></td>
-                              <td><?= htmlspecialchars($n['date_evaluation'] ?? '-') ?></td>
+                              <td><?= htmlspecialchars(formatDate($n['date_evaluation'] ?? null)) ?></td>
                               <td><?= htmlspecialchars($n['note_obtenue']) ?></td>
                               <td><?= htmlspecialchars($n['ponderation_max'] ?? '-') ?></td>
                             </tr>
@@ -138,7 +138,7 @@
                           <?php foreach ($ecritures as $i => $ec): ?>
                             <tr>
                               <td><?= $i+1 ?></td>
-                              <td><?= htmlspecialchars($ec['date_operation'] ?? '') ?></td>
+                              <td><?= htmlspecialchars(formatDate($ec['date_operation'] ?? null)) ?></td>
                               <td><?= htmlspecialchars($ec['type_mouvement'] ?? '') ?></td>
                               <td><?= htmlspecialchars(number_format((float) ($ec['montant'] ?? 0), 2)) ?></td>
                               <td><?= htmlspecialchars($ec['libelle'] ?? '') ?></td>

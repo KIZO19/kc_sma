@@ -79,7 +79,7 @@
                           <td><?= htmlspecialchars($student['nom'] ?? '-') ?></td>
                           <td><?= htmlspecialchars($student['postnom'] ?? '-') ?></td>
                           <td><?= htmlspecialchars($student['prenom'] ?? '-') ?></td>
-                          <td><?= htmlspecialchars($student['date_naissance'] ?? '-') ?></td>
+                          <td><?= htmlspecialchars(formatDate($student['date_naissance'] ?? null)) ?></td>
                           <td><?= htmlspecialchars($student['parent_nom_responsable'] ?? '-') ?></td>
                           <td>
                             <?php if (($student['statut_eleve'] ?? '') === 'actif'): ?>

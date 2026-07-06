@@ -9,7 +9,7 @@
   <div class="container-fluid">
     <div class="text-center mb-3">
       <h2>Liste des paiements</h2>
-      <p>Exporté le <?= date('Y-m-d H:i') ?></p>
+      <p>Exporté le <?= date('d m Y H:i') ?></p>
     </div>
     <table>
       <thead>
@@ -21,7 +21,7 @@
             <td><?= $i+1 ?></td>
             <td><?= htmlspecialchars($p['reference_recu'] ?? '') ?></td>
             <td><?= htmlspecialchars((($p['prenom'] ?? '') . ' ' . ($p['nom'] ?? '') . ' ' . ($p['postnom'] ?? ''))) ?></td>
-            <td><?= htmlspecialchars($p['date_operation'] ?? '') ?></td>
+            <td><?= htmlspecialchars(formatDate($p['date_operation'] ?? null)) ?></td>
             <td><?= htmlspecialchars($p['montant_affiche'] ?? number_format((float) ($p['montant'] ?? 0), 2)) ?></td>
             <td><?= htmlspecialchars($p['nom_compte'] ?? '') ?></td>
             <td><?= htmlspecialchars($p['agent_nom'] ?? '') ?></td>

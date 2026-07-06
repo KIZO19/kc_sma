@@ -129,7 +129,7 @@ require __DIR__ . '/../partials/app_header.php'; ?>
                       </td>
                       <td><?= htmlspecialchars($school['statut_abonnement'] ?? 'Aucun') ?></td>
                       <td><?= htmlspecialchars($school['plan_name'] ?? '-') ?></td>
-                      <td><?= htmlspecialchars($school['date_fin'] ?? '-') ?></td>
+                      <td><?= htmlspecialchars(formatDate($school['date_fin'] ?? null)) ?></td>
                       <td>
                         <?php if (($role ?? '') === 'super_admin'): ?>
                           <a href="<?= BASE_URL ?>/ecoles/edit?id=<?= (int) $school['id'] ?>" class="btn btn-sm btn-outline-secondary me-2">Modifier</a>

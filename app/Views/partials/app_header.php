@@ -3,7 +3,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <?php $title = $title ?? APP_NAME; ?>
+  <?php
+  if (!function_exists('formatDate')) {
+      function formatDate(?string $date): string
+      {
+          if (empty($date)) {
+              return '-';
+          }
+
+          try {
+              $dt = new \DateTime($date);
+              return $dt->format('d m Y');
+          } catch (\Exception $e) {
+              return trim((string) $date) ?: '-';
+          }
+      }
+  }
+  $title = $title ?? APP_NAME; ?>
   <?php
   $faviconUrl = BASE_URL . '/assets/kc-logo.svg';
   $faviconMime = 'image/svg+xml';

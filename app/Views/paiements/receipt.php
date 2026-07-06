@@ -42,7 +42,7 @@
 
               <div class="mt-3">
                 <div class="pos-row"><div>Élève:</div><div><?= htmlspecialchars($eleveName) ?></div></div>
-                <div class="pos-row"><div>Date:</div><div><?= htmlspecialchars($ecriture['date_operation'] ?? '') ?></div></div>
+                <div class="pos-row"><div>Date:</div><div><?= htmlspecialchars(formatDate($ecriture['date_operation'] ?? null)) ?></div></div>
                 <div class="pos-row"><div>Motif:</div><div><?= htmlspecialchars($ecriture['libelle'] ?? '') ?></div></div>
                 <div class="pos-line"></div>
                 <div class="pos-row"><div>Montant</div><div class="pos-amount"><?= htmlspecialchars($ecriture['montant_affiche'] ?? number_format((float) ($ecriture['montant'] ?? 0), 2)) ?></div></div>

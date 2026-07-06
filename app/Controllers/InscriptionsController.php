@@ -670,6 +670,9 @@ class InscriptionsController extends Controller
         if ($value === '') {
             return '';
         }
+        if (!Eleve::isValidMatriculeFormat($value)) {
+            throw new \InvalidArgumentException('Le matricule doit contenir 4 lettres majuscules suivies de 5 chiffres.');
+        }
         if (Eleve::isMatriculeTaken($value, $excludeId)) {
             throw new \InvalidArgumentException('Le matricule saisi est déjà utilisé.');
         }
@@ -703,17 +706,24 @@ class InscriptionsController extends Controller
 
     private function generateMatricule(string $name): string
     {
-        $prefix = strtoupper(preg_replace('/[^A-Z0-9]/', '', mb_substr($name, 0, 6, 'UTF-8')));
-        $prefix = $prefix === '' ? 'ELEVE' : $prefix;
-        return sprintf('%s-%s-%s', $prefix, date('YmdHis'), substr(bin2hex(random_bytes(3)), 0, 6));
+        $letters = preg_replace('/[^A-Z]/', '', strtoupper($name));
+        if ($letters === '') {
+            $letters = 'ELEVE';
+        }
+        $letters = substr(str_pad($letters, 4, 'X'), 0, 4);
+        $numbers = str_pad((string) random_int(0, 99999), 5, '0', STR_PAD_LEFT);
+        return $letters . $numbers;
     }
 
     private function generateMatriculeFromSchool(string $schoolName, string $nom, string $postnom, string $prenom, int $eleveId, string $annee): string
     {
-        $letters = $this->getRandomLettersFromSchool($schoolName, 3);
-        $initials = $this->getStudentInitials($nom, $postnom, $prenom);
-        $yearCode = $this->getYearCode($annee);
-        return strtoupper($letters . $initials . $eleveId . $yearCode);
+        $letters = preg_replace('/[^A-Z]/', '', strtoupper($schoolName . $nom . $postnom . $prenom));
+        if ($letters === '') {
+            $letters = 'ECOLE';
+        }
+        $letters = substr(str_pad($letters, 4, 'X'), 0, 4);
+        $numbers = str_pad((string) ($eleveId % 100000), 5, '0', STR_PAD_LEFT);
+        return $letters . $numbers;
     }
 
     private function getRandomLettersFromSchool(string $schoolName, int $length): string
