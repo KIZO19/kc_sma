@@ -36,6 +36,7 @@ class InscriptionsController extends Controller
         $modules = $this->getModulesForRole($role);
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
         $pendingStudents = $ecoleId > 0 ? Eleve::getPendingBySchool($ecoleId) : Eleve::getPending();
+        $enrolledStudents = $ecoleId > 0 ? Eleve::getEnrolledBySchool($ecoleId) : [];
         $sections = Section::getAll();
         $options = Option::getAll();
 
@@ -46,6 +47,7 @@ class InscriptionsController extends Controller
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $modules,
             'pendingStudents' => $pendingStudents,
+            'enrolledStudents' => $enrolledStudents,
             'sections' => $sections,
             'options' => $options,
             'canSubmit' => in_array($role, self::SUBMISSION_ROLES, true),

@@ -119,10 +119,13 @@ $defaultYearId = $defaultYearId ?? 0;
                         <option value="">Sélectionnez une année scolaire</option>
                         <?php foreach ($years as $year): ?>
                           <option value="<?= (int) $year['id'] ?>" <?= ((int) ($oldInput['annee_scolaire_id'] ?? $defaultYearId) === (int) $year['id']) ? 'selected' : '' ?>>
-                            <?= htmlspecialchars($year['annee']) ?>
+                            <?= htmlspecialchars($year['annee']) ?><?php if ((int) $year['id'] === (int) $defaultYearId): ?> - par défaut<?php endif; ?>
                           </option>
                         <?php endforeach; ?>
                       </select>
+                      <?php if (!empty($years) && !empty($defaultYearId)): ?>
+                        <div class="form-text">L’année préselectionnée est celle par défaut de l’école.</div>
+                      <?php endif; ?>
                     </div>
                     <div class="mb-3">
                       <label class="form-label">Devise</label>

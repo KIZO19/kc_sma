@@ -125,6 +125,22 @@ class Eleve
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public static function getEnrolledBySchool(int $ecoleId): array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            'SELECT e.*, p.nom_responsable AS parent_nom_responsable '
+            . 'FROM eleves e '
+            . 'LEFT JOIN parents p ON e.parent_id = p.id '
+            . 'WHERE e.statut_eleve = :statut AND (e.ecole_id = :ecole_id OR p.ecole_id = :ecole_id OR EXISTS ('
+            . 'SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id '
+            . 'WHERE i.eleve_id = e.id AND c.ecole_id = :ecole_id)) '
+            . 'ORDER BY e.nom ASC, e.postnom ASC, e.prenom ASC'
+        );
+        $stmt->execute([':statut' => 'actif', ':ecole_id' => $ecoleId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public static function getAll(): array
     {
         $db = Database::getConnection();
@@ -186,10 +202,47 @@ class Eleve
         $stmt = $db->prepare(
             'SELECT ece.* FROM ecritures_comptables_eleves ece '
             . 'INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id '
-            . 'WHERE ce.eleve_id = :eleve ORDER BY ece.date_operation DESC'
+            . 'WHERE ce.eleve_id = :eleve'
         );
         $stmt->execute([':eleve' => $eleveId]);
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $records = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        try {
+            $legacyStmt = $db->prepare(
+                'SELECT pe.id AS legacy_id, pe.eleve_id, pe.frais_id, pe.montant_paye AS montant, pe.date_paiement AS date_operation, '
+                . 'COALESCE(fs.type_frais, "Paiement") AS libelle '
+                . 'FROM paiements_eleves pe '
+                . 'LEFT JOIN frais_scolaires fs ON pe.frais_id = fs.id '
+                . 'WHERE pe.eleve_id = :eleve'
+            );
+            $legacyStmt->execute([':eleve' => $eleveId]);
+            $legacyRecords = $legacyStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            foreach ($legacyRecords as $legacy) {
+                $records[] = [
+                    'id' => 'legacy-' . ($legacy['legacy_id'] ?? ''),
+                    'compte_eleve_id' => null,
+                    'frais_id' => $legacy['frais_id'] ?? null,
+                    'caisse_banque_id' => null,
+                    'type_mouvement' => 'CREDIT',
+                    'montant' => $legacy['montant'] ?? 0,
+                    'reference_recu' => null,
+                    'date_operation' => $legacy['date_operation'] ?? null,
+                    'libelle' => $legacy['libelle'] ?? 'Paiement',
+                    'agent_saisie_id' => null,
+                ];
+            }
+        } catch (\Throwable $e) {
+            // Ignore legacy payment table issues and fall back to modern entries only.
+        }
+
+        usort($records, function ($a, $b) {
+            $ta = strtotime($a['date_operation'] ?? '1970-01-01 00:00:00');
+            $tb = strtotime($b['date_operation'] ?? '1970-01-01 00:00:00');
+            return $tb <=> $ta;
+        });
+
+        return $records;
     }
 
     public static function getNotes(int $eleveId): array

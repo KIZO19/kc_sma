@@ -57,7 +57,7 @@
                 <div class="card-header"><h3 class="card-title">Situation comptable</h3></div>
                 <div class="card-body">
                   <?php if (!empty($compte)): ?>
-                    <p><strong>Solde dû:</strong> <?= number_format((float) ($compte['solde_debiteur'] ?? 0), 2) ?></p>
+                    <p><strong>Total payé :</strong> <?= number_format((float) ($compte['solde_debiteur'] ?? 0), 2) ?></p>
                     <p>
                       <a href="#ecritures" class="btn btn-sm btn-outline-primary">Voir écritures</a>
                       <?php if (in_array($role, ['super_admin','comptable_école'], true)): ?>

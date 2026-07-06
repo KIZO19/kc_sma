@@ -116,6 +116,40 @@
                       </table>
                     </div>
                   <?php endif; ?>
+
+                  <div class="mt-4">
+                    <h4>Élèves déjà inscrits</h4>
+                    <?php if (empty($enrolledStudents)): ?>
+                      <div class="alert alert-secondary">Aucun élève inscrit pour le moment.</div>
+                    <?php else: ?>
+                      <div class="table-responsive">
+                        <table class="table table-striped table-bordered">
+                          <thead class="table-light">
+                            <tr>
+                              <th style="width: 50px;">#</th>
+                              <th>Matricule</th>
+                              <th>Nom</th>
+                              <th>Prénom</th>
+                              <th>Date de naissance</th>
+                              <th>Parent</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <?php foreach ($enrolledStudents as $index => $student): ?>
+                              <tr>
+                                <td><?= $index + 1 ?></td>
+                                <td><?= htmlspecialchars($student['matricule'] ?? 'N/A') ?></td>
+                                <td><?= htmlspecialchars($student['nom']) ?></td>
+                                <td><?= htmlspecialchars($student['prenom'] ?? '-') ?></td>
+                                <td><?= htmlspecialchars($student['date_naissance']) ?></td>
+                                <td><?= htmlspecialchars($student['parent_nom_responsable'] ?? '-') ?></td>
+                              </tr>
+                            <?php endforeach; ?>
+                          </tbody>
+                        </table>
+                      </div>
+                    <?php endif; ?>
+                  </div>
                 </div>
               </div>
 
