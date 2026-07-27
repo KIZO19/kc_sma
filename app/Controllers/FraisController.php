@@ -6,6 +6,7 @@ use App\Core\Auth;
 use App\Core\Controller;
 use App\Models\AnneeScolaire;
 use App\Models\Classe;
+use App\Models\DetteEleve;
 use App\Models\FraisScolaire;
 use App\Models\Option;
 use App\Models\Section;
@@ -231,6 +232,13 @@ class FraisController extends Controller
                             ':libelle' => $libelle,
                             ':agent' => $agentId,
                         ]);
+
+                        // insert student debt for this frais
+                        try {
+                            DetteEleve::create((int) $eleveId, $insertId, $anneeScolaireId, (float) $montantTotal, $devise);
+                        } catch (\Throwable $e) {
+                            error_log('FraisController::submit dette create failed: ' . $e->getMessage());
+                        }
 
                         // update compte_eleve solde_debiteur
                         $newBalance = $currentBalance + (float) $montantTotal;

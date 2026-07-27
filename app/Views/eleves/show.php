@@ -57,7 +57,36 @@
                 <div class="card-header"><h3 class="card-title">Situation comptable</h3></div>
                 <div class="card-body">
                   <?php if (!empty($compte)): ?>
-                    <p><strong>Total payé :</strong> <?= number_format((float) ($compte['solde_debiteur'] ?? 0), 2) ?></p>
+                    <p><strong>Total payé :</strong> <?= number_format((float) ($totalPaid ?? 0), 2) ?></p>
+                    <p><strong>Dette de l'élève :</strong> <?= number_format(max(0, (float) ($compte['solde_debiteur'] ?? 0)), 2) ?></p>
+                    <?php if (!empty($dettes)): ?>
+                      <div class="table-responsive mt-3">
+                        <table class="table table-sm table-bordered">
+                          <thead>
+                            <tr>
+                              <th>Frais</th>
+                              <th>Montant initial</th>
+                              <th>Restant</th>
+                              <th>Portée</th>
+                              <th>Année</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <?php foreach ($dettes as $d): ?>
+                              <tr>
+                                <td><?= htmlspecialchars($d['type_frais'] ?? '-') ?></td>
+                                <td><?= number_format((float) ($d['montant_initial'] ?? 0), 2) ?> <?= htmlspecialchars($d['devise'] ?? 'USD') ?></td>
+                                <td><?= number_format((float) ($d['montant_restant'] ?? 0), 2) ?> <?= htmlspecialchars($d['devise'] ?? 'USD') ?></td>
+                                <td><?= htmlspecialchars($d['scope_label'] ?? '-') ?></td>
+                                <td><?= htmlspecialchars($d['annee_scolaire'] ?? '-') ?></td>
+                              </tr>
+                            <?php endforeach; ?>
+                          </tbody>
+                        </table>
+                      </div>
+                    <?php else: ?>
+                      <div class="alert alert-info">Aucune dette en cours pour cet élève.</div>
+                    <?php endif; ?>
                     <p>
                       <a href="#ecritures" class="btn btn-sm btn-outline-primary">Voir écritures</a>
                       <?php if (in_array($role, ['super_admin','comptable_école'], true)): ?>
@@ -114,7 +143,7 @@
                     <ul class="list-group">
                       <?php foreach ($discipline as $d): ?>
                         <li class="list-group-item">
-                          <strong><?= htmlspecialchars($d['date_evenement'] ?? '') ?></strong> — <?= htmlspecialchars($d['faute'] ?? '') ?>
+                          <strong><?= htmlspecialchars(formatDate($d['date_evenement'] ?? null)) ?></strong> — <?= htmlspecialchars($d['faute'] ?? '') ?>
                           <?php if (!empty($d['sanction'])): ?>
                             <div class="text-muted">Sanction: <?= htmlspecialchars($d['sanction']) ?></div>
                           <?php endif; ?>

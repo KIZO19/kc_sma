@@ -9,7 +9,7 @@
   <div class="container-fluid">
     <div class="text-center mb-3">
       <h2>Liste des paiements</h2>
-      <p>Exporté le <?= date('d m Y H:i') ?></p>
+      <p>Exporté le <?= date('d/m/Y H:i') ?></p>
     </div>
     <table>
       <thead>

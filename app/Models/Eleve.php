@@ -244,6 +244,28 @@ class Eleve
             // Ignore legacy payment table issues and fall back to modern entries only.
         }
 
+        $dedupedRecords = [];
+        $seenKeys = [];
+        foreach ($records as $record) {
+            $key = implode('|', [
+                trim((string) ($record['date_operation'] ?? '')),
+                trim((string) ($record['frais_id'] ?? '')),
+                trim((string) ($record['montant'] ?? '')),
+                trim((string) ($record['libelle'] ?? '')),
+                trim((string) ($record['type_mouvement'] ?? '')),
+                trim((string) ($record['reference_recu'] ?? '')),
+            ]);
+
+            if (isset($seenKeys[$key])) {
+                continue;
+            }
+
+            $seenKeys[$key] = true;
+            $dedupedRecords[] = $record;
+        }
+
+        $records = $dedupedRecords;
+
         usort($records, function ($a, $b) {
             $ta = strtotime($a['date_operation'] ?? '1970-01-01 00:00:00');
             $tb = strtotime($b['date_operation'] ?? '1970-01-01 00:00:00');

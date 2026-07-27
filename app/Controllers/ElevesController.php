@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Core\Auth;
 use App\Core\Controller;
+use App\Models\DetteEleve;
 use App\Models\Eleve;
 use App\Models\User;
 
@@ -58,6 +59,14 @@ class ElevesController extends Controller
 
         $compte = \App\Models\Eleve::getAccount($eleveId);
         $ecritures = \App\Models\Eleve::getAccountingEntries($eleveId);
+        $totalPaid = 0.0;
+        foreach ($ecritures as $ec) {
+            $amount = (float) ($ec['montant'] ?? 0);
+            if (strtoupper((string) ($ec['type_mouvement'] ?? '')) === 'CREDIT') {
+                $totalPaid += $amount;
+            }
+        }
+        $dettes = DetteEleve::getOutstandingByEleve($eleveId);
         $notes = \App\Models\Eleve::getNotes($eleveId);
         $discipline = \App\Models\Eleve::getDiscipline($eleveId);
 
@@ -70,6 +79,8 @@ class ElevesController extends Controller
             'eleve' => $eleve,
             'compte' => $compte,
             'ecritures' => $ecritures,
+            'dettes' => $dettes,
+            'totalPaid' => $totalPaid,
             'notes' => $notes,
             'discipline' => $discipline,
         ]);

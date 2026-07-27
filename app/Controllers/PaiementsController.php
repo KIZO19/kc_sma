@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Core\Auth;
 use App\Core\Controller;
 use App\Core\Database;
+use App\Models\DetteEleve;
 use App\Models\Eleve;
 use App\Models\FraisScolaire;
 use App\Models\User;
@@ -404,38 +405,18 @@ class PaiementsController extends Controller
         $stmt->execute([':ecole_id' => $user['ecole_id'] ?? 0]);
         $caisses = $stmt->fetchAll();
 
-        // Fetch fees for this school to populate motif picklist
+        // Fetch fees / debts for this school to populate motif picklist
         $fees = [];
         try {
-            $fees = \App\Models\FraisScolaire::getAllBySchool((int) ($user['ecole_id'] ?? 0));
+            if ($eleveId > 0) {
+                $fees = DetteEleve::getOutstandingByEleve($eleveId);
+            } else {
+                $fees = \App\Models\FraisScolaire::getAllBySchool((int) ($user['ecole_id'] ?? 0));
+            }
 
             if ($eleveId > 0 && !empty($fees)) {
-                $paymentsByFee = [];
-
-                try {
-                    $stmtPaid = $db->prepare('SELECT ece.frais_id, SUM(ece.montant) AS paid FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id WHERE ce.eleve_id = :eleve GROUP BY ece.frais_id');
-                    $stmtPaid->execute([':eleve' => $eleveId]);
-                    foreach ($stmtPaid->fetchAll() as $row) {
-                        $paymentsByFee[(int) ($row['frais_id'] ?? 0)] = (float) ($row['paid'] ?? 0);
-                    }
-                } catch (\Throwable $e) {
-                    // ignore legacy query issues
-                }
-
-                try {
-                    $stmtPaid2 = $db->prepare('SELECT pe.frais_id, SUM(pe.montant_paye) AS paid FROM paiements_eleves pe WHERE pe.eleve_id = :eleve GROUP BY pe.frais_id');
-                    $stmtPaid2->execute([':eleve' => $eleveId]);
-                    foreach ($stmtPaid2->fetchAll() as $row) {
-                        $feeId = (int) ($row['frais_id'] ?? 0);
-                        $paymentsByFee[$feeId] = ($paymentsByFee[$feeId] ?? 0.0) + (float) ($row['paid'] ?? 0);
-                    }
-                } catch (\Throwable $e) {
-                    // ignore legacy table issues
-                }
-
                 foreach ($fees as &$feeItem) {
-                    $paid = $paymentsByFee[(int) ($feeItem['id'] ?? 0)] ?? 0.0;
-                    $feeItem['remaining'] = max(0.0, (float) ($feeItem['montant_total'] ?? 0) - $paid);
+                    $feeItem['remaining'] = (float) ($feeItem['montant_restant'] ?? ($feeItem['montant_total'] ?? 0));
                 }
                 unset($feeItem);
             }
@@ -490,6 +471,7 @@ class PaiementsController extends Controller
 
         $errors = [];
         $fee = null;
+        $dette = null;
         $db = Database::getConnection();
         $userSchool = (int) ($user['ecole_id'] ?? 0);
 
@@ -509,34 +491,19 @@ class PaiementsController extends Controller
         }
 
         if ($fraisId) {
-            $fee = (($user['role'] ?? '') !== 'super_admin' && $userSchool > 0)
-                ? \App\Models\FraisScolaire::findByIdAndSchool($fraisId, $userSchool)
-                : \App\Models\FraisScolaire::findById($fraisId);
-            if ($fee) {
-                $feeTotal = (float) ($fee['montant_total'] ?? 0);
-                $paid = 0.0;
-                try {
-                    $stmtPaid = $db->prepare('SELECT SUM(ece.montant) AS paid FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id WHERE ce.eleve_id = :eleve AND ece.frais_id = :frais');
-                    $stmtPaid->execute([':eleve' => $eleveId, ':frais' => $fraisId]);
-                    $paid += (float) ($stmtPaid->fetchColumn() ?: 0);
-                } catch (\Throwable $e) {
-                    // ignore missing legacy or query issues
-                }
-                try {
-                    $stmtPaid2 = $db->prepare('SELECT SUM(pe.montant_paye) AS paid FROM paiements_eleves pe WHERE pe.eleve_id = :eleve AND pe.frais_id = :frais');
-                    $stmtPaid2->execute([':eleve' => $eleveId, ':frais' => $fraisId]);
-                    $paid += (float) ($stmtPaid2->fetchColumn() ?: 0);
-                } catch (\Throwable $e) {
-                    // ignore missing legacy table
-                }
-
-                $remaining = max(0.0, $feeTotal - $paid);
+            if (($user['role'] ?? '') !== 'super_admin' && $userSchool > 0) {
+                $fee = \App\Models\FraisScolaire::findByIdAndSchool($fraisId, $userSchool);
+            } else {
+                $fee = \App\Models\FraisScolaire::findById($fraisId);
+            }
+            $dette = DetteEleve::findByEleveAndFrais($eleveId, $fraisId);
+            if ($fee && $dette) {
+                $feeTotal = (float) ($dette['montant_initial'] ?? 0);
+                $remaining = (float) ($dette['montant_restant'] ?? 0);
                 if ($montant <= 0) {
                     $montant = $remaining > 0 ? $remaining : $feeTotal;
                 }
-
                 $libelle = $fee['type_frais'] . ' - ' . number_format($feeTotal, 2) . ' ' . ($fee['devise'] ?? '');
-
                 if ($remaining <= 0) {
                     $errors[] = 'Ce frais est déjà soldé pour cet élève.';
                 } elseif ($montant > $remaining) {
@@ -544,6 +511,8 @@ class PaiementsController extends Controller
                 } elseif ($montant > $feeTotal) {
                     $errors[] = 'Le montant saisi ne peut pas être supérieur au montant total du frais scolaire sélectionné.';
                 }
+            } elseif (!$dette) {
+                $errors[] = 'Aucune dette correspondante trouvée pour cet élève et ce frais.';
             } elseif (($user['role'] ?? '') !== 'super_admin' && $userSchool > 0) {
                 $errors[] = 'Le frais scolaire sélectionné est invalide pour votre école.';
             }
@@ -581,6 +550,9 @@ class PaiementsController extends Controller
         $reference = $this->generateUniqueReceiptReference($db);
         try {
             $ecritureId = $this->persistPaymentEntry($db, $compteId, $eleveId, $fraisId, $caisseId, $montant, $libelle, $agentId, $reference);
+            if ($fraisId && $dette) {
+                DetteEleve::reduceRemaining((int) ($dette['id'] ?? 0), $montant);
+            }
         } catch (\RuntimeException $e) {
             $_SESSION['paiements_errors'] = [$e->getMessage()];
             $_SESSION['paiements_old'] = $oldInput;

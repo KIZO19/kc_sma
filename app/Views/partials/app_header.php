@@ -13,7 +13,7 @@
 
           try {
               $dt = new \DateTime($date);
-              return $dt->format('d m Y');
+              return $dt->format('d/m/Y');
           } catch (\Exception $e) {
               return trim((string) $date) ?: '-';
           }

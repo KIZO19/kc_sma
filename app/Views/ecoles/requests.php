@@ -43,7 +43,7 @@
                       <td><?= htmlspecialchars($p['nom_etablissement']) ?></td>
                       <td><?= htmlspecialchars($p['email_officiel'] ?? '') ?></td>
                       <td><?= htmlspecialchars($p['telephone_contact'] ?? '') ?></td>
-                      <td><?= htmlspecialchars($p['date_creation_compte'] ?? '') ?></td>
+                      <td><?= htmlspecialchars(formatDate($p['date_creation_compte'] ?? null)) ?></td>
                       <td>
                         <form method="post" action="<?= BASE_URL ?>/ecoles/confirm" style="display:inline">
                           <input type="hidden" name="ecole_id" value="<?= (int)$p['id'] ?>">
