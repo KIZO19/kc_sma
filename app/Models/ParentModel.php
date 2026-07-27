@@ -58,7 +58,16 @@ class ParentModel
             ':mot_de_passe' => $data['mot_de_passe'],
         ]);
 
-        return self::findById((int) $db->lastInsertId());
+        $created = self::findById((int) $db->lastInsertId());
+        if ($created) {
+            try {
+                self::createUserAccount((int) $created['id']);
+            } catch (\Throwable $e) {
+                error_log('ParentModel::create user account error: ' . $e->getMessage());
+            }
+        }
+
+        return $created;
     }
 
     public static function createUserAccount(int $parentId): array

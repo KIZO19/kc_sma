@@ -101,7 +101,16 @@ class Eleve
             }
         }
 
-        return self::findById((int) $db->lastInsertId());
+        $created = self::findById((int) $db->lastInsertId());
+        if ($created) {
+            try {
+                self::createUserAccount((int) $created['id']);
+            } catch (\Throwable $e) {
+                error_log('Eleve::create user account error: ' . $e->getMessage());
+            }
+        }
+
+        return $created;
     }
 
     public static function getPending(): array

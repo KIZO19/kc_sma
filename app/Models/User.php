@@ -248,6 +248,14 @@ class User
         }
     }
 
+    public static function getAllUsers(): array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare('SELECT * FROM utilisateurs ORDER BY CASE WHEN statut = :active THEN 0 ELSE 1 END, role ASC, nom_complet ASC');
+        $stmt->execute([':active' => 'Actif']);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public static function getInactiveUsers(): array
     {
         $db = Database::getConnection();

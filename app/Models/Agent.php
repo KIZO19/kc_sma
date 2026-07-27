@@ -30,6 +30,38 @@ class Agent
         return $agent ?: null;
     }
 
+    public static function create(array $data): ?array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            'INSERT INTO agents (ecole_id, nom, postnom, prenom, telephone, email, mot_de_passe, role_id, salaire_de_base, est_enseignant_secondaire) VALUES (:ecole_id, :nom, :postnom, :prenom, :telephone, :email, :mot_de_passe, :role_id, :salaire_de_base, :est_enseignant_secondaire)'
+        );
+
+        $stmt->execute([
+            ':ecole_id' => $data['ecole_id'] ?? null,
+            ':nom' => $data['nom'] ?? null,
+            ':postnom' => $data['postnom'] ?? null,
+            ':prenom' => $data['prenom'] ?? null,
+            ':telephone' => $data['telephone'] ?? null,
+            ':email' => $data['email'] ?? null,
+            ':mot_de_passe' => isset($data['mot_de_passe']) ? $data['mot_de_passe'] : null,
+            ':role_id' => isset($data['role_id']) ? (int) $data['role_id'] : 1,
+            ':salaire_de_base' => $data['salaire_de_base'] ?? null,
+            ':est_enseignant_secondaire' => !empty($data['est_enseignant_secondaire']) ? 1 : 0,
+        ]);
+
+        $created = self::findById((int) $db->lastInsertId());
+        if ($created) {
+            try {
+                self::createUserAccount((int) $created['id']);
+            } catch (\Throwable $e) {
+                error_log('Agent::create user account error: ' . $e->getMessage());
+            }
+        }
+
+        return $created;
+    }
+
     public static function createUserAccount(int $agentId): array
     {
         $agent = self::findById($agentId);

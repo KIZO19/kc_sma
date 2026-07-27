@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jul 01, 2026 at 10:59 PM
+-- Generation Time: Jul 27, 2026 at 08:57 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.0.30
 
@@ -205,7 +205,10 @@ INSERT INTO `classes` (`id`, `ecole_id`, `nom_classe`, `section_id`, `option_id`
 (1, 1, '3ème Maternelle', 1, NULL),
 (2, 1, '6ème Année Primaire', 2, NULL),
 (3, 1, '3ème Technique Informatique', 3, 1),
-(4, 1, '4ème Commerciale', 3, 2);
+(4, 1, '4ème Commerciale', 3, 2),
+(5, 1, '1ère', 2, 2),
+(6, 4, '1', 2, NULL),
+(7, 4, '7ème', 3, 6);
 
 -- --------------------------------------------------------
 
@@ -225,7 +228,11 @@ CREATE TABLE `comptes_eleves` (
 --
 
 INSERT INTO `comptes_eleves` (`id`, `eleve_id`, `annee_scolaire_id`, `solde_debiteur`) VALUES
-(1, 2, 1, 50.00);
+(1, 2, 1, 50.00),
+(2, 3, 1, 0.00),
+(3, 6, 1, 1.00),
+(4, 1, 1, -1.00),
+(5, 9, 1, -24.00);
 
 -- --------------------------------------------------------
 
@@ -248,6 +255,49 @@ INSERT INTO `cours` (`id`, `ecole_id`, `nom_cours`, `code_cours`) VALUES
 (1, 1, 'Mathématiques', 'MATH'),
 (2, 1, 'Informatique Générale', 'INFO-GEN'),
 (3, 1, 'Français', 'FRAN');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `dettes_eleves`
+--
+
+CREATE TABLE `dettes_eleves` (
+  `id` int(11) NOT NULL,
+  `eleve_id` int(11) NOT NULL,
+  `frais_id` int(11) NOT NULL,
+  `annee_scolaire_id` int(11) NOT NULL,
+  `montant_initial` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `montant_restant` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `devise` varchar(5) NOT NULL DEFAULT 'USD',
+  `date_creation` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `devises`
+--
+
+CREATE TABLE `devises` (
+  `id` int(11) NOT NULL,
+  `code` varchar(5) NOT NULL,
+  `libelle` varchar(100) NOT NULL,
+  `taux` decimal(14,6) NOT NULL DEFAULT 1.000000,
+  `actif` tinyint(1) NOT NULL DEFAULT 1,
+  `date_creation` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `devises`
+--
+
+INSERT INTO `devises` (`id`, `code`, `libelle`, `taux`, `actif`, `date_creation`) VALUES
+(1, 'USD', 'Dollar américain', 1.000000, 1, '2026-07-04 22:33:35'),
+(2, 'EUR', 'Euro', 1.100000, 1, '2026-07-04 22:33:35'),
+(3, 'CDF', 'Franc congolais', 2500.000000, 1, '2026-07-04 22:33:35'),
+(4, 'XAF', 'Franc CFA BEAC', 0.001700, 1, '2026-07-04 22:33:35'),
+(5, 'XOF', 'Franc CFA BCEAO', 0.001700, 1, '2026-07-04 22:33:35');
 
 -- --------------------------------------------------------
 
@@ -290,17 +340,21 @@ CREATE TABLE `ecoles` (
   `code_antenne` varchar(50) DEFAULT NULL COMMENT 'Code Antenne SERNIE/MINEPST',
   `code_ecole` varchar(50) DEFAULT NULL COMMENT 'Code Unique de l''Établissement',
   `province_education` varchar(100) DEFAULT NULL COMMENT 'Ex: Nord-Kivu 1',
-  `devise_principale` varchar(5) DEFAULT 'USD'
+  `devise_principale` varchar(5) DEFAULT 'USD',
+  `matricule` varchar(100) DEFAULT NULL COMMENT 'Numéro matricule unique de l''école',
+  `logo_url` varchar(255) DEFAULT NULL COMMENT 'Chemin vers le logo de l''école',
+  `admin_ecole_id` int(11) DEFAULT NULL,
+  `identifiant` varchar(100) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
 -- Dumping data for table `ecoles`
 --
 
-INSERT INTO `ecoles` (`id`, `nom_etablissement`, `adresse`, `telephone_contact`, `email_officiel`, `mot_de_passe`, `date_creation_compte`, `statut_systeme`, `code_antenne`, `code_ecole`, `province_education`, `devise_principale`) VALUES
-(1, 'École Pilote Test', NULL, '+243990000000', 'contact@ecole-pilote.com', '123456', '2026-06-23 16:29:21', 'Actif', NULL, NULL, NULL, 'USD'),
-(3, 'École Exemple', 'Rue de Test 1', '+243990000000', 'contact@ecole-exemple.com', 'ecole123', '2026-06-23 22:07:16', 'Actif', NULL, 'CODE123', 'Kinshasa', 'USD'),
-(4, 'Complexe Scolaire Emmanuel 1', 'Goma, Nord-Kivu, RDC', '+243000000000', 'contact@cs-emmanuel1.com', 'Pass123*', '2026-06-27 21:05:07', 'Actif', NULL, NULL, NULL, 'USD');
+INSERT INTO `ecoles` (`id`, `nom_etablissement`, `adresse`, `telephone_contact`, `email_officiel`, `mot_de_passe`, `date_creation_compte`, `statut_systeme`, `code_antenne`, `code_ecole`, `province_education`, `devise_principale`, `matricule`, `logo_url`, `admin_ecole_id`, `identifiant`) VALUES
+(1, 'École Pilote Test', '', '+243990000000', 'contact@ecole-pilote.com', '123456', '2026-06-23 16:29:21', 'Actif', NULL, NULL, NULL, 'USD', 'LZHEG', '/uploads/school_logos/school_1785088070_3eae7916ee.png', NULL, NULL),
+(3, 'École Exemple', 'Rue de Test 1', '+243990000000', 'contact@ecole-exemple.com', 'ecole123', '2026-06-23 22:07:16', 'Actif', NULL, 'CODE123', 'Kinshasa', 'USD', NULL, NULL, NULL, NULL),
+(4, 'Complexe Scolaire Emmanuel 1', 'Goma, Nord-Kivu, RDC', '+243000000000', 'contact@cs-emmanuel1.com', 'Pass123*', '2026-06-27 21:05:07', 'Actif', NULL, NULL, NULL, 'USD', 'XDW2K', '/uploads/school_logos/school_1783242344_e872f66f5a.png', NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -327,7 +381,11 @@ CREATE TABLE `ecritures_comptables_eleves` (
 
 INSERT INTO `ecritures_comptables_eleves` (`id`, `compte_eleve_id`, `frais_id`, `caisse_banque_id`, `type_mouvement`, `montant`, `reference_recu`, `date_operation`, `libelle`, `agent_saisie_id`) VALUES
 (1, 1, 1, NULL, 'DEBIT', 150.00, NULL, '2026-06-23 15:03:23', 'Facturation Minerval 1er Trimestre', 3),
-(2, 1, 1, 1, 'CREDIT', 100.00, 'REC-2026-001', '2026-06-23 15:03:23', 'Acompte Minerval perçu en espèces', 3);
+(2, 1, 1, 1, 'CREDIT', 100.00, 'REC-2026-001', '2026-06-23 15:03:23', 'Acompte Minerval perçu en espèces', 3),
+(4, 3, 4, NULL, 'DEBIT', 1.00, NULL, '2026-07-04 23:30:18', 'Facturation inscription: FRAIS DE CONSTRUCTION', 1),
+(6, 4, 4, NULL, 'CREDIT', 1.00, 'REC-20260705020036-706', '2026-07-05 00:00:36', 'FRAIS DE CONSTRUCTION - 1.00 USD', 1),
+(7, 5, 2, NULL, 'CREDIT', 1.00, 'REC-20260705123817-645', '2026-07-05 10:38:17', 'Frais technique - 45.00 USD', 1),
+(8, 5, 2, NULL, 'CREDIT', 23.00, 'REC-20260705214321-691', '2026-07-05 19:43:21', 'Frais technique - 45.00 USD', 1);
 
 -- --------------------------------------------------------
 
@@ -347,7 +405,6 @@ CREATE TABLE `eleves` (
   `adresse` text DEFAULT NULL,
   `date_naissance` date NOT NULL,
   `parent_id` int(11) DEFAULT NULL,
-  `ecole_id` int(11) DEFAULT NULL,
   `nom_pere` varchar(100) DEFAULT NULL,
   `nom_mere` varchar(100) DEFAULT NULL,
   `province_origine` varchar(100) DEFAULT NULL,
@@ -357,17 +414,24 @@ CREATE TABLE `eleves` (
   `village` varchar(100) DEFAULT NULL,
   `num_permanent` varchar(50) DEFAULT NULL COMMENT 'Numéro permanent de l''élève (MINEDUB)',
   `photo` varchar(255) DEFAULT NULL,
-  `statut_eleve` enum('actif','inactif') DEFAULT 'actif'
+  `statut_eleve` enum('actif','inactif') DEFAULT 'actif',
+  `ecole_id` int(11) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
 -- Dumping data for table `eleves`
 --
 
-INSERT INTO `eleves` (`id`, `matricule`, `nom`, `postnom`, `prenom`, `genre`, `lieu_naissance`, `nationalite`, `adresse`, `date_naissance`, `parent_id`, `nom_pere`, `nom_mere`, `province_origine`, `territoire`, `secteur`, `groupement`, `village`, `num_permanent`, `photo`, `statut_eleve`) VALUES
-(1, NULL, 'Kambale', 'Muhindo', 'Justin', 'M', NULL, 'CONGOLAISE', NULL, '2012-05-14', 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'actif'),
-(2, NULL, 'Paluku', 'Muhindo', 'Arsène', 'M', NULL, 'CONGOLAISE', NULL, '2009-08-22', 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'actif'),
-(3, 'JSDJSK21', 'Masika', 'Kavira', 'Clarisse', 'F', NULL, 'CONGOLAISE', NULL, '2021-02-02', 4, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'actif');
+INSERT INTO `eleves` (`id`, `matricule`, `nom`, `postnom`, `prenom`, `genre`, `lieu_naissance`, `nationalite`, `adresse`, `date_naissance`, `parent_id`, `nom_pere`, `nom_mere`, `province_origine`, `territoire`, `secteur`, `groupement`, `village`, `num_permanent`, `photo`, `statut_eleve`, `ecole_id`) VALUES
+(1, NULL, 'Kambale', 'Muhindo', 'Justin', 'M', NULL, 'CONGOLAISE', NULL, '2012-05-14', 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'actif', NULL),
+(2, NULL, 'Paluku', 'Muhindo', 'Arsène', 'M', NULL, 'CONGOLAISE', NULL, '2009-08-22', 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'actif', NULL),
+(3, 'JSDJSK21', 'Masika', 'Kavira', 'Clarisse', 'F', NULL, 'CONGOLAISE', NULL, '2021-02-02', 4, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'actif', NULL),
+(4, 'AMINA-20260703085920-252854', 'AMINA', 'MBOKASI', 'ANGE', 'F', 'bunia', 'CONGOLAISE', 'RULENGA\r\nNdosho', '2011-09-03', 1, 'Jean', 'Marie', 'Nord-Kivu', 'Goma', 'Sector 1', 'Group A', 'Village 1', '', NULL, 'actif', NULL),
+(5, 'AGISHA-20260703122431-213539', 'AGISHA', 'MITIMA', 'PRUNELLE', 'F', 'GOMA', 'CONGOLAISE', 'RULENGA\r\nNdosho', '2019-02-01', 1, 'JEAN PAUL', 'MUHINDO', 'Nord-Kivu', 'Beni', '', '', '', '', NULL, 'actif', 1),
+(6, 'B-20260705013018-a99f18', 'Bahati', 'kalimira', 'angle', 'F', 'GOMA', 'CONGOLAISE', 'Goma\r\nNdosho', '2022-06-12', 2, 'Joseph KIZOMBO', 'Joseph KIZOMBO', 'Nord-Kivu', 'Goma', 'Sector 1', 'Group A', 'Village 1', '', NULL, 'actif', 1),
+(7, 'UNIQUE-TEST-1783237523', 'Test', 'Unique', 'Case', 'M', NULL, 'CONGOLAISE', NULL, '2000-01-01', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'inactif', NULL),
+(8, 'UNIQUE-TEST-1783237559', 'Test', 'Unique', 'Case', 'M', NULL, 'CONGOLAISE', NULL, '2000-01-01', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'inactif', NULL),
+(9, 'ANGELA-20260705123651-584c73', 'ANGELA', 'BAHATI', 'MIRIAM', 'F', 'GOMA', 'CONGOLAISE', 'HZHSDCSJ', '2017-02-12', 5, 'BAHATI', 'GRACE', 'Nord-Kivu', 'Beni', 'Beni-Centre', 'Group X', 'Village X1', '', NULL, 'actif', 4);
 
 -- --------------------------------------------------------
 
@@ -484,20 +548,24 @@ INSERT INTO `fiche_retenue` (`id`, `fiche_paie_id`, `retenue_id`) VALUES
 
 CREATE TABLE `frais_scolaires` (
   `id` int(11) NOT NULL,
-  `classe_id` int(11) NOT NULL,
+  `classe_id` int(11) DEFAULT NULL,
   `type_frais` varchar(100) NOT NULL,
   `montant_total` decimal(10,2) NOT NULL,
   `annee_scolaire_id` int(11) NOT NULL,
-  `devise` varchar(5) NOT NULL DEFAULT 'USD'
+  `devise` varchar(5) NOT NULL DEFAULT 'USD',
+  `scope` varchar(20) NOT NULL DEFAULT 'class',
+  `scope_id` int(11) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
 -- Dumping data for table `frais_scolaires`
 --
 
-INSERT INTO `frais_scolaires` (`id`, `classe_id`, `type_frais`, `montant_total`, `annee_scolaire_id`) VALUES
-(1, 3, 'Minerval 1er Trimestre', 150.00, 1),
-(2, 3, 'Frais de Laboratoire Info', 50.00, 1);
+INSERT INTO `frais_scolaires` (`id`, `classe_id`, `type_frais`, `montant_total`, `annee_scolaire_id`, `devise`, `scope`, `scope_id`) VALUES
+(1, 3, 'Minerval 1er Trimestre', 150.00, 1, 'USD', 'class', NULL),
+(2, NULL, 'Frais technique', 45.00, 1, 'USD', 'option', 3),
+(3, 4, 'Frais de l\'Etat', 30000.00, 1, 'CDF', 'class', NULL),
+(4, NULL, 'FRAIS DE CONSTRUCTION', 1.00, 1, 'USD', 'school', NULL);
 
 -- --------------------------------------------------------
 
@@ -549,7 +617,9 @@ CREATE TABLE `inscriptions` (
 INSERT INTO `inscriptions` (`id`, `eleve_id`, `classe_id`, `annee_scolaire_id`, `date_inscription`, `moyenne_annuelle`, `rang`, `decision_finale`) VALUES
 (1, 1, 2, 1, '2026-06-23 12:50:05', NULL, NULL, 'En cours'),
 (2, 2, 3, 1, '2026-06-23 12:50:05', NULL, NULL, 'En cours'),
-(3, 3, 1, 1, '2026-06-23 12:50:05', NULL, NULL, 'En cours');
+(3, 3, 1, 1, '2026-06-23 12:50:05', NULL, NULL, 'En cours'),
+(4, 5, 2, 1, '2026-07-03 10:24:31', NULL, NULL, 'En cours'),
+(5, 6, 1, 1, '2026-07-04 23:30:18', NULL, NULL, 'En cours');
 
 -- --------------------------------------------------------
 
@@ -615,17 +685,21 @@ CREATE TABLE `notes` (
 
 CREATE TABLE `options` (
   `id` int(11) NOT NULL,
-  `nom_option` varchar(100) NOT NULL
+  `nom_option` varchar(100) NOT NULL,
+  `section_id` int(11) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
 -- Dumping data for table `options`
 --
 
-INSERT INTO `options` (`id`, `nom_option`) VALUES
-(1, 'Technique Informatique'),
-(2, 'Commerciale et Gestion'),
-(3, 'Sciences');
+INSERT INTO `options` (`id`, `nom_option`, `section_id`) VALUES
+(1, 'Technique Informatique', 3),
+(2, 'Commerciale et Gestion', 3),
+(3, 'Sciences', NULL),
+(4, 'Vétérinaire', 3),
+(5, 'Technique Sociale', 3),
+(6, 'Education de base', 3);
 
 -- --------------------------------------------------------
 
@@ -647,7 +721,10 @@ CREATE TABLE `paiements_eleves` (
 
 INSERT INTO `paiements_eleves` (`id`, `eleve_id`, `frais_id`, `montant_paye`, `date_paiement`) VALUES
 (1, 2, 1, 100.00, '2026-06-23 12:50:05'),
-(2, 2, 2, 50.00, '2026-06-23 12:50:05');
+(2, 2, 2, 50.00, '2026-06-23 12:50:05'),
+(3, 1, 4, 1.00, '2026-07-05 00:00:36'),
+(4, 9, 2, 1.00, '2026-07-05 10:38:17'),
+(5, 9, 2, 23.00, '2026-07-05 19:43:21');
 
 -- --------------------------------------------------------
 
@@ -672,7 +749,8 @@ INSERT INTO `parents` (`id`, `ecole_id`, `nom_responsable`, `telephone`, `email`
 (1, 1, 'Jean-Paul Muhindo', '+243991234567', 'jeanpaul@gmail.com', '$2y$10$abcdefghijklmnopqrstuv'),
 (2, 1, 'Marie Kavira', '+243811234567', 'mariekav@gmail.com', '$2y$10$abcdefghijklmnopqrstuv'),
 (3, 1, 'KIZOMBO LWALABA Joseph Kizombo', '0785747734', 'marc.balume@outlook.com', '$2y$10$Q1qdbvmfw/TchZ6A8tIs9el.CMHlI3vGLeJfERMb1PZ/Z1tVGSYje'),
-(4, 4, 'JOH KIZO', '0785747734', 'adminkizo@gmail.com', '$2y$10$mKPtCGYOaGY6M3TBS80kgO2IV029dTO7HBhV/yE/SqpOKxuFhinDe');
+(4, 4, 'JOH KIZO', '0785747734', 'adminkizo@gmail.com', '$2y$10$mKPtCGYOaGY6M3TBS80kgO2IV029dTO7HBhV/yE/SqpOKxuFhinDe'),
+(5, 4, 'BAHATI', '097832832', 'codekizo8@gmail.com', '$2y$10$/U/I7FQ.2kF4qjElU.X2L.PLmS4u.6Rm33b7eoEEZDKWKnmh43MTG');
 
 -- --------------------------------------------------------
 
@@ -873,20 +951,49 @@ CREATE TABLE `utilisateurs` (
   `ecole_id` int(11) DEFAULT NULL COMMENT 'NULL uniquement pour super_admin',
   `reference_id` int(11) DEFAULT NULL COMMENT 'ID de la table agents, parents ou eleves',
   `statut` enum('Actif','Inactif','Suspendu') DEFAULT 'Actif',
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `avatar` varchar(255) DEFAULT NULL,
+  `section_id` int(11) DEFAULT NULL COMMENT 'Section affectÚe Ó l utilisateur pour ses responsabilitÚs'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
 -- Dumping data for table `utilisateurs`
 --
 
-INSERT INTO `utilisateurs` (`id`, `nom_complet`, `identifiant`, `mot_de_passe`, `role`, `ecole_id`, `reference_id`, `statut`, `created_at`) VALUES
-(1, 'Kakule Vianney Jean', 'vianney@gmail.com', '$2y$10$Q1qdbvmfw...', 'préfet_école', 1, 1, 'Actif', '2026-06-27 22:08:32'),
-(2, 'Luvualu Kizombo Joseph', 'joseph@gmail.com', '$2y$10$Q1qdbvmfw...', 'sec_école', 1, 3, 'Actif', '2026-06-27 22:08:32'),
-(3, 'KIZOMBO LWALABA Joseph', 'marc.balume@outlook.com', '$2y$10$Q1qdbvmfw...', 'parent_ecole', 1, 3, 'Actif', '2026-06-27 22:08:32'),
-(100, 'Parent Test', 'parent.test@example.com', '<HASH_PARENT>', 'parent_ecole', 1, 1, 'Actif', '2026-06-27 23:06:48'),
-(101, 'Agent Test', '+243990000003', '<HASH_AGENT>', 'enseignant_école', 1, 3, 'Actif', '2026-06-27 23:06:48'),
-(102, 'Élève Test', 'eleve1@example.com', '<HASH_ELEVE>', 'eleve_ecole', 1, 1, 'Actif', '2026-06-27 23:06:48');
+INSERT INTO `utilisateurs` (`id`, `nom_complet`, `identifiant`, `mot_de_passe`, `role`, `ecole_id`, `reference_id`, `statut`, `created_at`, `avatar`, `section_id`) VALUES
+(1, 'Kakule Vianney Jean', 'vianney@gmail.com', '$2y$10$Q1qdbvmfw...', 'préfet_école', 1, 1, 'Actif', '2026-06-27 22:08:32', NULL, 3),
+(2, 'Luvualu Kizombo Joseph', 'joseph@gmail.com', '$2y$10$Q1qdbvmfw...', 'sec_école', 1, 3, 'Actif', '2026-06-27 22:08:32', NULL, NULL),
+(3, 'KIZOMBO LWALABA Joseph', 'marc.balume@outlook.com', '$2y$10$Q1qdbvmfw...', 'parent_ecole', 1, 3, 'Actif', '2026-06-27 22:08:32', NULL, NULL),
+(100, 'Parent Test', 'parent.test@example.com', '<HASH_PARENT>', 'parent_ecole', 1, 1, 'Actif', '2026-06-27 23:06:48', NULL, NULL),
+(101, 'Agent Test', '+243990000003', '<HASH_AGENT>', 'enseignant_école', 1, 3, 'Actif', '2026-06-27 23:06:48', NULL, NULL),
+(102, 'Élève Test', 'eleve1@example.com', '<HASH_ELEVE>', 'eleve_ecole', 1, 1, 'Actif', '2026-06-27 23:06:48', NULL, NULL),
+(103, 'Élève Test', 'eleve1', '$2y$10$Lym17ZPP92J6rWk983h0hOah.heso4HeP/a/qMxunIW7vcKJaEm/2', 'eleve_ecole', NULL, NULL, 'Actif', '2026-07-01 22:48:00', NULL, NULL),
+(104, 'Parent Test', 'parent1', '$2y$10$NPVVWL97d0/r.D53V9f.muUOOfrPyyt/pv4hSIeN8xHZMmGIoAzyu', 'parent_ecole', 4, NULL, 'Actif', '2026-07-01 22:48:00', NULL, NULL),
+(105, 'Agent Test', 'agent1', '$2y$10$F7FgxXypSjvLQ5ZsOQiNX.NfpGpdMT7O1LhdC9Bcp8x5AvcCF8wsS', '', NULL, NULL, 'Actif', '2026-07-01 22:48:00', NULL, NULL),
+(106, 'École Test', 'ecole1', '$2y$10$.GPiu8iKdwNgPSfgxQD7vun17cpOX8p8qVAEOCSIIyny0lkWfrd5O', 'ecole_admin', NULL, NULL, 'Actif', '2026-07-01 22:48:00', NULL, NULL),
+(107, 'Admin Test', 'admin1', '$2y$10$OFUC2olSBwR2BbWp4ydOn.wgskYJvtrf6IqdfCUmu6206VWNUAbG.', 'super_admin', NULL, NULL, 'Actif', '2026-07-01 22:48:00', NULL, NULL),
+(108, 'Kakule Vianney Jean', '+243990000001', '$2y$10$twxGqzs8HefkSITzCIT98uYYgrXw5L/wJY4tGQOUWNsl81ZFzf1tG', 'enseignant_école', 1, 1, 'Actif', '2026-07-03 00:36:07', NULL, NULL),
+(109, 'Kavugho Sifa Anny', '+243990000002', '$2y$10$T2az0YPx6rX.r8YGmYg2He3Cp19i8tvDfOvRy/FoZbF7UwH4aw1fq', 'enseignant_école', 1, 2, 'Actif', '2026-07-03 00:36:07', NULL, NULL),
+(110, 'Kambale Mwisa Pascal', '+243990000004', '$2y$10$JnU2HRTeEzUTJ.9hCHL5CuVfoDEHmoGUsZC9YGq3JI1.CO9hv7tZq', 'enseignant_école', 1, 4, 'Actif', '2026-07-03 00:36:07', NULL, NULL),
+(111, 'Mumbere Kitsali Claude', '+243990000005', '$2y$10$EJip1Q1oWk4KquNtO1SBJuk9eM30oJJN63XI1X5BLghXvqS2PpJRe', 'enseignant_école', 1, 5, 'Actif', '2026-07-03 00:36:07', NULL, NULL),
+(112, 'Marie Kavira', 'mariekav@gmail.com', '$2y$10$83gZl3Nan4NZHUQtbFCkBurbmqkX6CF9aL0tTPqdir3dxQOz.QDeW', 'parent_ecole', 1, 2, 'Actif', '2026-07-03 00:36:07', NULL, NULL),
+(113, 'JOH KIZO', 'adminkizo@gmail.com', '$2y$10$SjUUuKlXcwUVehJJAr3xe.QepJGjg9AyGv9NlN3G.moFa.54e91qC', 'parent_ecole', 4, 4, 'Actif', '2026-07-03 00:36:07', NULL, NULL),
+(114, 'Arsène Paluku', 'eleve2@school.local', '$2y$10$y7iecyfnenW334rEdFCKsuOusJpGSdhLM5qKhyiAx8Mwk6mFG2sxC', 'eleve_ecole', 1, 2, 'Actif', '2026-07-03 00:36:07', NULL, NULL),
+(115, 'Clarisse Masika', 'JSDJSK21', '$2y$10$OTIXV7Uk9MlweqkfBpH0a.tTaSEaQ.v4IgLGdPQTK0Mp1Dxj3Iyo2', 'eleve_ecole', 1, 3, 'Actif', '2026-07-03 00:36:07', NULL, NULL),
+(116, 'Comptable Test', 'comptable_test1@example.com', '$2y$10$Q/bNi1xdBXvJwTOiOrgjweTFO30ZpCwCVdeuu3LymqoMrX5T4AHGe', 'comptable_école', 4, NULL, 'Actif', '2026-07-03 00:38:14', NULL, NULL),
+(130, 'Super Admin Test', 'super_admin@test.local', '$2y$10$hYxzSYamKo9hylHM6gqpsO6fRNcl./0dv8ahyPuEYwEsEAXF5BEZC', 'super_admin', NULL, NULL, 'Actif', '2026-07-03 07:51:05', NULL, NULL),
+(131, 'École Admin Test', 'ecole_admin@test.local', '$2y$10$hYxzSYamKo9hylHM6gqpsO6fRNcl./0dv8ahyPuEYwEsEAXF5BEZC', 'ecole_admin', 4, NULL, 'Actif', '2026-07-03 07:51:05', NULL, NULL),
+(132, 'Préfet École Test', 'prefet_ecole@test.local', '$2y$10$hYxzSYamKo9hylHM6gqpsO6fRNcl./0dv8ahyPuEYwEsEAXF5BEZC', 'préfet_école', 4, NULL, 'Actif', '2026-07-03 07:51:05', NULL, 3),
+(133, 'Directeur des études Test', 'DE_ecole@test.local', '$2y$10$hYxzSYamKo9hylHM6gqpsO6fRNcl./0dv8ahyPuEYwEsEAXF5BEZC', 'DE_école', 1, NULL, 'Actif', '2026-07-03 07:51:05', NULL, 3),
+(134, 'Directeur Département Test', 'DD_ecole@test.local', '$2y$10$hYxzSYamKo9hylHM6gqpsO6fRNcl./0dv8ahyPuEYwEsEAXF5BEZC', 'DD_école', 1, NULL, 'Actif', '2026-07-03 07:51:05', NULL, 3),
+(135, 'Directeur Principal Test', 'DP_ecole@test.local', '$2y$10$hYxzSYamKo9hylHM6gqpsO6fRNcl./0dv8ahyPuEYwEsEAXF5BEZC', 'DP_école', 1, NULL, 'Actif', '2026-07-03 07:51:05', NULL, 2),
+(136, 'Directeur Adjoint Test', 'DA_ecole@test.local', '$2y$10$hYxzSYamKo9hylHM6gqpsO6fRNcl./0dv8ahyPuEYwEsEAXF5BEZC', 'DA_école', 1, NULL, 'Actif', '2026-07-03 07:51:05', NULL, 2),
+(137, 'Comptable École Test', 'comptable_ecole@test.local', '$2y$10$vrcPVjUDDdeePxUB.szm9uuDw4aPtnNMmOnXq5bUUxmpg9Lu38BUe', 'comptable_école', 1, NULL, 'Actif', '2026-07-03 07:51:05', NULL, NULL),
+(138, 'Secrétaire École Test', 'sec_ecole@test.local', '$2y$10$hYxzSYamKo9hylHM6gqpsO6fRNcl./0dv8ahyPuEYwEsEAXF5BEZC', 'sec_école', 1, NULL, 'Actif', '2026-07-03 07:51:05', NULL, NULL),
+(139, 'Promoteur École Test', 'promoteur_ecole@test.local', '$2y$10$hYxzSYamKo9hylHM6gqpsO6fRNcl./0dv8ahyPuEYwEsEAXF5BEZC', 'promoteur_école', 1, NULL, 'Actif', '2026-07-03 07:51:05', NULL, NULL),
+(140, 'Enseignant École Test', 'enseignant_ecole@test.local', '$2y$10$hYxzSYamKo9hylHM6gqpsO6fRNcl./0dv8ahyPuEYwEsEAXF5BEZC', 'enseignant_école', 1, NULL, 'Actif', '2026-07-03 07:51:05', NULL, NULL),
+(141, 'Élève École Test', 'eleve_ecole@test.local', '$2y$10$hYxzSYamKo9hylHM6gqpsO6fRNcl./0dv8ahyPuEYwEsEAXF5BEZC', 'eleve_ecole', 1, NULL, 'Actif', '2026-07-03 07:51:05', NULL, NULL),
+(142, 'Parent École Test', 'parent_ecole@test.local', '$2y$10$hYxzSYamKo9hylHM6gqpsO6fRNcl./0dv8ahyPuEYwEsEAXF5BEZC', 'parent_ecole', 1, NULL, 'Actif', '2026-07-03 07:51:05', NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -996,6 +1103,23 @@ ALTER TABLE `cours`
   ADD PRIMARY KEY (`id`);
 
 --
+-- Indexes for table `dettes_eleves`
+--
+ALTER TABLE `dettes_eleves`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `eleve_id` (`eleve_id`),
+  ADD KEY `frais_id` (`frais_id`),
+  ADD KEY `annee_scolaire_id` (`annee_scolaire_id`),
+  ADD KEY `montant_restant` (`montant_restant`);
+
+--
+-- Indexes for table `devises`
+--
+ALTER TABLE `devises`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `code` (`code`);
+
+--
 -- Indexes for table `discipline_eleves`
 --
 ALTER TABLE `discipline_eleves`
@@ -1016,6 +1140,7 @@ ALTER TABLE `ecoles`
 ALTER TABLE `ecritures_comptables_eleves`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `reference_recu` (`reference_recu`),
+  ADD UNIQUE KEY `idx_ecritures_reference_recu_unique` (`reference_recu`),
   ADD KEY `compte_eleve_id` (`compte_eleve_id`),
   ADD KEY `frais_id` (`frais_id`),
   ADD KEY `caisse_banque_id` (`caisse_banque_id`),
@@ -1027,6 +1152,7 @@ ALTER TABLE `ecritures_comptables_eleves`
 ALTER TABLE `eleves`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `uq_eleve_matricule` (`matricule`),
+  ADD UNIQUE KEY `idx_eleves_matricule_unique` (`matricule`),
   ADD KEY `parent_id` (`parent_id`);
 
 --
@@ -1076,7 +1202,8 @@ ALTER TABLE `fiche_retenue`
 ALTER TABLE `frais_scolaires`
   ADD PRIMARY KEY (`id`),
   ADD KEY `classe_id` (`classe_id`),
-  ADD KEY `annee_scolaire_id` (`annee_scolaire_id`);
+  ADD KEY `annee_scolaire_id` (`annee_scolaire_id`),
+  ADD KEY `scope_id` (`scope_id`);
 
 --
 -- Indexes for table `historique_etablissements`
@@ -1120,7 +1247,8 @@ ALTER TABLE `notes`
 -- Indexes for table `options`
 --
 ALTER TABLE `options`
-  ADD PRIMARY KEY (`id`);
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `fk_options_sections` (`section_id`);
 
 --
 -- Indexes for table `paiements_eleves`
@@ -1255,19 +1383,31 @@ ALTER TABLE `child_requests`
 -- AUTO_INCREMENT for table `classes`
 --
 ALTER TABLE `classes`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 
 --
 -- AUTO_INCREMENT for table `comptes_eleves`
 --
 ALTER TABLE `comptes_eleves`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- AUTO_INCREMENT for table `cours`
 --
 ALTER TABLE `cours`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+
+--
+-- AUTO_INCREMENT for table `dettes_eleves`
+--
+ALTER TABLE `dettes_eleves`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `devises`
+--
+ALTER TABLE `devises`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT for table `discipline_eleves`
@@ -1285,13 +1425,13 @@ ALTER TABLE `ecoles`
 -- AUTO_INCREMENT for table `ecritures_comptables_eleves`
 --
 ALTER TABLE `ecritures_comptables_eleves`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- AUTO_INCREMENT for table `eleves`
 --
 ALTER TABLE `eleves`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
 
 --
 -- AUTO_INCREMENT for table `evaluations`
@@ -1327,7 +1467,7 @@ ALTER TABLE `fiche_retenue`
 -- AUTO_INCREMENT for table `frais_scolaires`
 --
 ALTER TABLE `frais_scolaires`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT for table `historique_etablissements`
@@ -1339,7 +1479,7 @@ ALTER TABLE `historique_etablissements`
 -- AUTO_INCREMENT for table `inscriptions`
 --
 ALTER TABLE `inscriptions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- AUTO_INCREMENT for table `journees_pedagogiques`
@@ -1363,19 +1503,19 @@ ALTER TABLE `notes`
 -- AUTO_INCREMENT for table `options`
 --
 ALTER TABLE `options`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT for table `paiements_eleves`
 --
 ALTER TABLE `paiements_eleves`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- AUTO_INCREMENT for table `parents`
 --
 ALTER TABLE `parents`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- AUTO_INCREMENT for table `participants_evenement`
@@ -1435,7 +1575,7 @@ ALTER TABLE `sections`
 -- AUTO_INCREMENT for table `utilisateurs`
 --
 ALTER TABLE `utilisateurs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=103;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=143;
 
 --
 -- Constraints for dumped tables
@@ -1492,6 +1632,14 @@ ALTER TABLE `comptes_eleves`
   ADD CONSTRAINT `comptes_eleves_ibfk_2` FOREIGN KEY (`annee_scolaire_id`) REFERENCES `annees_scolaires` (`id`),
   ADD CONSTRAINT `fk_comptes_annee` FOREIGN KEY (`annee_scolaire_id`) REFERENCES `annees_scolaires` (`id`) ON UPDATE CASCADE,
   ADD CONSTRAINT `fk_comptes_eleves` FOREIGN KEY (`eleve_id`) REFERENCES `eleves` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Constraints for table `dettes_eleves`
+--
+ALTER TABLE `dettes_eleves`
+  ADD CONSTRAINT `dettes_eleves_ibfk_1` FOREIGN KEY (`eleve_id`) REFERENCES `eleves` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `dettes_eleves_ibfk_2` FOREIGN KEY (`frais_id`) REFERENCES `frais_scolaires` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `dettes_eleves_ibfk_3` FOREIGN KEY (`annee_scolaire_id`) REFERENCES `annees_scolaires` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `discipline_eleves`
@@ -1609,6 +1757,12 @@ ALTER TABLE `notes`
   ADD CONSTRAINT `fk_notes_final_eval` FOREIGN KEY (`evaluation_id`) REFERENCES `evaluations` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   ADD CONSTRAINT `notes_ibfk_1` FOREIGN KEY (`evaluation_id`) REFERENCES `evaluations` (`id`) ON DELETE CASCADE,
   ADD CONSTRAINT `notes_ibfk_2` FOREIGN KEY (`eleve_id`) REFERENCES `eleves` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `options`
+--
+ALTER TABLE `options`
+  ADD CONSTRAINT `fk_options_sections` FOREIGN KEY (`section_id`) REFERENCES `sections` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `paiements_eleves`
