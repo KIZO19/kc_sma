@@ -32,6 +32,7 @@ class PaiementsController extends Controller
         $payments = $this->fetchPaymentsForUser($user, 0, $eleveId, $fraisId);
         $eleveFilter = $eleveId ? Eleve::findById($eleveId) : null;
         $fraisFilter = $fraisId ? FraisScolaire::findById($fraisId) : null;
+        $totalPaid = $eleveId !== null ? $this->fetchTotalPaidForEleve($user, $eleveId) : null;
 
         $userSchool = (int) ($user['ecole_id'] ?? 0);
         $students = $userSchool > 0 ? Eleve::getAllBySchool($userSchool) : Eleve::getAll();
@@ -50,6 +51,7 @@ class PaiementsController extends Controller
             'fraisId' => $fraisId,
             'students' => $students,
             'fees' => $fees,
+            'totalPaid' => $totalPaid,
         ]);
     }
 
@@ -137,9 +139,62 @@ class PaiementsController extends Controller
         }
         $payments = $this->fetchPaymentsForUser($user, 0, $eleveId, $fraisId);
 
+        $totalPaid = $eleveId !== null ? $this->fetchTotalPaidForEleve($user, $eleveId) : null;
+
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['payments' => $payments], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['payments' => $payments, 'totalPaid' => $totalPaid], JSON_UNESCAPED_UNICODE);
         exit;
+    }
+
+    private function fetchTotalPaidForEleve(array $user, int $eleveId): float
+    {
+        $db = \App\Core\Database::getConnection();
+        $sql = 'SELECT SUM(ece.montant) AS total_paid FROM ecritures_comptables_eleves ece '
+            . 'INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id '
+            . 'INNER JOIN eleves el ON ce.eleve_id = el.id '
+            . 'WHERE ece.type_mouvement = :type AND ce.eleve_id = :eleveId ';
+        $params = [':type' => 'CREDIT', ':eleveId' => $eleveId];
+
+        if (($user['role'] ?? '') !== 'super_admin') {
+            $sql .= 'AND (
+                el.ecole_id = :ecole
+                OR EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id WHERE i.eleve_id = el.id AND c.ecole_id = :ecole)
+                OR EXISTS (SELECT 1 FROM frais_scolaires fs2 INNER JOIN classes c2 ON c2.id = fs2.classe_id WHERE fs2.id = ece.frais_id AND c2.ecole_id = :ecole)
+            ) ';
+            $params[':ecole'] = (int) ($user['ecole_id'] ?? 0);
+        }
+
+        $stmt = $db->prepare($sql);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value, is_int($value) ? \PDO::PARAM_INT : \PDO::PARAM_STR);
+        }
+        $stmt->execute();
+        $paid1 = (float) ($stmt->fetchColumn() ?: 0);
+
+        try {
+            $legacySql = 'SELECT SUM(pe.montant_paye) AS total_paid FROM paiements_eleves pe '
+                . 'INNER JOIN eleves el ON pe.eleve_id = el.id '
+                . 'WHERE pe.eleve_id = :eleveId ';
+            $legacyParams = [':eleveId' => $eleveId];
+            if (($user['role'] ?? '') !== 'super_admin') {
+                $legacySql .= 'AND (
+                    el.ecole_id = :ecole
+                    OR EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id WHERE i.eleve_id = el.id AND c.ecole_id = :ecole)
+                    OR EXISTS (SELECT 1 FROM frais_scolaires fs2 INNER JOIN classes c2 ON c2.id = fs2.classe_id WHERE fs2.id = pe.frais_id AND c2.ecole_id = :ecole)
+                ) ';
+                $legacyParams[':ecole'] = (int) ($user['ecole_id'] ?? 0);
+            }
+            $lstmt = $db->prepare($legacySql);
+            foreach ($legacyParams as $key => $value) {
+                $lstmt->bindValue($key, $value, is_int($value) ? \PDO::PARAM_INT : \PDO::PARAM_STR);
+            }
+            $lstmt->execute();
+            $paid2 = (float) ($lstmt->fetchColumn() ?: 0);
+        } catch (\Throwable $e) {
+            $paid2 = 0.0;
+        }
+
+        return $paid1 + $paid2;
     }
 
     private function renderViewToString(string $viewPath, array $params = []): string

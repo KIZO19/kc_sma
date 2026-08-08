@@ -377,13 +377,14 @@ if (!empty($schoolContext['logo_url'])) {
 
         <div class="mb-3">
           <div class="input-group">
-            <input class="form-control form-control-sidebar" type="search" placeholder="Recherche" aria-label="Search">
-            <button class="btn btn-outline-light"><i class="bi bi-search"></i></button>
+            <input id="sidebarSearchInput" class="form-control form-control-sidebar" type="search" placeholder="Recherche" aria-label="Search">
+            <button id="sidebarSearchButton" class="btn btn-outline-light" type="button"><i class="bi bi-search"></i></button>
           </div>
+          <div id="sidebarSearchEmptyState" class="text-muted small mt-2 d-none">Aucun élément trouvé.</div>
         </div>
 
         <nav class="mt-2">
-          <ul class="nav nav-pills nav-sidebar flex-column" data-lte-treeview="true" role="menu" data-accordion="true">
+          <ul id="sidebarNavMenu" class="nav nav-pills nav-sidebar flex-column" data-lte-treeview="true" role="menu" data-accordion="true">
             <li class="nav-header">MENU</li>
             <li class="nav-item">
               <a href="<?= BASE_URL ?>/dashboard" class="nav-link <?= $currentPath === BASE_URL . '/dashboard' ? 'active' : '' ?>">

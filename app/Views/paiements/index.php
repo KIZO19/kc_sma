@@ -56,6 +56,9 @@
     <?php if (!empty($eleveFilter)): ?>
       <div class="alert alert-info py-2">
         Affichage des paiements pour l'élève <strong><?= htmlspecialchars(($eleveFilter['prenom'] ?? '') . ' ' . ($eleveFilter['nom'] ?? '') . ' ' . ($eleveFilter['postnom'] ?? '')) ?></strong>.
+        <?php if (isset($totalPaid)): ?>
+          <br><strong>Total déjà payé :</strong> <?= number_format((float) ($totalPaid ?? 0), 2) ?>
+        <?php endif; ?>
       </div>
     <?php endif; ?>
     <div class="row">

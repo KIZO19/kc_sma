@@ -124,6 +124,54 @@
         });
       }
 
+      const sidebarSearchInput = document.getElementById('sidebarSearchInput');
+      const sidebarSearchButton = document.getElementById('sidebarSearchButton');
+      const sidebarNavMenu = document.getElementById('sidebarNavMenu');
+      const sidebarSearchEmptyState = document.getElementById('sidebarSearchEmptyState');
+
+      function applySidebarSearch() {
+        if (!sidebarNavMenu || !sidebarSearchInput) return;
+
+        const query = sidebarSearchInput.value.trim().toLowerCase();
+        const items = sidebarNavMenu.querySelectorAll('li.nav-item, li.nav-header');
+        let visibleCount = 0;
+
+        items.forEach((item) => {
+          const text = (item.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+          const shouldShow = !query || text.includes(query);
+
+          if (shouldShow) {
+            item.style.display = '';
+            visibleCount += 1;
+          } else {
+            item.style.display = 'none';
+          }
+        });
+
+        if (sidebarSearchEmptyState) {
+          sidebarSearchEmptyState.classList.toggle('d-none', visibleCount > 0 || !query);
+        }
+      }
+
+      if (sidebarSearchInput) {
+        sidebarSearchInput.addEventListener('input', applySidebarSearch);
+        sidebarSearchInput.addEventListener('keyup', function (event) {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            applySidebarSearch();
+          }
+        });
+      }
+
+      if (sidebarSearchButton) {
+        sidebarSearchButton.addEventListener('click', function (event) {
+          event.preventDefault();
+          applySidebarSearch();
+        });
+      }
+
+      applySidebarSearch();
+
       if (themeButtons.length > 0) {
         themeButtons.forEach(button => {
           button.addEventListener('click', function () {
