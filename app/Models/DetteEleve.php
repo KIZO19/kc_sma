@@ -54,6 +54,14 @@ class DetteEleve
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public static function getTotalOutstandingByEleve(int $eleveId): float
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare('SELECT SUM(montant_restant) AS total_outstanding FROM dettes_eleves WHERE eleve_id = :eleve_id');
+        $stmt->execute([':eleve_id' => $eleveId]);
+        return (float) ($stmt->fetchColumn() ?: 0);
+    }
+
     public static function findByEleveAndFrais(int $eleveId, int $fraisId): ?array
     {
         $db = Database::getConnection();

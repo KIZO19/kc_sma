@@ -33,6 +33,7 @@ class PaiementsController extends Controller
         $eleveFilter = $eleveId ? Eleve::findById($eleveId) : null;
         $fraisFilter = $fraisId ? FraisScolaire::findById($fraisId) : null;
         $totalPaid = $eleveId !== null ? $this->fetchTotalPaidForEleve($user, $eleveId) : null;
+        $totalDebt = $eleveId !== null ? DetteEleve::getTotalOutstandingByEleve($eleveId) : null;
 
         $userSchool = (int) ($user['ecole_id'] ?? 0);
         $students = $userSchool > 0 ? Eleve::getAllBySchool($userSchool) : Eleve::getAll();
@@ -52,6 +53,7 @@ class PaiementsController extends Controller
             'students' => $students,
             'fees' => $fees,
             'totalPaid' => $totalPaid,
+            'totalDebt' => $totalDebt,
         ]);
     }
 
@@ -140,9 +142,10 @@ class PaiementsController extends Controller
         $payments = $this->fetchPaymentsForUser($user, 0, $eleveId, $fraisId);
 
         $totalPaid = $eleveId !== null ? $this->fetchTotalPaidForEleve($user, $eleveId) : null;
+        $totalDebt = $eleveId !== null ? DetteEleve::getTotalOutstandingByEleve($eleveId) : null;
 
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['payments' => $payments, 'totalPaid' => $totalPaid], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['payments' => $payments, 'totalPaid' => $totalPaid, 'totalDebt' => $totalDebt], JSON_UNESCAPED_UNICODE);
         exit;
     }
 

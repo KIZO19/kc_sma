@@ -96,6 +96,7 @@ $fees = $fees ?? [];
                               <td>
                                 <a href="<?= BASE_URL ?>/frais/show?id=<?= (int) $fee['id'] ?>" class="btn btn-sm btn-outline-primary me-1">Détail</a>
                                 <a href="<?= BASE_URL ?>/frais/edit?id=<?= (int) $fee['id'] ?>" class="btn btn-sm btn-outline-secondary">Modifier</a>
+                                <a href="<?= BASE_URL ?>/frais/edit?id=<?= (int) $fee['id'] ?>" class="btn btn-sm btn-outline-secondary">Supprimer</a>
                               </td>
                             </tr>
                           <?php endforeach; ?>

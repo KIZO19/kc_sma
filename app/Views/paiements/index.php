@@ -59,6 +59,9 @@
         <?php if (isset($totalPaid)): ?>
           <br><strong>Total déjà payé :</strong> <?= number_format((float) ($totalPaid ?? 0), 2) ?>
         <?php endif; ?>
+        <?php if (isset($totalDebt)): ?>
+          <br><strong>Total des dettes restantes :</strong> <?= number_format((float) ($totalDebt ?? 0), 2) ?>
+        <?php endif; ?>
       </div>
     <?php endif; ?>
     <div class="row">
