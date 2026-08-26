@@ -63,6 +63,11 @@
                         <tr>
                           <td><?= $index + 1 ?></td>
                           <td><?= htmlspecialchars($option['nom_option']) ?></td>
+                          <td class="text-end">
+                            <?php if ($canCreate): ?>
+                              <a href="<?= BASE_URL ?>/options/edit?id=<?= (int) $option['id'] ?>" class="btn btn-sm btn-primary">Modifier</a>
+                            <?php endif; ?>
+                          </td>
                         </tr>
                       <?php endforeach; ?>
                     </tbody>

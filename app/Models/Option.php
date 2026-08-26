@@ -31,4 +31,21 @@ class Option
         $stmt = $db->prepare('INSERT INTO options (nom_option) VALUES (:nom_option)');
         return $stmt->execute([':nom_option' => $data['nom_option'] ?? '']);
     }
+
+    public static function update(int $id, array $data): bool
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare('UPDATE options SET nom_option = :nom_option WHERE id = :id');
+        return $stmt->execute([
+            ':nom_option' => $data['nom_option'] ?? '',
+            ':id' => $id,
+        ]);
+    }
+
+    public static function delete(int $id): bool
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare('DELETE FROM options WHERE id = :id');
+        return $stmt->execute([':id' => $id]);
+    }
 }

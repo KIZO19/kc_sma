@@ -83,4 +83,91 @@ class OptionsController extends Controller
 
         $this->redirect('/options/create');
     }
+
+    public function edit(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(self::CREATION_ROLES);
+
+        $id = (int) ($_GET['id'] ?? 0);
+        if ($id <= 0) {
+            $_SESSION['options_errors'] = ['Option introuvable.'];
+            $this->redirect('/options');
+            return;
+        }
+
+        $option = Option::findById($id);
+        if (!$option) {
+            $_SESSION['options_errors'] = ['Option introuvable.'];
+            $this->redirect('/options');
+            return;
+        }
+
+        $user = Auth::refresh() ?: Auth::user();
+        $role = $user['role'] ?? 'default';
+        $modules = $this->getModulesForRole($role);
+
+        $oldInput = $_SESSION['option_old'] ?? [];
+        unset($_SESSION['option_old']);
+
+        $this->view('options/edit', [
+            'title' => APP_NAME . ' - Modifier l\'option',
+            'user' => $user,
+            'role' => $role,
+            'roleLabel' => User::getRoleLabel($role),
+            'modules' => $modules,
+            'option' => $option,
+            'oldInput' => $oldInput,
+        ]);
+    }
+
+    public function update(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(self::CREATION_ROLES);
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->redirect('/options');
+            return;
+        }
+
+        $id = (int) ($_POST['id'] ?? 0);
+        $nomOption = trim($_POST['nom_option'] ?? '');
+        $errors = [];
+
+        if ($id <= 0) {
+            $errors[] = 'Identifiant invalide.';
+        }
+        if ($nomOption === '') {
+            $errors[] = 'Le nom de l’option est requis.';
+        }
+
+        if (!empty($errors)) {
+            $_SESSION['options_errors'] = $errors;
+            $_SESSION['option_old'] = $_POST;
+            $this->redirect('/options/edit?id=' . $id);
+            return;
+        }
+
+        Option::update($id, ['nom_option' => $nomOption]);
+        $_SESSION['options_success'] = 'Option mise à jour.';
+        $this->redirect('/options');
+    }
+
+    public function destroy(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(self::CREATION_ROLES);
+
+        $id = (int) ($_POST['id'] ?? 0);
+        if ($id <= 0) {
+            $_SESSION['options_errors'] = ['Identifiant invalide.'];
+            $this->redirect('/options');
+            return;
+        }
+
+        Option::delete($id);
+        $_SESSION['options_success'] = 'Option supprimée.';
+        $this->redirect('/options');
+    }
 }
