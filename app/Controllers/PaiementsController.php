@@ -479,6 +479,12 @@ class PaiementsController extends Controller
             try {
                 $totalDebt = DetteEleve::getTotalOutstandingByEleve($eleveId);
                 $totalDebtByCurrency = DetteEleve::getTotalOutstandingGroupedByDevise($eleveId);
+                // If no dettes entries exist, compute from applicable fees (scope-based)
+                if (empty($totalDebtByCurrency)) {
+                    $totalDebtByCurrency = DetteEleve::computeOutstandingFromApplicableFees($eleveId);
+                    // also compute scalar total
+                    $totalDebt = array_sum($totalDebtByCurrency);
+                }
             } catch (\Throwable $e) {
                 $totalDebt = null;
                 $totalDebtByCurrency = [];

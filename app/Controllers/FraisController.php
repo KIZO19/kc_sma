@@ -64,6 +64,14 @@ class FraisController extends Controller
         $oldInput = $_SESSION['frais_old'] ?? [];
         unset($_SESSION['frais_old']);
 
+        // generate a suggested encodage for the new fee (unique per school)
+        $suggestedEncodage = null;
+        try {
+            $suggestedEncodage = $this->generateUniqueEncodage($ecoleId);
+        } catch (\Throwable $e) {
+            $suggestedEncodage = '';
+        }
+
         $this->view('frais/create', [
             'title' => APP_NAME . ' - Nouveau frais',
             'user' => $user,
@@ -78,7 +86,28 @@ class FraisController extends Controller
             'currencies' => $currencyOptions,
             'schoolCurrency' => $schoolCurrency,
             'oldInput' => $oldInput,
+            'suggestedEncodage' => $suggestedEncodage,
         ]);
+    }
+
+    private function generateUniqueEncodage(int $ecoleId): string
+    {
+        $base = 'FRAIS-' . date('Y') . '-';
+        $attempts = 0;
+        while ($attempts < 20) {
+            $candidate = $base . str_pad((string) random_int(1, 9999), 4, '0', STR_PAD_LEFT);
+            try {
+                if (!FraisScolaire::existsEncodage($candidate, $ecoleId)) {
+                    return $candidate;
+                }
+            } catch (\Throwable $e) {
+                // if DB not ready, fallback to candidate without checking
+                return $candidate;
+            }
+            $attempts++;
+        }
+        // fallback deterministic
+        return $base . uniqid();
     }
 
     public function submit(): void

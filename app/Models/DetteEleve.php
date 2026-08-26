@@ -76,6 +76,94 @@ class DetteEleve
         return $result;
     }
 
+    public static function computeOutstandingFromApplicableFees(int $eleveId): array
+    {
+        $db = Database::getConnection();
+        // determine student's latest class
+        $stmt = $db->prepare('SELECT i.classe_id FROM inscriptions i WHERE i.eleve_id = :eleve ORDER BY i.date_inscription DESC LIMIT 1');
+        $stmt->execute([':eleve' => $eleveId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        $classeId = (int) ($row['classe_id'] ?? 0);
+
+        $classRec = null;
+        $optionId = 0;
+        $sectionId = 0;
+        $ecoleId = 0;
+        try {
+            if ($classeId > 0) {
+                $classRec = \App\Models\Classe::findById($classeId);
+                $optionId = (int) ($classRec['option_id'] ?? 0);
+                $sectionId = (int) ($classRec['section_id'] ?? 0);
+                $ecoleId = (int) ($classRec['ecole_id'] ?? 0);
+            }
+        } catch (\Throwable $e) {
+            // ignore
+        }
+
+        // fallback: try eleve record for ecole
+        try {
+            $eleve = \App\Models\Eleve::findById($eleveId);
+            if ($eleve && !empty($eleve['ecole_id'])) {
+                $ecoleId = (int) $eleve['ecole_id'];
+            }
+        } catch (\Throwable $e) {
+        }
+
+        // fetch fees for school (if ecoleId 0, get all fees)
+        try {
+            $allFees = $ecoleId > 0 ? \App\Models\FraisScolaire::getAllBySchool($ecoleId) : \App\Models\FraisScolaire::getAll();
+        } catch (\Throwable $e) {
+            $allFees = [];
+        }
+
+        $result = [];
+        foreach ($allFees as $f) {
+            $apply = false;
+            $scope = $f['scope'] ?? 'class';
+            $scopeId = isset($f['scope_id']) ? (int) $f['scope_id'] : null;
+            $feeClasseId = isset($f['classe_id']) ? (int) $f['classe_id'] : 0;
+
+            if ($scope === 'school') {
+                $apply = true;
+            } elseif ($scope === 'class') {
+                if ($feeClasseId > 0 && $classeId > 0 && $feeClasseId === $classeId) $apply = true;
+                if ($scopeId !== null && $classeId > 0 && $scopeId === $classeId) $apply = true;
+            } elseif ($scope === 'option') {
+                if ($scopeId !== null && $optionId > 0 && $scopeId === $optionId) $apply = true;
+            } elseif ($scope === 'section') {
+                if ($scopeId !== null && $sectionId > 0 && $scopeId === $sectionId) $apply = true;
+            }
+
+            if (!$apply) continue;
+
+            $feeId = (int) ($f['id'] ?? 0);
+            $feeAmount = (float) ($f['montant_total'] ?? 0);
+            $devise = strtoupper(trim($f['devise'] ?? 'USD')) ?: 'USD';
+
+            // sum payments for this fee and student
+            $paid = 0.0;
+            try {
+                $pstmt = $db->prepare('SELECT SUM(ece.montant) AS paid FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id WHERE ce.eleve_id = :eleve AND ece.frais_id = :frais AND ece.type_mouvement = :type');
+                $pstmt->execute([':eleve' => $eleveId, ':frais' => $feeId, ':type' => 'CREDIT']);
+                $paid += (float) ($pstmt->fetchColumn() ?: 0);
+            } catch (\Throwable $e) {
+            }
+            try {
+                $pstmt2 = $db->prepare('SELECT SUM(pe.montant_paye) AS paid FROM paiements_eleves pe WHERE pe.eleve_id = :eleve AND pe.frais_id = :frais');
+                $pstmt2->execute([':eleve' => $eleveId, ':frais' => $feeId]);
+                $paid += (float) ($pstmt2->fetchColumn() ?: 0);
+            } catch (\Throwable $e) {
+            }
+
+            $remaining = max(0.0, $feeAmount - $paid);
+            if ($remaining <= 0) continue;
+            if (!isset($result[$devise])) $result[$devise] = 0.0;
+            $result[$devise] += $remaining;
+        }
+
+        return $result;
+    }
+
     public static function findByEleveAndFrais(int $eleveId, int $fraisId): ?array
     {
         $db = Database::getConnection();

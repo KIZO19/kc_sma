@@ -59,7 +59,7 @@ $defaultYearId = $defaultYearId ?? 0;
                     </div>
                     <div class="mb-3">
                       <label class="form-label">Encodage (code unique)</label>
-                      <input type="text" name="encodage" class="form-control" required value="<?= htmlspecialchars($oldInput['encodage'] ?? '') ?>" placeholder="ex: FRAIS-2026-001">
+                      <input type="text" name="encodage" class="form-control" required value="<?= htmlspecialchars($oldInput['encodage'] ?? ($suggestedEncodage ?? '')) ?>" placeholder="ex: FRAIS-2026-001">
                     </div>
                     <div class="mb-3">
                       <label class="form-label">Portée</label>
