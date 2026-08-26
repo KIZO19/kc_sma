@@ -7,6 +7,13 @@ use PDO;
 
 class FraisScolaire
 {
+    public static function getAll(): array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->query('SELECT * FROM frais_scolaires ORDER BY annee_scolaire_id DESC, type_frais ASC');
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public static function getAllBySchool(int $ecoleId): array
     {
         $db = Database::getConnection();

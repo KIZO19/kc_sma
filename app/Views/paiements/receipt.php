@@ -1,13 +1,15 @@
 <?php require __DIR__ . '/../partials/app_header.php'; ?>
 <style>
   /* POS receipt styling */
-  .pos-receipt { max-width: 360px; margin: 0 auto; font-family: 'Courier New', monospace; font-size: 12px; }
+  .pos-receipt { max-width: 360px; margin: 0 auto; font-family: 'Courier New', monospace; font-size: 12px; position: relative; overflow: hidden; }
+  .pos-receipt::before { content: ''; position: absolute; inset: 25% 5% 30%; background: url('<?= htmlspecialchars($ecole_logo ?? '', ENT_QUOTES, 'UTF-8') ?>') center / contain no-repeat; opacity: .10; pointer-events: none; z-index: 0; }
+  .pos-receipt > * { position: relative; z-index: 1; }
   .pos-header { text-align: center; }
   .pos-line { border-top: 1px dashed #000; margin: 8px 0; }
   .pos-row { display:flex; justify-content:space-between; }
   .pos-amount { font-weight: bold; font-size: 16px; }
   .qr { text-align:center; margin-top:10px; }
-  @media print { .no-print { display:none; } .pos-receipt { max-width: 320px; } }
+  @media print { .no-print { display:none; } .pos-receipt { max-width: 320px; } .pos-receipt::before { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
 </style>
 <section class="content">
   <div class="container-fluid">
@@ -17,6 +19,9 @@
           <div class="card-body">
             <div class="pos-receipt">
               <div class="pos-header">
+                <?php if (!empty($ecole_logo)): ?>
+                  <img src="<?= htmlspecialchars($ecole_logo, ENT_QUOTES, 'UTF-8') ?>" alt="Logo de l'école" style="display:block;width:72px;height:72px;object-fit:contain;margin:0 auto 8px;">
+                <?php endif; ?>
                 <h4><?= htmlspecialchars($ecole_name ?? APP_NAME) ?></h4>
                 <div><?= htmlspecialchars($ecriture['caisse_name'] ?? '') ?></div>
                 <div class="pos-line"></div>
@@ -44,6 +49,8 @@
                 <div class="pos-row"><div>Élève:</div><div><?= htmlspecialchars($eleveName) ?></div></div>
                 <div class="pos-row"><div>Date:</div><div><?= htmlspecialchars(formatDate($ecriture['date_operation'] ?? null)) ?></div></div>
                 <div class="pos-row"><div>Motif:</div><div><?= htmlspecialchars($ecriture['libelle'] ?? '') ?></div></div>
+                <div class="pos-row"><div>Perçu par:</div><div><?= htmlspecialchars($ecriture['agent_nom'] ?? '-') ?></div></div>
+                <div class="pos-row"><div>Fonction:</div><div><?= htmlspecialchars($ecriture['agent_fonction'] ?? '-') ?></div></div>
                 <div class="pos-line"></div>
                 <div class="pos-row"><div>Montant</div><div class="pos-amount"><?= htmlspecialchars($ecriture['montant_affiche'] ?? number_format((float) ($ecriture['montant'] ?? 0), 2)) ?></div></div>
                 <?php if (!empty($ecriture['montant_usd_equivalent']) && strtoupper(trim($ecriture['transaction_devise'] ?? 'USD')) !== 'USD'): ?>

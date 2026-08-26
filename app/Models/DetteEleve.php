@@ -141,21 +141,24 @@ class DetteEleve
             $devise = strtoupper(trim($f['devise'] ?? 'USD')) ?: 'USD';
 
             // sum payments for this fee and student
-            $paid = 0.0;
+            $paidAccounting = 0.0;
+            $paidLegacy = 0.0;
             try {
                 $pstmt = $db->prepare('SELECT SUM(ece.montant) AS paid FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id WHERE ce.eleve_id = :eleve AND ece.frais_id = :frais AND ece.type_mouvement = :type');
                 $pstmt->execute([':eleve' => $eleveId, ':frais' => $feeId, ':type' => 'CREDIT']);
-                $paid += (float) ($pstmt->fetchColumn() ?: 0);
+                $paidAccounting = (float) ($pstmt->fetchColumn() ?: 0);
             } catch (\Throwable $e) {
             }
             try {
                 $pstmt2 = $db->prepare('SELECT SUM(pe.montant_paye) AS paid FROM paiements_eleves pe WHERE pe.eleve_id = :eleve AND pe.frais_id = :frais');
                 $pstmt2->execute([':eleve' => $eleveId, ':frais' => $feeId]);
-                $paid += (float) ($pstmt2->fetchColumn() ?: 0);
+                $paidLegacy = (float) ($pstmt2->fetchColumn() ?: 0);
             } catch (\Throwable $e) {
             }
 
-            $remaining = max(0.0, $feeAmount - $paid);
+            // A payment may exist in both the accounting and legacy tables.
+            // Use the larger total instead of adding both copies.
+            $remaining = max(0.0, $feeAmount - max($paidAccounting, $paidLegacy));
             if ($remaining <= 0) continue;
             if (!isset($result[$devise])) $result[$devise] = 0.0;
             $result[$devise] += $remaining;

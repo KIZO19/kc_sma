@@ -100,7 +100,7 @@ class PaiementsController extends Controller
             // BOM for Excel compatibility with UTF-8
             echo "\xEF\xBB\xBF";
             $out = fopen('php://output', 'w');
-            fputcsv($out, ['Réf reçu', 'Élève', 'Date', 'Montant', 'Caisse', 'Agent', 'Libellé']);
+            fputcsv($out, ['Réf reçu', 'Élève', 'Date', 'Montant', 'Caisse', 'Perçu par', 'Fonction', 'Libellé']);
             foreach ($payments as $p) {
                 $name = trim(($p['prenom'] ?? '') . ' ' . ($p['nom'] ?? '') . ' ' . ($p['postnom'] ?? ''));
                 fputcsv($out, [
@@ -110,6 +110,7 @@ class PaiementsController extends Controller
                     $p['montant_affiche'] ?? number_format((float) ($p['montant'] ?? 0), 2),
                     $p['nom_compte'] ?? '',
                     $p['agent_nom'] ?? '',
+                    $p['agent_fonction'] ?? '',
                     $p['libelle'] ?? '',
                 ]);
             }
@@ -215,7 +216,9 @@ class PaiementsController extends Controller
             $paid2 = 0.0;
         }
 
-        return $paid1 + $paid2;
+        // The application historically used two payment tables. Prefer the larger
+        // total so a payment mirrored in both tables is not counted twice.
+        return max($paid1, $paid2);
     }
 
     private function renderViewToString(string $viewPath, array $params = []): string
@@ -229,13 +232,15 @@ class PaiementsController extends Controller
     private function fetchPaymentsForUser(array $user, int $limit = 0, ?int $eleveId = null, ?int $fraisId = null): array
     {
         $db = \App\Core\Database::getConnection();
-        $sql = 'SELECT ece.id, ece.reference_recu, ece.date_operation, ece.montant, ece.libelle, ce.eleve_id, el.nom, el.postnom, el.prenom, cb.nom_compte, u.nom_complet AS agent_nom, fs.devise AS frais_devise, COALESCE(fs.devise, ecole.devise_principale, \'USD\') AS transaction_devise '
+        $sql = 'SELECT ece.id, ece.frais_id, ece.reference_recu, ece.date_operation, ece.montant, ece.libelle, ce.eleve_id, el.nom, el.postnom, el.prenom, cb.nom_compte, COALESCE(NULLIF(CONCAT_WS(\' \', a.prenom, a.nom, a.postnom), \'\'), u.nom_complet) AS agent_nom, ra.titre_role AS agent_fonction, fs.devise AS frais_devise, COALESCE(fs.devise, ecole.devise_principale, \'USD\') AS transaction_devise '
             . 'FROM ecritures_comptables_eleves ece '
             . 'INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id '
             . 'INNER JOIN eleves el ON ce.eleve_id = el.id '
             . 'LEFT JOIN ecoles ecole ON el.ecole_id = ecole.id '
             . 'LEFT JOIN caisses_banques cb ON ece.caisse_banque_id = cb.id '
             . 'LEFT JOIN frais_scolaires fs ON ece.frais_id = fs.id '
+            . 'LEFT JOIN agents a ON ece.agent_saisie_id = a.id '
+            . 'LEFT JOIN roles_administration ra ON a.role_id = ra.id '
             . 'LEFT JOIN utilisateurs u ON ece.agent_saisie_id = u.reference_id AND u.role NOT IN (\'eleve_ecole\', \'parent_ecole\') '
             . 'WHERE ece.type_mouvement = :type ';
 
@@ -310,6 +315,23 @@ class PaiementsController extends Controller
 
             // Normalize legacy rows to match ecritures structure
             foreach ($legacy as $l) {
+                $duplicate = false;
+                foreach ($records as $record) {
+                    if ((int) ($record['eleve_id'] ?? 0) !== (int) ($l['eleve_id'] ?? 0)
+                        || (int) ($record['frais_id'] ?? 0) !== (int) ($l['frais_id'] ?? 0)
+                        || abs((float) ($record['montant'] ?? 0) - (float) ($l['montant'] ?? 0)) > 0.001) {
+                        continue;
+                    }
+                    $recordTime = strtotime($record['date_operation'] ?? '');
+                    $legacyTime = strtotime($l['date_operation'] ?? '');
+                    if ($recordTime !== false && $legacyTime !== false && abs($recordTime - $legacyTime) <= 2) {
+                        $duplicate = true;
+                        break;
+                    }
+                }
+                if ($duplicate) {
+                    continue;
+                }
                 $records[] = [
                     'id' => 'legacy-' . ($l['legacy_id'] ?? ''),
                     'reference_recu' => null,
@@ -317,11 +339,13 @@ class PaiementsController extends Controller
                     'montant' => $l['montant'] ?? 0,
                     'libelle' => $l['libelle_frais'] ?? 'Paiement',
                     'eleve_id' => $l['eleve_id'] ?? null,
+                    'frais_id' => $l['frais_id'] ?? null,
                     'nom' => $l['nom'] ?? null,
                     'postnom' => $l['postnom'] ?? null,
                     'prenom' => $l['prenom'] ?? null,
                     'nom_compte' => null,
                     'agent_nom' => null,
+                    'agent_fonction' => null,
                     'frais_devise' => $l['frais_devise'] ?? 'USD',
                 ];
             }
@@ -374,7 +398,7 @@ class PaiementsController extends Controller
         return (int) $db->lastInsertId();
     }
 
-    private function persistPaymentEntry(\PDO $db, int $compteId, int $eleveId, ?int $fraisId, ?int $caisseId, float $montant, string $libelle, int $agentId, string $reference): int
+    private function persistPaymentEntry(\PDO $db, int $compteId, int $eleveId, ?int $fraisId, ?int $detteId, ?int $caisseId, float $montant, string $libelle, int $agentId, string $reference): int
     {
         $db->beginTransaction();
         try {
@@ -414,6 +438,11 @@ class PaiementsController extends Controller
 
             $upd = $db->prepare('UPDATE comptes_eleves SET solde_debiteur = solde_debiteur - :montant WHERE id = :id');
             $upd->execute([':montant' => $montant, ':id' => $compteId]);
+
+            if ($detteId !== null && $detteId > 0) {
+                $detteStmt = $db->prepare('UPDATE dettes_eleves SET montant_restant = GREATEST(0, montant_restant - :montant) WHERE id = :id');
+                $detteStmt->execute([':montant' => $montant, ':id' => $detteId]);
+            }
 
             $db->commit();
             return $ecritureId;
@@ -636,8 +665,36 @@ class PaiementsController extends Controller
                 } elseif ($montant > $feeTotal) {
                     $errors[] = 'Le montant saisi ne peut pas être supérieur au montant total du frais scolaire sélectionné.';
                 }
-            } elseif (!$dette) {
-                $errors[] = 'Aucune dette correspondante trouvée pour cet élève et ce frais.';
+            } elseif ($fee && !$dette) {
+                // Older records may have a fee without a dettes_eleves row. Create the
+                // missing debt from the fee total so the payment can still be tracked.
+                $feeTotal = (float) ($fee['montant_total'] ?? 0);
+                if ($montant <= 0) {
+                    $montant = $feeTotal;
+                }
+                if ($montant <= 0) {
+                    $errors[] = 'Le montant du frais sélectionné est invalide.';
+                } elseif ($montant > $feeTotal) {
+                    $errors[] = 'Le montant saisi ne peut pas être supérieur au montant total du frais scolaire sélectionné.';
+                } else {
+                    $libelle = $fee['type_frais'] . ' - ' . number_format($feeTotal, 2) . ' ' . ($fee['devise'] ?? '');
+                    try {
+                        if (DetteEleve::create(
+                            $eleveId,
+                            $fraisId,
+                            (int) ($fee['annee_scolaire_id'] ?? 0),
+                            $feeTotal,
+                            (string) ($fee['devise'] ?? 'USD')
+                        )) {
+                            $dette = DetteEleve::findByEleveAndFrais($eleveId, $fraisId);
+                        }
+                    } catch (\Throwable $e) {
+                        error_log('PaiementsController::store debt creation failed: ' . $e->getMessage());
+                    }
+                    if (!$dette) {
+                        $errors[] = 'Impossible de préparer la dette de cet élève.';
+                    }
+                }
             } elseif (($user['role'] ?? '') !== 'super_admin' && $userSchool > 0) {
                 $errors[] = 'Le frais scolaire sélectionné est invalide pour votre école.';
             }
@@ -649,13 +706,9 @@ class PaiementsController extends Controller
         $caisseId = !empty($_POST['caisse_id']) ? (int) $_POST['caisse_id'] : null;
 
         if ($eleveId <= 0 || $montant <= 0) {
-            if (!in_array('Élève invalide.', $errors, true)) {
+            if (!in_array('Élève ou montant invalide.', $errors, true)) {
                 $errors[] = 'Élève ou montant invalide.';
             }
-        }
-
-        if ($eleveId <= 0 || $montant <= 0) {
-            $errors[] = 'Élève ou montant invalide.';
         }
 
         if (!empty($errors)) {
@@ -674,11 +727,19 @@ class PaiementsController extends Controller
         $compteId = $this->ensureStudentAccount($db, $eleveId, $userSchool);
         $reference = $this->generateUniqueReceiptReference($db);
         try {
-            $ecritureId = $this->persistPaymentEntry($db, $compteId, $eleveId, $fraisId, $caisseId, $montant, $libelle, $agentId, $reference);
-            if ($fraisId && $dette) {
-                DetteEleve::reduceRemaining((int) ($dette['id'] ?? 0), $montant);
-            }
-        } catch (\RuntimeException $e) {
+            $ecritureId = $this->persistPaymentEntry(
+                $db,
+                $compteId,
+                $eleveId,
+                $fraisId,
+                $dette ? (int) ($dette['id'] ?? 0) : null,
+                $caisseId,
+                $montant,
+                $libelle,
+                $agentId,
+                $reference
+            );
+        } catch (\Throwable $e) {
             $_SESSION['paiements_errors'] = [$e->getMessage()];
             $_SESSION['paiements_old'] = $oldInput;
             $redirectUrl = BASE_URL . '/paiements/create';
@@ -737,7 +798,7 @@ class PaiementsController extends Controller
         } else {
             $ecritureId = (int) $idParam;
             if ($ecritureId > 0) {
-                $stmt = $db->prepare('SELECT ece.*, ce.eleve_id, el.nom, el.postnom, el.prenom, cb.nom_compte AS caisse_name FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id INNER JOIN eleves el ON ce.eleve_id = el.id LEFT JOIN caisses_banques cb ON ece.caisse_banque_id = cb.id WHERE ece.id = :id LIMIT 1');
+                $stmt = $db->prepare('SELECT ece.*, ce.eleve_id, el.nom, el.postnom, el.prenom, cb.nom_compte AS caisse_name, CONCAT_WS(\' \', a.prenom, a.nom, a.postnom) AS agent_nom, ra.titre_role AS agent_fonction FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id INNER JOIN eleves el ON ce.eleve_id = el.id LEFT JOIN caisses_banques cb ON ece.caisse_banque_id = cb.id LEFT JOIN agents a ON ece.agent_saisie_id = a.id LEFT JOIN roles_administration ra ON a.role_id = ra.id WHERE ece.id = :id LIMIT 1');
                 $stmt->execute([':id' => $ecritureId]);
                 $data = $stmt->fetch(\PDO::FETCH_ASSOC);
             }
@@ -773,12 +834,18 @@ class PaiementsController extends Controller
 
         // Determine school name for this élève (fallback to APP_NAME)
         $ecoleName = APP_NAME;
+        $ecoleLogo = null;
         try {
             $eleve = Eleve::findById((int) ($data['eleve_id'] ?? 0));
             if (!empty($eleve['ecole_id'])) {
                 $ecole = \App\Models\Ecole::findById((int) $eleve['ecole_id']);
                 if ($ecole && !empty($ecole['nom_etablissement'])) {
                     $ecoleName = $ecole['nom_etablissement'];
+                }
+                if (!empty($ecole['logo_url'])) {
+                    $ecoleLogo = strpos($ecole['logo_url'], 'http') === 0
+                        ? $ecole['logo_url']
+                        : BASE_URL . '/' . ltrim($ecole['logo_url'], '/');
                 }
             } else {
                 // try to infer from latest inscription -> classe -> ecole
@@ -790,6 +857,11 @@ class PaiementsController extends Controller
                     $ec = \App\Models\Ecole::findById((int) $row['ecole_id']);
                     if ($ec && !empty($ec['nom_etablissement'])) {
                         $ecoleName = $ec['nom_etablissement'];
+                    }
+                    if (!empty($ec['logo_url'])) {
+                        $ecoleLogo = strpos($ec['logo_url'], 'http') === 0
+                            ? $ec['logo_url']
+                            : BASE_URL . '/' . ltrim($ec['logo_url'], '/');
                     }
                 }
             }
@@ -831,6 +903,7 @@ class PaiementsController extends Controller
             'ecriture' => $data,
             'compte' => $compte,
             'ecole_name' => $ecoleName,
+            'ecole_logo' => $ecoleLogo,
             'reste_a_payer' => $reste,
         ]);
     }

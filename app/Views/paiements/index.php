@@ -79,13 +79,14 @@
                   <th data-sort-key="montant" class="sortable">Montant</th>
                   <th data-sort-key="frais_devise" class="sortable">Devise</th>
                   <th data-sort-key="nom_compte" class="sortable">Caisse / Compte</th>
-                  <th data-sort-key="agent_nom" class="sortable">Agent</th>
+                  <th data-sort-key="agent_nom" class="sortable">Perçu par</th>
+                  <th data-sort-key="agent_fonction" class="sortable">Fonction</th>
                   <th style="width: 110px;">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 <?php if (empty($payments)): ?>
-                  <tr><td colspan="10" class="text-center py-4">Aucun paiement enregistré.</td></tr>
+                  <tr><td colspan="11" class="text-center py-4">Aucun paiement enregistré.</td></tr>
                 <?php else: ?>
                   <?php foreach ($payments as $i => $p): ?>
                     <tr>
@@ -98,6 +99,7 @@
                       <td data-key="frais_devise"><?= htmlspecialchars($p['frais_devise'] ?? ($p['transaction_devise'] ?? 'USD')) ?></td>
                       <td data-key="nom_compte"><?= htmlspecialchars($p['nom_compte'] ?? '') ?></td>
                       <td data-key="agent_nom"><?= htmlspecialchars($p['agent_nom'] ?? '') ?></td>
+                      <td data-key="agent_fonction"><?= htmlspecialchars($p['agent_fonction'] ?? '') ?></td>
                       <td>
                         <a href="<?= BASE_URL ?>/paiements/receipt?id=<?= urlencode($p['id']) ?>" class="btn btn-sm btn-outline-primary">Reçu</a>
                       </td>
@@ -168,7 +170,7 @@
           const row = document.createElement('tr');
           row.className = 'no-data-row';
           const cell = document.createElement('td');
-          cell.colSpan = 10;
+          cell.colSpan = 11;
           cell.className = 'text-center py-4';
           cell.textContent = 'Aucune donnée correspondante trouvée.';
           row.appendChild(cell);
@@ -305,6 +307,7 @@
                 <td data-key="frais_devise">${p.frais_devise || (p.transaction_devise || 'USD')}</td>
                 <td data-key="nom_compte">${p.nom_compte || ''}</td>
                 <td data-key="agent_nom">${p.agent_nom || ''}</td>
+                <td data-key="agent_fonction">${p.agent_fonction || ''}</td>
                 <td><a href="<?= BASE_URL ?>/paiements/receipt?id=${encodeURIComponent(p.id)}" class="btn btn-sm btn-outline-primary">Reçu</a></td>
               `;
               return tr;

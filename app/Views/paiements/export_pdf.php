@@ -13,7 +13,7 @@
     </div>
     <table>
       <thead>
-        <tr><th>#</th><th>Réf reçu</th><th>Élève</th><th>Date</th><th>Montant</th><th>Caisse</th><th>Agent</th><th>Libellé</th></tr>
+        <tr><th>#</th><th>Réf reçu</th><th>Élève</th><th>Date</th><th>Montant</th><th>Caisse</th><th>Perçu par</th><th>Fonction</th><th>Libellé</th></tr>
       </thead>
       <tbody>
         <?php foreach (($payments ?? []) as $i => $p): ?>
@@ -25,6 +25,7 @@
             <td><?= htmlspecialchars($p['montant_affiche'] ?? number_format((float) ($p['montant'] ?? 0), 2)) ?></td>
             <td><?= htmlspecialchars($p['nom_compte'] ?? '') ?></td>
             <td><?= htmlspecialchars($p['agent_nom'] ?? '') ?></td>
+            <td><?= htmlspecialchars($p['agent_fonction'] ?? '') ?></td>
             <td><?= htmlspecialchars($p['libelle'] ?? '') ?></td>
           </tr>
         <?php endforeach; ?>
