@@ -62,6 +62,20 @@ class DetteEleve
         return (float) ($stmt->fetchColumn() ?: 0);
     }
 
+    public static function getTotalOutstandingGroupedByDevise(int $eleveId): array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare('SELECT COALESCE(devise, "USD") AS devise, SUM(montant_restant) AS total FROM dettes_eleves WHERE eleve_id = :eleve_id GROUP BY COALESCE(devise, "USD")');
+        $stmt->execute([':eleve_id' => $eleveId]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $result = [];
+        foreach ($rows as $r) {
+            $dev = strtoupper(trim($r['devise'] ?? 'USD')) ?: 'USD';
+            $result[$dev] = (float) ($r['total'] ?? 0);
+        }
+        return $result;
+    }
+
     public static function findByEleveAndFrais(int $eleveId, int $fraisId): ?array
     {
         $db = Database::getConnection();

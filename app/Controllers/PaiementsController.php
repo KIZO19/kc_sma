@@ -475,6 +475,14 @@ class PaiementsController extends Controller
                 exit;
             }
             $compte = Eleve::getAccount($eleveId);
+            // Calculate precise total outstanding from dettes_eleves
+            try {
+                $totalDebt = DetteEleve::getTotalOutstandingByEleve($eleveId);
+                $totalDebtByCurrency = DetteEleve::getTotalOutstandingGroupedByDevise($eleveId);
+            } catch (\Throwable $e) {
+                $totalDebt = null;
+                $totalDebtByCurrency = [];
+            }
         } else {
             // No specific eleve requested: provide a selector (scope to school)
             $userSchool = (int) ($user['ecole_id'] ?? 0);
@@ -541,6 +549,8 @@ class PaiementsController extends Controller
             'modules' => $modules,
             'eleve' => $eleve,
             'compte' => $compte,
+            'totalDebt' => $totalDebt ?? null,
+            'totalDebtByCurrency' => $totalDebtByCurrency ?? [],
             'caisses' => $caisses,
             'fees' => $fees,
         ]);

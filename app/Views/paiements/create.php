@@ -103,7 +103,27 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
         <div class="card card-outline card-secondary">
           <div class="card-header"><h3 class="card-title">Compte élève</h3></div>
           <div class="card-body">
-            <p><strong>Solde dû:</strong> <?= number_format((float) ($compte['solde_debiteur'] ?? 0), 2) ?></p>
+            <p><strong>Solde dû (compte):</strong> <?= number_format((float) ($compte['solde_debiteur'] ?? 0), 2) ?></p>
+            <?php if (!empty($totalDebtByCurrency) && is_array($totalDebtByCurrency)): ?>
+              <div class="mb-2"><strong>Solde dû par devise :</strong></div>
+              <ul class="list-unstyled mb-0">
+                <?php foreach ($totalDebtByCurrency as $dev => $amt): ?>
+                  <?php
+                    $usdEq = null;
+                    if (strtoupper($dev) !== 'USD') {
+                        try {
+                            $usdEq = \App\Models\Devise::convertToUsd((float) $amt, strtoupper($dev));
+                        } catch (\Throwable $e) {
+                            $usdEq = null;
+                        }
+                    }
+                  ?>
+                  <li><?= htmlspecialchars($dev) ?>: <?= \App\Models\Devise::formatAmountWithCurrency((float) $amt, $dev, $usdEq) ?></li>
+                <?php endforeach; ?>
+              </ul>
+            <?php elseif (isset($totalDebt)): ?>
+              <p><strong>Solde dû (total exact):</strong> <?= number_format((float) ($totalDebt ?? 0), 2) ?></p>
+            <?php endif; ?>
           </div>
         </div>
         <?php endif; ?>
