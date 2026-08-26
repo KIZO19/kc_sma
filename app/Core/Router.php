@@ -56,6 +56,13 @@ class Router
             $actionName = 'notFound';
         }
 
+        // If an URL uses /<resource>/view (any case) but the controller implements show(), prefer that method.
+        if (strtolower($actionName) === 'view') {
+            if (method_exists($controllerClass, 'show')) {
+                $actionName = 'show';
+            }
+        }
+
         $controller = new $controllerClass();
 
         if (!is_callable([$controller, $actionName])) {

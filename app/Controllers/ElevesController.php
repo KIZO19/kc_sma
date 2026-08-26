@@ -86,9 +86,5 @@ class ElevesController extends Controller
         ]);
     }
 
-    // Backwards-compatible alias for routes using /eleves/view
-    public function view(): void
-    {
-        $this->show();
-    }
+    
 }
