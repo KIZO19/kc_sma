@@ -127,6 +127,19 @@ class FraisController extends Controller
             $scopeId = (int) ($_POST['scope_id'] ?? 0);
             $devise = trim($_POST['devise'] ?? '');
 
+            // Debug logging: record submitted values to PHP error log (temporary)
+            error_log('FraisController::submit - POST received: ' . json_encode([
+                'type_frais' => $typeFrais,
+                'montant_total' => $montantTotal,
+                'encodage' => $encodage,
+                'classe_id' => $classeId,
+                'annee_scolaire_id' => $anneeScolaireId,
+                'scope' => $scope,
+                'scope_id' => $scopeId,
+                'devise' => $devise,
+                'ecole_id' => $ecoleId,
+            ]));
+
             $errors = [];
             if ($ecoleId <= 0) {
                 $errors[] = 'École introuvable pour cet utilisateur.';
@@ -204,8 +217,9 @@ class FraisController extends Controller
                         $errors[] = 'Un frais avec cet encodage existe déjà pour votre école.';
                     }
                 } catch (\PDOException $e) {
-                    // Likely migration not applied (encodage column missing)
-                    $errors[] = 'La base de données nécessite une migration pour prendre en charge l\'encodage; exécutez app/Config/migration_add_encodage_to_frais.sql';
+                    // log and show a neutral error so we don't give misleading migration instructions
+                    error_log('FraisController::submit existsEncodage error: ' . $e->getMessage());
+                    $errors[] = 'Erreur interne lors de la vérification de l\'encodage. Veuillez réessayer.';
                 }
             }
 
@@ -222,6 +236,7 @@ class FraisController extends Controller
                     'encodage' => $encodage,
                     'ecole_id' => $ecoleId,
                     ]);
+                    error_log('FraisController::submit - create returned id: ' . var_export($insertId, true));
                 } catch (\PDOException $e) {
                     $errors[] = 'Erreur base de données : colonne manquante ou migration non appliquée. Exécutez les migrations SQL depuis app/Config et réessayez.';
                     // log exception in error log for debugging
@@ -471,7 +486,8 @@ class FraisController extends Controller
                 return;
             }
         } catch (\PDOException $e) {
-            $_SESSION['frais_errors'] = ['La base de données nécessite une migration pour prendre en charge l\'encodage; exécutez app/Config/migration_add_encodage_to_frais.sql'];
+            error_log('FraisController::update existsEncodage error: ' . $e->getMessage());
+            $_SESSION['frais_errors'] = ['Erreur interne lors de la vérification de l\'encodage. Veuillez réessayer.'];
             $_SESSION['frais_old'] = $_POST;
             $this->redirect('/frais/edit?id=' . $id);
             return;

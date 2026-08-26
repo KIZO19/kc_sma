@@ -48,7 +48,8 @@ $defaultYearId = $defaultYearId ?? 0;
                   <h3 class="card-title">Création d’un frais</h3>
                 </div>
                 <div class="card-body">
-                  <form method="post" action="<?= BASE_URL ?>/frais/submit" autocomplete="off">
+                  <div id="clientErrorContainer"></div>
+                  <form id="fraisForm" method="post" action="<?= BASE_URL ?>/frais/submit" autocomplete="off">
                     <div class="mb-3">
                       <label class="form-label">Type de frais</label>
                       <input type="text" name="type_frais" class="form-control" required value="<?= htmlspecialchars($oldInput['type_frais'] ?? '') ?>">
@@ -217,5 +218,88 @@ document.addEventListener('DOMContentLoaded', function () {
   // Initialize on load
   updateMeta();
   updateVisibility();
+
+  // Encodage: show generated hint and allow regen by reload
+  const encodageInput = document.getElementById('encodageInput');
+  const regenBtn = document.getElementById('regenEncodage');
+  const encodageHint = document.getElementById('encodageHint');
+  if (encodageInput && regenBtn) {
+    // hide hint when user types manually
+    encodageInput.addEventListener('input', function () {
+      if (encodageHint) encodageHint.style.display = encodageInput.value.trim() === '<?= htmlspecialchars($suggestedEncodage ?? '') ?>' ? '' : 'none';
+    });
+    regenBtn.addEventListener('click', function () {
+      // simple strategy: reload the page to get a new suggestedEncodage from server
+      const params = new URLSearchParams(window.location.search);
+      // add a cache-busting param
+      params.set('_regen', Date.now());
+      window.location.search = params.toString();
+    });
+  }
+
+  // Ensure hidden scope id and trimmed values before submit
+  const fraisForm = document.getElementById('fraisForm');
+  if (fraisForm) {
+    fraisForm.addEventListener('submit', function (ev) {
+      // client-side validation
+      const clientErrors = [];
+      const typeVal = (fraisForm.querySelector('input[name="type_frais"]') || { value: '' }).value.trim();
+      const montantVal = (fraisForm.querySelector('input[name="montant_total"]') || { value: '' }).value.trim();
+      const encVal = (document.getElementById('encodageInput') || { value: '' }).value.trim();
+      const anneeVal = (fraisForm.querySelector('select[name="annee_scolaire_id"]') || { value: '' }).value;
+      const deviseVal = (fraisForm.querySelector('select[name="devise"]') || { value: '' }).value;
+
+      if (typeVal === '') clientErrors.push('Le type de frais est requis.');
+      if (montantVal === '' || isNaN(montantVal) || Number(montantVal) < 0) clientErrors.push('Le montant total doit être un nombre positif.');
+      if (encVal === '') clientErrors.push("L'encodage est requis.");
+      if (/\s/.test(encVal)) clientErrors.push("L'encodage ne doit pas contenir d'espaces.");
+      if (!anneeVal || anneeVal === '') clientErrors.push('L\'année scolaire est requise.');
+      if (!deviseVal || deviseVal === '') clientErrors.push('La devise est requise.');
+
+      // ensure scopeIdHidden populated
+      const scope = scopeSelect ? scopeSelect.value : 'class';
+      if (scope === 'class') {
+        scopeIdHidden.value = classeSelect ? classeSelect.value || '' : '';
+        if (!scopeIdHidden.value) clientErrors.push('La classe est requise pour la portée classe.');
+      } else if (scope === 'option') {
+        scopeIdHidden.value = optionSelect ? optionSelect.value || '' : '';
+        if (!scopeIdHidden.value) clientErrors.push('L\'option doit être sélectionnée pour la portée option.');
+      } else if (scope === 'section') {
+        scopeIdHidden.value = sectionSelect ? sectionSelect.value || '' : '';
+        if (!scopeIdHidden.value) clientErrors.push('La section doit être sélectionnée pour la portée section.');
+      } else {
+        scopeIdHidden.value = '';
+      }
+
+      if (clientErrors.length > 0) {
+        ev.preventDefault();
+        // render errors into clientErrorContainer
+        const container = document.getElementById('clientErrorContainer');
+        if (container) {
+          container.innerHTML = '<div class="alert alert-danger alert-dismissible" role="alert"><ul class="mb-0">' + clientErrors.map(e => '<li>' + e + '</li>').join('') + '</ul><button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button></div>';
+          // scroll into view
+          container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        return false;
+      }
+      // make sure scopeIdHidden matches current visible control
+      const scope = scopeSelect ? scopeSelect.value : 'class';
+      if (scope === 'class') {
+        scopeIdHidden.value = classeSelect ? classeSelect.value || '' : '';
+      } else if (scope === 'option') {
+        scopeIdHidden.value = optionSelect ? optionSelect.value || '' : '';
+      } else if (scope === 'section') {
+        scopeIdHidden.value = sectionSelect ? sectionSelect.value || '' : '';
+      } else {
+        scopeIdHidden.value = '';
+      }
+      // trim encodage and type_frais inputs to avoid accidental spaces
+      const typeInput = fraisForm.querySelector('input[name="type_frais"]');
+      const encInput = document.getElementById('encodageInput');
+      if (typeInput) typeInput.value = typeInput.value.trim();
+      if (encInput) encInput.value = encInput.value.trim();
+      // allow normal submit to proceed
+    });
+  }
 });
 </script>
