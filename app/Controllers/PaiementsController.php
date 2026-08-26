@@ -8,6 +8,7 @@ use App\Core\Database;
 use App\Models\DetteEleve;
 use App\Models\Eleve;
 use App\Models\FraisScolaire;
+use App\Models\Classe;
 use App\Models\User;
 use App\Models\Eleve as EleveModel;
 
@@ -455,6 +456,12 @@ class PaiementsController extends Controller
         $modules = $this->getModulesForRole($role);
 
         $eleveId = (int) ($_GET['eleve_id'] ?? $_GET['id'] ?? 0);
+        // If a specific élève is requested, allow access only to the school accountant
+        if ($eleveId > 0 && (($user['role'] ?? '') !== 'comptable_école')) {
+            $_SESSION['flash_error'] = 'Accès réservé au comptable pour enregistrer un paiement pour un élève.';
+            header('Location: ' . BASE_URL . '/paiements');
+            exit;
+        }
         $eleve = null;
         $students = [];
         if ($eleveId > 0) {
@@ -480,20 +487,47 @@ class PaiementsController extends Controller
         $stmt->execute([':ecole_id' => $user['ecole_id'] ?? 0]);
         $caisses = $stmt->fetchAll();
 
-        // Fetch fees / debts for this school to populate motif picklist
+        // Fetch fees applicable to populate motif picklist
         $fees = [];
         try {
+            $schoolIdForFees = (int) ($user['ecole_id'] ?? 0);
             if ($eleveId > 0) {
-                $fees = DetteEleve::getOutstandingByEleve($eleveId);
-            } else {
-                $fees = \App\Models\FraisScolaire::getAllBySchool((int) ($user['ecole_id'] ?? 0));
-            }
+                // determine student's latest class/option/section
+                $stmtCls = $db->prepare('SELECT i.classe_id FROM inscriptions i WHERE i.eleve_id = :eleve ORDER BY i.date_inscription DESC LIMIT 1');
+                $stmtCls->execute([':eleve' => $eleveId]);
+                $rowCls = $stmtCls->fetch();
+                $classeIdForFees = (int) ($rowCls['classe_id'] ?? 0);
+                $classRec = $classeIdForFees > 0 ? Classe::findById($classeIdForFees) : null;
+                $optionForClass = (int) ($classRec['option_id'] ?? 0);
+                $sectionForClass = (int) ($classRec['section_id'] ?? 0);
 
-            if ($eleveId > 0 && !empty($fees)) {
-                foreach ($fees as &$feeItem) {
-                    $feeItem['remaining'] = (float) ($feeItem['montant_restant'] ?? ($feeItem['montant_total'] ?? 0));
+                $allFees = \App\Models\FraisScolaire::getAllBySchool($schoolIdForFees);
+                foreach ($allFees as $f) {
+                    $scope = $f['scope'] ?? 'class';
+                    $scopeId = isset($f['scope_id']) ? (int) $f['scope_id'] : null;
+                    $apply = false;
+                    if ($scope === 'class') {
+                        $feeClasseId = isset($f['classe_id']) ? (int) $f['classe_id'] : null;
+                        if ($feeClasseId === $classeIdForFees || $scopeId === $classeIdForFees) {
+                            $apply = true;
+                        }
+                    } elseif ($scope === 'option') {
+                        if (!empty($scopeId) && $scopeId === $optionForClass) $apply = true;
+                    } elseif ($scope === 'section') {
+                        if (!empty($scopeId) && $scopeId === $sectionForClass) $apply = true;
+                    } elseif ($scope === 'school') {
+                        $apply = true;
+                    }
+
+                    if ($apply) {
+                        // attach remaining amount if a dette exists for this eleve and frais
+                        $d = DetteEleve::findByEleveAndFrais($eleveId, (int) ($f['id'] ?? 0));
+                        $f['remaining'] = $d ? (float) ($d['montant_restant'] ?? ($f['montant_total'] ?? 0)) : (float) ($f['montant_total'] ?? 0);
+                        $fees[] = $f;
+                    }
                 }
-                unset($feeItem);
+            } else {
+                $fees = \App\Models\FraisScolaire::getAllBySchool($schoolIdForFees);
             }
         } catch (\Throwable $e) {
             // ignore, view will show empty list

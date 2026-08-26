@@ -165,6 +165,7 @@ class FraisController extends Controller
                     'devise' => $devise,
                     'scope' => $scope,
                     'scope_id' => $scope === 'class' ? $classeId : ($scope === 'option' || $scope === 'section' ? $scopeId : null),
+                    'ecole_id' => $ecoleId,
                     ]);
                 } catch (\PDOException $e) {
                     $errors[] = 'Erreur base de données : colonne manquante ou migration non appliquée. Exécutez les migrations SQL depuis app/Config et réessayez.';
@@ -401,6 +402,7 @@ class FraisController extends Controller
             'devise' => $devise,
             'scope' => $scope,
             'scope_id' => $scope === 'class' ? $classeId : ($scope === 'option' || $scope === 'section' ? $scopeId : null),
+            'ecole_id' => $ecoleId,
         ]);
 
         if ($ok) {

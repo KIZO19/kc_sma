@@ -28,7 +28,13 @@ class FraisScolaire
                  LEFT JOIN options ao ON (f.scope = 'option' AND ao.id = f.scope_id)
                  LEFT JOIN sections ss ON (f.scope = 'section' AND ss.id = f.scope_id)
                  LEFT JOIN annees_scolaires s ON s.id = f.annee_scolaire_id
-                 WHERE (c.ecole_id = :ecole_id OR f.scope IN ('option','section','school'))
+                                 WHERE (
+                                     f.ecole_id = :ecole_id
+                                     OR c.ecole_id = :ecole_id
+                                     OR (f.scope = 'option' AND ao.ecole_id = :ecole_id)
+                                     OR (f.scope = 'section' AND ss.ecole_id = :ecole_id)
+                                     OR (f.scope = 'school' AND f.ecole_id = :ecole_id)
+                                 )
                  ORDER BY s.annee DESC, c.nom_classe ASC, f.type_frais ASC"
             );
             $stmt->execute([':ecole_id' => $ecoleId]);
@@ -41,7 +47,7 @@ class FraisScolaire
                  FROM frais_scolaires f
                  LEFT JOIN classes c ON c.id = f.classe_id
                  LEFT JOIN annees_scolaires s ON s.id = f.annee_scolaire_id
-                 WHERE c.ecole_id = :ecole_id OR f.classe_id IS NULL
+                 WHERE c.ecole_id = :ecole_id OR f.classe_id IS NULL OR f.ecole_id = :ecole_id
                  ORDER BY s.annee DESC, c.nom_classe ASC, f.type_frais ASC"
             );
             $stmt->execute([':ecole_id' => $ecoleId]);
@@ -52,12 +58,20 @@ class FraisScolaire
     public static function create(array $data)
     {
         $db = Database::getConnection();
-        $stmt = $db->prepare(
-            'INSERT INTO frais_scolaires (classe_id, type_frais, montant_total, annee_scolaire_id, devise, scope, scope_id)
-             VALUES (:classe_id, :type_frais, :montant_total, :annee_scolaire_id, :devise, :scope, :scope_id)'
-        );
+        // support optional ecole_id field
+        if (array_key_exists('ecole_id', $data)) {
+            $stmt = $db->prepare(
+                'INSERT INTO frais_scolaires (classe_id, type_frais, montant_total, annee_scolaire_id, devise, scope, scope_id, ecole_id)'
+                . ' VALUES (:classe_id, :type_frais, :montant_total, :annee_scolaire_id, :devise, :scope, :scope_id, :ecole_id)'
+            );
+        } else {
+            $stmt = $db->prepare(
+                'INSERT INTO frais_scolaires (classe_id, type_frais, montant_total, annee_scolaire_id, devise, scope, scope_id)'
+                . ' VALUES (:classe_id, :type_frais, :montant_total, :annee_scolaire_id, :devise, :scope, :scope_id)'
+            );
+        }
 
-        $ok = $stmt->execute([
+        $params = [
             ':classe_id' => $data['classe_id'] ?? null,
             ':type_frais' => $data['type_frais'],
             ':montant_total' => $data['montant_total'],
@@ -65,7 +79,12 @@ class FraisScolaire
             ':devise' => $data['devise'],
             ':scope' => $data['scope'] ?? 'class',
             ':scope_id' => $data['scope_id'] ?? null,
-        ]);
+        ];
+        if (array_key_exists('ecole_id', $data)) {
+            $params[':ecole_id'] = $data['ecole_id'] ?? null;
+        }
+
+        $ok = $stmt->execute($params);
 
         if ($ok) {
             return (int) $db->lastInsertId();
@@ -92,7 +111,7 @@ class FraisScolaire
             . 'LEFT JOIN classes c ON c.id = f.classe_id '
             . 'LEFT JOIN annees_scolaires s ON s.id = f.annee_scolaire_id '
             . 'WHERE f.id = :id AND ('
-            . 'c.ecole_id = :ecole_id OR f.scope IN (\'option\', \'section\', \'school\')) '
+            . 'c.ecole_id = :ecole_id OR f.ecole_id = :ecole_id OR f.scope IN (\'option\', \'section\', \'school\')) '
             . 'LIMIT 1'
         );
         $stmt->execute([':id' => $id, ':ecole_id' => $ecoleId]);
@@ -104,10 +123,10 @@ class FraisScolaire
     {
         $db = Database::getConnection();
         $stmt = $db->prepare(
-            'UPDATE frais_scolaires SET classe_id = :classe_id, type_frais = :type_frais, montant_total = :montant_total, annee_scolaire_id = :annee_scolaire_id, devise = :devise, scope = :scope, scope_id = :scope_id WHERE id = :id'
+            'UPDATE frais_scolaires SET classe_id = :classe_id, type_frais = :type_frais, montant_total = :montant_total, annee_scolaire_id = :annee_scolaire_id, devise = :devise, scope = :scope, scope_id = :scope_id, ecole_id = :ecole_id WHERE id = :id'
         );
 
-        return (bool) $stmt->execute([
+        $params = [
             ':classe_id' => $data['classe_id'] ?? null,
             ':type_frais' => $data['type_frais'],
             ':montant_total' => $data['montant_total'],
@@ -115,7 +134,10 @@ class FraisScolaire
             ':devise' => $data['devise'],
             ':scope' => $data['scope'] ?? 'class',
             ':scope_id' => $data['scope_id'] ?? null,
+            ':ecole_id' => $data['ecole_id'] ?? null,
             ':id' => $id,
-        ]);
+        ];
+
+        return (bool) $stmt->execute($params);
     }
 }
