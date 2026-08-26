@@ -12,7 +12,7 @@ class Comptes_elevesController extends Controller
     public function index(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école']);
+        Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'parent_ecole']);
 
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
@@ -46,6 +46,7 @@ class Comptes_elevesController extends Controller
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $modules,
             'accounts' => $rows,
+            'canManageAccounting' => ($role === 'comptable_école'),
         ]);
     }
 }

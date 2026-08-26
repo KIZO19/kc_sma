@@ -1,4 +1,5 @@
 <?php require __DIR__ . '/../partials/app_header.php'; ?>
+<?php $accounts = $accounts ?? []; ?>
       <section class="content-header">
         <div class="container-fluid">
           <div class="row mb-2">
@@ -35,7 +36,9 @@
                     <td><?= number_format((float) ($a['solde'] ?? 0), 2) ?></td>
                     <td>
                       <a href="<?= BASE_URL ?>/eleves/view?id=<?= urlencode($a['eleve_id'] ?? '') ?>" class="btn btn-sm btn-secondary">Voir élève</a>
-                      <a href="<?= BASE_URL ?>/paiements?eleve_id=<?= urlencode($a['eleve_id'] ?? '') ?>" class="btn btn-sm btn-primary">Enregistrer paiement</a>
+                      <?php if (!empty($canManageAccounting)): ?>
+                        <a href="<?= BASE_URL ?>/paiements/create?eleve_id=<?= urlencode($a['eleve_id'] ?? '') ?>" class="btn btn-sm btn-primary">Enregistrer paiement</a>
+                      <?php endif; ?>
                     </td>
                   </tr>
                 <?php endforeach; ?>

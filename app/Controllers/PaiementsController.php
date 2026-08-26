@@ -17,7 +17,7 @@ class PaiementsController extends Controller
     public function index(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école', 'sec_école', 'parent_ecole']);
+        Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'parent_ecole']);
 
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
@@ -34,7 +34,13 @@ class PaiementsController extends Controller
         $eleveFilter = $eleveId ? Eleve::findById($eleveId) : null;
         $fraisFilter = $fraisId ? FraisScolaire::findById($fraisId) : null;
         $totalPaid = $eleveId !== null ? $this->fetchTotalPaidForEleve($user, $eleveId) : null;
+        $totalPaidByCurrency = $eleveId !== null ? $this->fetchTotalPaidByCurrency($user, $eleveId) : [];
         $totalDebt = $eleveId !== null ? DetteEleve::getTotalOutstandingByEleve($eleveId) : null;
+        $totalDebtByCurrency = $eleveId !== null ? DetteEleve::getTotalOutstandingGroupedByDevise($eleveId) : [];
+        if ($eleveId !== null && empty($totalDebtByCurrency)) {
+            $totalDebtByCurrency = DetteEleve::computeOutstandingFromApplicableFees($eleveId);
+            $totalDebt = array_sum($totalDebtByCurrency);
+        }
 
         $userSchool = (int) ($user['ecole_id'] ?? 0);
         // Show only enrolled (validated) students who still have outstanding debts for selection
@@ -71,14 +77,17 @@ class PaiementsController extends Controller
             'students' => $students,
             'fees' => $fees,
             'totalPaid' => $totalPaid,
+            'totalPaidByCurrency' => $totalPaidByCurrency,
             'totalDebt' => $totalDebt,
+            'totalDebtByCurrency' => $totalDebtByCurrency,
+            'canManageAccounting' => ($role === 'comptable_école'),
         ]);
     }
 
     public function export(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école', 'sec_école']);
+        Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'parent_ecole']);
 
         $user = Auth::refresh() ?: Auth::user();
         $eleveId = !empty($_GET['eleve_id']) ? (int) $_GET['eleve_id'] : null;
@@ -148,7 +157,7 @@ class PaiementsController extends Controller
     public function listJson(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école', 'sec_école', 'parent_ecole']);
+        Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'parent_ecole']);
 
         $user = Auth::refresh() ?: Auth::user();
         $eleveId = !empty($_GET['eleve_id']) ? (int) $_GET['eleve_id'] : null;
@@ -161,10 +170,16 @@ class PaiementsController extends Controller
         $payments = $this->fetchPaymentsForUser($user, 0, $eleveId, $fraisId);
 
         $totalPaid = $eleveId !== null ? $this->fetchTotalPaidForEleve($user, $eleveId) : null;
+        $totalPaidByCurrency = $eleveId !== null ? $this->fetchTotalPaidByCurrency($user, $eleveId) : [];
         $totalDebt = $eleveId !== null ? DetteEleve::getTotalOutstandingByEleve($eleveId) : null;
+        $totalDebtByCurrency = $eleveId !== null ? DetteEleve::getTotalOutstandingGroupedByDevise($eleveId) : [];
+        if ($eleveId !== null && empty($totalDebtByCurrency)) {
+            $totalDebtByCurrency = DetteEleve::computeOutstandingFromApplicableFees($eleveId);
+            $totalDebt = array_sum($totalDebtByCurrency);
+        }
 
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['payments' => $payments, 'totalPaid' => $totalPaid, 'totalDebt' => $totalDebt], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['payments' => $payments, 'totalPaid' => $totalPaid, 'totalPaidByCurrency' => $totalPaidByCurrency, 'totalDebt' => $totalDebt, 'totalDebtByCurrency' => $totalDebtByCurrency], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -219,6 +234,20 @@ class PaiementsController extends Controller
         // The application historically used two payment tables. Prefer the larger
         // total so a payment mirrored in both tables is not counted twice.
         return max($paid1, $paid2);
+    }
+
+    private function fetchTotalPaidByCurrency(array $user, int $eleveId): array
+    {
+        $totals = [];
+        foreach ($this->fetchPaymentsForUser($user, 0, $eleveId) as $payment) {
+            $currency = strtoupper(trim($payment['transaction_devise'] ?? $payment['frais_devise'] ?? 'USD')) ?: 'USD';
+            if (!isset($totals[$currency])) {
+                $totals[$currency] = 0.0;
+            }
+            $totals[$currency] += (float) ($payment['montant'] ?? 0);
+        }
+        ksort($totals);
+        return $totals;
     }
 
     private function renderViewToString(string $viewPath, array $params = []): string
@@ -481,6 +510,11 @@ class PaiementsController extends Controller
         Auth::requireRoles(['super_admin', 'comptable_école']);
 
         $user = Auth::refresh() ?: Auth::user();
+        if (($user['role'] ?? '') !== 'comptable_école') {
+            $_SESSION['flash_error'] = 'Seul le comptable de l’école peut enregistrer un paiement.';
+            $this->redirect('/paiements');
+            return;
+        }
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
 
@@ -526,6 +560,8 @@ class PaiementsController extends Controller
         }
 
         $db = Database::getConnection();
+        $paymentFormToken = bin2hex(random_bytes(16));
+        $_SESSION['payment_form_token'] = $paymentFormToken;
         $stmt = $db->prepare('SELECT * FROM caisses_banques WHERE ecole_id = :ecole_id OR ecole_id IS NULL');
         $stmt->execute([':ecole_id' => $user['ecole_id'] ?? 0]);
         $caisses = $stmt->fetchAll();
@@ -588,6 +624,7 @@ class PaiementsController extends Controller
             'totalDebtByCurrency' => $totalDebtByCurrency ?? [],
             'caisses' => $caisses,
             'fees' => $fees,
+            'paymentFormToken' => $paymentFormToken,
         ]);
     }
 
@@ -597,6 +634,19 @@ class PaiementsController extends Controller
         Auth::requireRoles(['super_admin', 'comptable_école']);
 
         $user = Auth::refresh() ?: Auth::user();
+        if (($user['role'] ?? '') !== 'comptable_école') {
+            $_SESSION['flash_error'] = 'Seul le comptable de l’école peut enregistrer un paiement.';
+            $this->redirect('/paiements');
+            return;
+        }
+
+        $submittedToken = (string) ($_POST['payment_form_token'] ?? '');
+        $expectedToken = (string) ($_SESSION['payment_form_token'] ?? '');
+        if ($submittedToken === '' || $expectedToken === '' || !hash_equals($expectedToken, $submittedToken)) {
+            $_SESSION['paiements_errors'] = ['Ce formulaire a déjà été traité ou a expiré. Rechargez la page et réessayez.'];
+            header('Location: ' . BASE_URL . '/paiements/create');
+            exit;
+        }
         $agentId = null;
         if (!empty($user['reference_id'])) {
             $agentId = (int) $user['reference_id'];
@@ -739,6 +789,7 @@ class PaiementsController extends Controller
                 $agentId,
                 $reference
             );
+            unset($_SESSION['payment_form_token']);
         } catch (\Throwable $e) {
             $_SESSION['paiements_errors'] = [$e->getMessage()];
             $_SESSION['paiements_old'] = $oldInput;
@@ -757,7 +808,7 @@ class PaiementsController extends Controller
     public function receipt(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['super_admin', 'comptable_école', 'sec_école']);
+        Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'parent_ecole']);
 
         $user = Auth::refresh() ?: Auth::user();
         $idParam = $_GET['id'] ?? null;
@@ -887,7 +938,8 @@ class PaiementsController extends Controller
                 $stmtPaid2->execute([':eleve' => (int) $data['eleve_id'], ':frais' => (int) $fraisId]);
                 $paid2 = (float) ($stmtPaid2->fetchColumn() ?: 0);
 
-                $totalPaid = $paid1 + $paid2;
+                // The same payment can be mirrored in both historical tables.
+                $totalPaid = max($paid1, $paid2);
                 $reste = max(0.0, $feeTotal - $totalPaid);
             }
         } catch (\Throwable $e) {

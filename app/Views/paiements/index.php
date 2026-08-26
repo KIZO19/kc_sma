@@ -42,7 +42,7 @@
         </select>
       </div>
       <div class="col-md-6 text-end">
-          <?php if (in_array($role, ['super_admin','comptable_école'], true)): ?>
+          <?php if (!empty($canManageAccounting)): ?>
             <a href="<?= BASE_URL ?>/paiements/create<?= !empty($eleveId) ? '?eleve_id=' . (int) $eleveId : '' ?>" class="btn btn-success">Enregistrer paiement</a>
           <?php endif; ?>
           <div class="btn-group ms-2" role="group">
@@ -56,11 +56,17 @@
     <?php if (!empty($eleveFilter)): ?>
       <div class="alert alert-info py-2">
         Affichage des paiements pour l'élève <strong><?= htmlspecialchars(($eleveFilter['prenom'] ?? '') . ' ' . ($eleveFilter['nom'] ?? '') . ' ' . ($eleveFilter['postnom'] ?? '')) ?></strong>.
-        <?php if (isset($totalPaid)): ?>
-          <br><strong>Total déjà payé :</strong> <?= number_format((float) ($totalPaid ?? 0), 2) ?>
+        <?php if (!empty($totalPaidByCurrency)): ?>
+          <br><strong>Totaux déjà payés par devise :</strong>
+          <?php foreach ($totalPaidByCurrency as $currency => $amount): ?>
+            <br><span><?= htmlspecialchars($currency) ?> : <?= number_format((float) $amount, 2, ',', ' ') ?></span>
+          <?php endforeach; ?>
         <?php endif; ?>
-        <?php if (isset($totalDebt)): ?>
-          <br><strong>Total des dettes restantes :</strong> <?= number_format((float) ($totalDebt ?? 0), 2) ?>
+        <?php if (!empty($totalDebtByCurrency)): ?>
+          <br><strong>Dettes restantes par devise :</strong>
+          <?php foreach ($totalDebtByCurrency as $currency => $amount): ?>
+            <br><span><?= htmlspecialchars($currency) ?> : <?= number_format((float) $amount, 2, ',', ' ') ?></span>
+          <?php endforeach; ?>
         <?php endif; ?>
       </div>
     <?php endif; ?>

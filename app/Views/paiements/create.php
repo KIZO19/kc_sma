@@ -40,6 +40,7 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
           <div class="card-header"><h3 class="card-title">Détails paiement</h3></div>
           <div class="card-body">
             <form method="post" action="<?= BASE_URL ?>/paiements/store">
+              <input type="hidden" name="payment_form_token" value="<?= htmlspecialchars($paymentFormToken ?? '', ENT_QUOTES, 'UTF-8') ?>">
               <?php if (!empty($eleve)): ?>
                 <input type="hidden" name="eleve_id" value="<?= (int) $eleve['id'] ?>">
               <?php else: ?>
