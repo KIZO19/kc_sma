@@ -216,7 +216,7 @@ class FraisController extends Controller
                     if (FraisScolaire::existsEncodage($encodage, $ecoleId)) {
                         $errors[] = 'Un frais avec cet encodage existe déjà pour votre école.';
                     }
-                } catch (\PDOException $e) {
+                } catch (\Throwable $e) {
                     // log and show a neutral error so we don't give misleading migration instructions
                     error_log('FraisController::submit existsEncodage error: ' . $e->getMessage());
                     $errors[] = 'Erreur interne lors de la vérification de l\'encodage. Veuillez réessayer.';
@@ -485,7 +485,7 @@ class FraisController extends Controller
                 $this->redirect('/frais/edit?id=' . $id);
                 return;
             }
-        } catch (\PDOException $e) {
+        } catch (\Throwable $e) {
             error_log('FraisController::update existsEncodage error: ' . $e->getMessage());
             $_SESSION['frais_errors'] = ['Erreur interne lors de la vérification de l\'encodage. Veuillez réessayer.'];
             $_SESSION['frais_old'] = $_POST;

@@ -123,16 +123,32 @@ class FraisScolaire
     public static function existsEncodage(string $encodage, int $ecoleId, ?int $excludeId = null): bool
     {
         $db = Database::getConnection();
-        $sql = 'SELECT f.id FROM frais_scolaires f LEFT JOIN classes c ON c.id = f.classe_id LEFT JOIN options ao ON (f.scope = "option" AND ao.id = f.scope_id) LEFT JOIN sections ss ON (f.scope = "section" AND ss.id = f.scope_id) WHERE f.encodage = :encodage AND (f.ecole_id = :ecole_id OR c.ecole_id = :ecole_id OR (f.scope = "option" AND ao.ecole_id = :ecole_id) OR (f.scope = "section" AND ss.ecole_id = :ecole_id))';
-        if ($excludeId !== null) {
-            $sql .= ' AND f.id != :excludeId';
-        }
-        $stmt = $db->prepare($sql);
+        // Try the full-scoped check first (joins to classes/options/sections). If DB schema is older
+        // or some tables/columns are missing, fall back to a simpler check to avoid blocking inserts.
         $params = [':encodage' => $encodage, ':ecole_id' => $ecoleId];
-        if ($excludeId !== null) $params[':excludeId'] = $excludeId;
-        $stmt->execute($params);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        return (bool) $row;
+        try {
+            $sql = 'SELECT f.id FROM frais_scolaires f LEFT JOIN classes c ON c.id = f.classe_id LEFT JOIN options ao ON (f.scope = \'option\' AND ao.id = f.scope_id) LEFT JOIN sections ss ON (f.scope = \'section\' AND ss.id = f.scope_id) WHERE f.encodage = :encodage AND (f.ecole_id = :ecole_id OR c.ecole_id = :ecole_id OR (f.scope = \'option\' AND ao.ecole_id = :ecole_id) OR (f.scope = \'section\' AND ss.ecole_id = :ecole_id))';
+            if ($excludeId !== null) {
+                $sql .= ' AND f.id != :excludeId';
+                $params[':excludeId'] = $excludeId;
+            }
+            $stmt = $db->prepare($sql);
+            $stmt->execute($params);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            return (bool) $row;
+        } catch (\Throwable $e) {
+            // log and fall back to simpler check (by encodage and ecole_id)
+            error_log('FraisScolaire::existsEncodage fallback due to error: ' . $e->getMessage());
+            $fallbackSql = 'SELECT id FROM frais_scolaires WHERE encodage = :encodage AND (ecole_id = :ecole_id OR ecole_id IS NULL)';
+            if ($excludeId !== null) {
+                $fallbackSql .= ' AND id != :excludeId';
+                $params[':excludeId'] = $excludeId;
+            }
+            $stmt = $db->prepare($fallbackSql);
+            $stmt->execute($params);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            return (bool) $row;
+        }
     }
 
     public static function update(int $id, array $data): bool
