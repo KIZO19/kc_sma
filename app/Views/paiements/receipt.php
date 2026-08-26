@@ -1,15 +1,24 @@
 <?php require __DIR__ . '/../partials/app_header.php'; ?>
 <style>
   /* POS receipt styling */
-  .pos-receipt { max-width: 360px; margin: 0 auto; font-family: 'Courier New', monospace; font-size: 12px; position: relative; overflow: hidden; }
-  .pos-receipt::before { content: ''; position: absolute; inset: 25% 5% 30%; background: url('<?= htmlspecialchars($ecole_logo ?? '', ENT_QUOTES, 'UTF-8') ?>') center / contain no-repeat; opacity: .10; pointer-events: none; z-index: 0; }
-  .pos-receipt > * { position: relative; z-index: 1; }
+  .pos-receipt { width: 300px; max-width: 100%; margin: 0 auto; font-family: 'Courier New', monospace; font-size: 11px; position: relative; overflow: hidden; }
+  .receipt-watermark { position: absolute; top: 25%; left: 5%; width: 90%; height: 45%; object-fit: contain; opacity: .08; pointer-events: none; z-index: 0; }
+  .pos-receipt > *:not(.receipt-watermark) { position: relative; z-index: 1; }
   .pos-header { text-align: center; }
+  .pos-header h4 { font-size: 14px; margin: 3px 0; overflow-wrap: anywhere; }
   .pos-line { border-top: 1px dashed #000; margin: 8px 0; }
-  .pos-row { display:flex; justify-content:space-between; }
-  .pos-amount { font-weight: bold; font-size: 16px; }
+  .pos-row { display:flex; justify-content:space-between; gap: 8px; }
+  .pos-row > div:last-child { text-align:right; overflow-wrap:anywhere; }
+  .pos-amount { font-weight: bold; font-size: 14px; }
   .qr { text-align:center; margin-top:10px; }
-  @media print { .no-print { display:none; } .pos-receipt { max-width: 320px; } .pos-receipt::before { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+  @media print {
+    @page { size: 80mm auto; margin: 3mm; }
+    body { margin: 0; background: #fff; }
+    .no-print, .card { box-shadow: none !important; }
+    .no-print { display:none !important; }
+    .pos-receipt { width: 72mm; max-width: 72mm; }
+    .receipt-watermark { opacity: .10; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  }
 </style>
 <section class="content">
   <div class="container-fluid">
@@ -18,9 +27,12 @@
         <div class="card">
           <div class="card-body">
             <div class="pos-receipt">
+              <?php if (!empty($ecole_logo)): ?>
+                <img class="receipt-watermark" src="<?= htmlspecialchars($ecole_logo, ENT_QUOTES, 'UTF-8') ?>" alt="">
+              <?php endif; ?>
               <div class="pos-header">
                 <?php if (!empty($ecole_logo)): ?>
-                  <img src="<?= htmlspecialchars($ecole_logo, ENT_QUOTES, 'UTF-8') ?>" alt="Logo de l'école" style="display:block;width:72px;height:72px;object-fit:contain;margin:0 auto 8px;">
+                  <img src="<?= htmlspecialchars($ecole_logo, ENT_QUOTES, 'UTF-8') ?>" alt="Logo de l'école" style="display:block;width:30px;height:30px;object-fit:contain;margin:0 auto 3px;">
                 <?php endif; ?>
                 <h4><?= htmlspecialchars($ecole_name ?? APP_NAME) ?></h4>
                 <div><?= htmlspecialchars($ecriture['caisse_name'] ?? '') ?></div>

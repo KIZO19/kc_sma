@@ -232,7 +232,7 @@ class PaiementsController extends Controller
     private function fetchPaymentsForUser(array $user, int $limit = 0, ?int $eleveId = null, ?int $fraisId = null): array
     {
         $db = \App\Core\Database::getConnection();
-        $sql = 'SELECT ece.id, ece.frais_id, ece.reference_recu, ece.date_operation, ece.montant, ece.libelle, ce.eleve_id, el.nom, el.postnom, el.prenom, cb.nom_compte, COALESCE(NULLIF(CONCAT_WS(\' \', a.prenom, a.nom, a.postnom), \'\'), u.nom_complet) AS agent_nom, ra.titre_role AS agent_fonction, fs.devise AS frais_devise, COALESCE(fs.devise, ecole.devise_principale, \'USD\') AS transaction_devise '
+        $sql = 'SELECT ece.id, ece.frais_id, ece.reference_recu, ece.date_operation, ece.montant, ece.libelle, ce.eleve_id, el.nom, el.postnom, el.prenom, cb.nom_compte, COALESCE(NULLIF(CONCAT_WS(\' \', a.nom, a.postnom, a.prenom), \'\'), u.nom_complet, \'Agent non identifié\') AS agent_nom, COALESCE(ra.titre_role, u.role, \'Agent\') AS agent_fonction, fs.devise AS frais_devise, COALESCE(fs.devise, ecole.devise_principale, \'USD\') AS transaction_devise '
             . 'FROM ecritures_comptables_eleves ece '
             . 'INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id '
             . 'INNER JOIN eleves el ON ce.eleve_id = el.id '
@@ -241,7 +241,7 @@ class PaiementsController extends Controller
             . 'LEFT JOIN frais_scolaires fs ON ece.frais_id = fs.id '
             . 'LEFT JOIN agents a ON ece.agent_saisie_id = a.id '
             . 'LEFT JOIN roles_administration ra ON a.role_id = ra.id '
-            . 'LEFT JOIN utilisateurs u ON ece.agent_saisie_id = u.reference_id AND u.role NOT IN (\'eleve_ecole\', \'parent_ecole\') '
+            . 'LEFT JOIN (SELECT reference_id, MAX(nom_complet) AS nom_complet, MAX(role) AS role FROM utilisateurs WHERE role NOT IN (\'eleve_ecole\', \'parent_ecole\') GROUP BY reference_id) u ON ece.agent_saisie_id = u.reference_id '
             . 'WHERE ece.type_mouvement = :type ';
 
         $params = [':type' => 'CREDIT'];
@@ -798,7 +798,7 @@ class PaiementsController extends Controller
         } else {
             $ecritureId = (int) $idParam;
             if ($ecritureId > 0) {
-                $stmt = $db->prepare('SELECT ece.*, ce.eleve_id, el.nom, el.postnom, el.prenom, cb.nom_compte AS caisse_name, CONCAT_WS(\' \', a.prenom, a.nom, a.postnom) AS agent_nom, ra.titre_role AS agent_fonction FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id INNER JOIN eleves el ON ce.eleve_id = el.id LEFT JOIN caisses_banques cb ON ece.caisse_banque_id = cb.id LEFT JOIN agents a ON ece.agent_saisie_id = a.id LEFT JOIN roles_administration ra ON a.role_id = ra.id WHERE ece.id = :id LIMIT 1');
+                $stmt = $db->prepare('SELECT ece.*, ce.eleve_id, el.nom, el.postnom, el.prenom, cb.nom_compte AS caisse_name, COALESCE(NULLIF(CONCAT_WS(\' \', a.nom, a.postnom, a.prenom), \'\'), u.nom_complet, \'Agent non identifié\') AS agent_nom, COALESCE(ra.titre_role, u.role, \'Agent\') AS agent_fonction FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id INNER JOIN eleves el ON ce.eleve_id = el.id LEFT JOIN caisses_banques cb ON ece.caisse_banque_id = cb.id LEFT JOIN agents a ON ece.agent_saisie_id = a.id LEFT JOIN roles_administration ra ON a.role_id = ra.id LEFT JOIN (SELECT reference_id, MAX(nom_complet) AS nom_complet, MAX(role) AS role FROM utilisateurs WHERE role NOT IN (\'eleve_ecole\', \'parent_ecole\') GROUP BY reference_id) u ON ece.agent_saisie_id = u.reference_id WHERE ece.id = :id LIMIT 1');
                 $stmt->execute([':id' => $ecritureId]);
                 $data = $stmt->fetch(\PDO::FETCH_ASSOC);
             }
