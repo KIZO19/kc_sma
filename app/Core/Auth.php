@@ -192,7 +192,8 @@ class Auth
     public static function refresh(): ?array
     {
         $user = self::user();
-        if (!$user) {
+        if (!$user || !isset($user['id']) || !is_int($user['id'])) {
+            self::logout();
             return null;
         }
 

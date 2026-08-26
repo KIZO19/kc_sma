@@ -36,7 +36,24 @@ class PaiementsController extends Controller
         $totalDebt = $eleveId !== null ? DetteEleve::getTotalOutstandingByEleve($eleveId) : null;
 
         $userSchool = (int) ($user['ecole_id'] ?? 0);
-        $students = $userSchool > 0 ? Eleve::getAllBySchool($userSchool) : Eleve::getAll();
+        // Show only enrolled (validated) students who still have outstanding debts for selection
+        $db = Database::getConnection();
+        if ($userSchool > 0) {
+            $stmt = $db->prepare(
+                'SELECT DISTINCT e.* FROM eleves e '
+                . 'INNER JOIN dettes_eleves d ON d.eleve_id = e.id '
+                . 'LEFT JOIN inscriptions i ON i.eleve_id = e.id '
+                . 'LEFT JOIN classes c ON i.classe_id = c.id '
+                . "WHERE d.montant_restant > 0 AND e.statut_eleve = :statut AND (e.ecole_id = :ecole_id OR c.ecole_id = :ecole_id) "
+                . 'ORDER BY e.nom ASC, e.postnom ASC, e.prenom ASC'
+            );
+            $stmt->execute([':statut' => 'actif', ':ecole_id' => $userSchool]);
+            $students = $stmt->fetchAll();
+        } else {
+            $stmt = $db->prepare('SELECT DISTINCT e.* FROM eleves e INNER JOIN dettes_eleves d ON d.eleve_id = e.id WHERE d.montant_restant > 0 AND e.statut_eleve = :statut ORDER BY e.nom ASC, e.postnom ASC, e.prenom ASC');
+            $stmt->execute([':statut' => 'actif']);
+            $students = $stmt->fetchAll();
+        }
         $fees = $userSchool > 0 ? FraisScolaire::getAllBySchool($userSchool) : [];
 
         $this->view('paiements/index', [

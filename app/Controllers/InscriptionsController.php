@@ -298,6 +298,8 @@ class InscriptionsController extends Controller
                             $currentBalance = (float) $compte['solde_debiteur'];
                         }
 
+                        $appliedFees = [];
+                        $appliedTotal = 0.0;
                         foreach ($fees as $f) {
                             $apply = false;
                             $scope = $f['scope'] ?? 'class';
@@ -306,8 +308,13 @@ class InscriptionsController extends Controller
                             if (!empty($f['annee_scolaire_id']) && (int) $f['annee_scolaire_id'] !== (int) $yearId) {
                                 continue;
                             }
+
+                            // For class-scoped fees we accept either explicit classe_id or scope_id (backwards compatibility)
                             if ($scope === 'class') {
-                                if (!empty($f['classe_id']) && (int) $f['classe_id'] === $classeId) $apply = true;
+                                $feeClasseId = isset($f['classe_id']) ? (int) $f['classe_id'] : null;
+                                if ($feeClasseId === $classeId || $scopeId === $classeId) {
+                                    $apply = true;
+                                }
                             } elseif ($scope === 'option') {
                                 if (!empty($scopeId) && $scopeId === $classOption) $apply = true;
                             } elseif ($scope === 'section') {
@@ -331,6 +338,12 @@ class InscriptionsController extends Controller
                                 ]);
 
                                 $currentBalance += $montant;
+                                $appliedFees[] = [
+                                    'id' => $f['id'] ?? null,
+                                    'label' => $f['type_frais'] ?? 'Frais',
+                                    'amount' => $montant,
+                                ];
+                                $appliedTotal += $montant;
                             }
                         }
 
@@ -369,7 +382,11 @@ class InscriptionsController extends Controller
                 }
 
                 unset($_SESSION['inscriptions_old']);
-                $_SESSION['inscriptions_success'] = 'L’élève a été enregistré. La validation doit être effectuée par le secrétaire.';
+                if (!empty($appliedTotal) && $appliedTotal > 0) {
+                    $_SESSION['inscriptions_success'] = 'L’élève a été enregistré. Frais appliqués: ' . number_format($appliedTotal, 2) . ' (' . count($appliedFees) . ' frais). La validation doit être effectuée par le secrétaire.';
+                } else {
+                    $_SESSION['inscriptions_success'] = 'L’élève a été enregistré. La validation doit être effectuée par le secrétaire.';
+                }
                 $this->redirect('/inscriptions');
             }
 
