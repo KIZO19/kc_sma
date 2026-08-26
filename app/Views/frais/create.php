@@ -59,7 +59,13 @@ $defaultYearId = $defaultYearId ?? 0;
                     </div>
                     <div class="mb-3">
                       <label class="form-label">Encodage (code unique)</label>
-                      <input type="text" name="encodage" class="form-control" required value="<?= htmlspecialchars($oldInput['encodage'] ?? ($suggestedEncodage ?? '')) ?>" placeholder="ex: FRAIS-2026-001">
+                      <div class="input-group">
+                        <input id="encodageInput" type="text" name="encodage" class="form-control" required value="<?= htmlspecialchars($oldInput['encodage'] ?? ($suggestedEncodage ?? '')) ?>" placeholder="ex: FRAIS-2026-001">
+                        <button id="regenEncodage" type="button" class="btn btn-outline-secondary" title="Régénérer">Régénérer</button>
+                      </div>
+                      <?php if (empty($oldInput['encodage'] ?? '') && !empty($suggestedEncodage)): ?>
+                        <div class="form-text text-muted mt-1"><span id="encodageHint">(généré automatiquement)</span></div>
+                      <?php endif; ?>
                     </div>
                     <div class="mb-3">
                       <label class="form-label">Portée</label>

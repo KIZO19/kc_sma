@@ -184,14 +184,17 @@ class FraisController extends Controller
             } elseif (!array_key_exists($devise, $this->getCurrencyOptions())) {
                 $errors[] = 'La devise sélectionnée est invalide.';
             }
-            // encodage must be provided and unique per school
+            // encodage: if not provided, generate one automatically
             if ($encodage === '') {
-                $errors[] = 'L\'encodage du frais est requis.';
-            } else {
-                // basic sanitization: no spaces
-                if (preg_match('/\s/', $encodage)) {
-                    $errors[] = 'L\'encodage ne doit pas contenir d\'espaces.';
+                try {
+                    $encodage = $this->generateUniqueEncodage($ecoleId);
+                } catch (\Throwable $e) {
+                    $encodage = 'FRAIS-' . date('Y') . '-' . uniqid();
                 }
+            }
+            // basic sanitization: no spaces
+            if (preg_match('/\s/', $encodage)) {
+                $errors[] = 'L\'encodage ne doit pas contenir d\'espaces.';
             }
 
             if (empty($errors)) {
