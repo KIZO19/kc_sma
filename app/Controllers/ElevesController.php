@@ -67,6 +67,12 @@ class ElevesController extends Controller
             }
         }
         $dettes = DetteEleve::getOutstandingByEleve($eleveId);
+        $totalPaidByCurrency = $this->getPaidTotalsByCurrency($eleveId);
+        $totalDebtByCurrency = DetteEleve::getTotalOutstandingGroupedByDevise($eleveId);
+        if (empty($totalDebtByCurrency)) {
+            $totalDebtByCurrency = DetteEleve::computeOutstandingFromApplicableFees($eleveId);
+        }
+        $entryTotalsByCurrency = $this->getEntryTotalsByCurrency($eleveId);
         $notes = \App\Models\Eleve::getNotes($eleveId);
         $discipline = \App\Models\Eleve::getDiscipline($eleveId);
 
@@ -81,9 +87,82 @@ class ElevesController extends Controller
             'ecritures' => $ecritures,
             'dettes' => $dettes,
             'totalPaid' => $totalPaid,
+            'totalPaidByCurrency' => $totalPaidByCurrency,
+            'totalDebtByCurrency' => $totalDebtByCurrency,
+            'entryTotalsByCurrency' => $entryTotalsByCurrency,
             'notes' => $notes,
             'discipline' => $discipline,
         ]);
+    }
+
+    private function getPaidTotalsByCurrency(int $eleveId): array
+    {
+        $db = \App\Core\Database::getConnection();
+        $totals = [];
+        $queries = [
+            'SELECT COALESCE(fs.devise, \'USD\') AS devise, SUM(ece.montant) AS total
+             FROM ecritures_comptables_eleves ece
+             INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
+             LEFT JOIN frais_scolaires fs ON fs.id = ece.frais_id
+             WHERE ce.eleve_id = :eleve AND ece.type_mouvement = \'CREDIT\'
+             GROUP BY COALESCE(fs.devise, \'USD\')',
+            'SELECT COALESCE(fs.devise, \'USD\') AS devise, SUM(pe.montant_paye) AS total
+             FROM paiements_eleves pe
+             LEFT JOIN frais_scolaires fs ON fs.id = pe.frais_id
+             WHERE pe.eleve_id = :eleve
+             GROUP BY COALESCE(fs.devise, \'USD\')',
+        ];
+
+        foreach ($queries as $query) {
+            try {
+                $stmt = $db->prepare($query);
+                $stmt->execute([':eleve' => $eleveId]);
+                foreach ($stmt->fetchAll(\PDO::FETCH_ASSOC) as $row) {
+                    $currency = strtoupper(trim($row['devise'] ?? 'USD')) ?: 'USD';
+                    $totals[$currency] = max($totals[$currency] ?? 0.0, (float) ($row['total'] ?? 0));
+                }
+            } catch (\Throwable $e) {
+                // Keep the totals available if a legacy table is unavailable.
+            }
+        }
+        ksort($totals);
+        return $totals;
+    }
+
+    private function getEntryTotalsByCurrency(int $eleveId): array
+    {
+        $db = \App\Core\Database::getConnection();
+        $totals = [];
+        $queries = [
+            'SELECT ece.type_mouvement, COALESCE(fs.devise, \'USD\') AS devise, SUM(ece.montant) AS total
+             FROM ecritures_comptables_eleves ece
+             INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
+             LEFT JOIN frais_scolaires fs ON fs.id = ece.frais_id
+             WHERE ce.eleve_id = :eleve GROUP BY ece.type_mouvement, COALESCE(fs.devise, \'USD\')',
+            'SELECT \'CREDIT\' AS type_mouvement, COALESCE(fs.devise, \'USD\') AS devise, SUM(pe.montant_paye) AS total
+             FROM paiements_eleves pe
+             LEFT JOIN frais_scolaires fs ON fs.id = pe.frais_id
+             WHERE pe.eleve_id = :eleve GROUP BY COALESCE(fs.devise, \'USD\')',
+        ];
+
+        foreach ($queries as $query) {
+            try {
+                $stmt = $db->prepare($query);
+                $stmt->execute([':eleve' => $eleveId]);
+                foreach ($stmt->fetchAll(\PDO::FETCH_ASSOC) as $row) {
+                    $type = strtoupper((string) ($row['type_mouvement'] ?? ''));
+                    $currency = strtoupper(trim($row['devise'] ?? 'USD')) ?: 'USD';
+                    if ($type === '') {
+                        continue;
+                    }
+                    $totals[$currency][$type] = max($totals[$currency][$type] ?? 0.0, (float) ($row['total'] ?? 0));
+                }
+            } catch (\Throwable $e) {
+                // Keep accounting totals available when the legacy table is absent.
+            }
+        }
+        ksort($totals);
+        return $totals;
     }
 
     

@@ -18,6 +18,10 @@
 
 <section class="content">
   <div class="container-fluid">
+    <?php if (!empty($_SESSION['paiements_success'])): ?>
+      <div class="alert alert-success"><?= htmlspecialchars($_SESSION['paiements_success']) ?></div>
+      <?php unset($_SESSION['paiements_success']); ?>
+    <?php endif; ?>
     <div class="row mb-3">
       <div class="col-md-4">
         <div class="input-group">
@@ -108,6 +112,9 @@
                       <td data-key="agent_fonction"><?= htmlspecialchars($p['agent_fonction'] ?? '') ?></td>
                       <td>
                         <a href="<?= BASE_URL ?>/paiements/receipt?id=<?= urlencode($p['id']) ?>" class="btn btn-sm btn-outline-primary">Reçu</a>
+                        <?php if (!empty($canManageAccounting) && strpos((string) ($p['id'] ?? ''), 'legacy-') !== 0): ?>
+                          <a href="<?= BASE_URL ?>/paiements/edit?id=<?= urlencode($p['id']) ?>" class="btn btn-sm btn-outline-warning">Modifier</a>
+                        <?php endif; ?>
                       </td>
                     </tr>
                   <?php endforeach; ?>
@@ -137,6 +144,7 @@
       document.addEventListener('DOMContentLoaded', function () {
         const initialEleveId = <?= json_encode($eleveId ?? null) ?>;
         const initialFraisId = <?= json_encode($fraisId ?? null) ?>;
+        const canManageAccounting = <?= !empty($canManageAccounting) ? 'true' : 'false' ?>;
         const searchInput = document.getElementById('paymentSearch');
         const eleveFilterSelect = document.getElementById('eleveFilter');
         const fraisFilterSelect = document.getElementById('fraisFilter');
@@ -314,7 +322,7 @@
                 <td data-key="nom_compte">${p.nom_compte || ''}</td>
                 <td data-key="agent_nom">${p.agent_nom || ''}</td>
                 <td data-key="agent_fonction">${p.agent_fonction || ''}</td>
-                <td><a href="<?= BASE_URL ?>/paiements/receipt?id=${encodeURIComponent(p.id)}" class="btn btn-sm btn-outline-primary">Reçu</a></td>
+                <td><a href="<?= BASE_URL ?>/paiements/receipt?id=${encodeURIComponent(p.id)}" class="btn btn-sm btn-outline-primary">Reçu</a>${canManageAccounting && !String(p.id).startsWith('legacy-') ? ` <a href="<?= BASE_URL ?>/paiements/edit?id=${encodeURIComponent(p.id)}" class="btn btn-sm btn-outline-warning">Modifier</a>` : ''}</td>
               `;
               return tr;
             });

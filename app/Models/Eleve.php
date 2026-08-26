@@ -217,8 +217,9 @@ class Eleve
     {
         $db = Database::getConnection();
         $stmt = $db->prepare(
-            'SELECT ece.* FROM ecritures_comptables_eleves ece '
+            'SELECT ece.*, fs.devise AS frais_devise FROM ecritures_comptables_eleves ece '
             . 'INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id '
+            . 'LEFT JOIN frais_scolaires fs ON fs.id = ece.frais_id '
             . 'WHERE ce.eleve_id = :eleve'
         );
         $stmt->execute([':eleve' => $eleveId]);
@@ -227,7 +228,7 @@ class Eleve
         try {
             $legacyStmt = $db->prepare(
                 'SELECT pe.id AS legacy_id, pe.eleve_id, pe.frais_id, pe.montant_paye AS montant, pe.date_paiement AS date_operation, '
-                . 'COALESCE(fs.type_frais, "Paiement") AS libelle '
+                . 'COALESCE(fs.type_frais, "Paiement") AS libelle, fs.devise AS frais_devise '
                 . 'FROM paiements_eleves pe '
                 . 'LEFT JOIN frais_scolaires fs ON pe.frais_id = fs.id '
                 . 'WHERE pe.eleve_id = :eleve'
@@ -247,6 +248,7 @@ class Eleve
                     'date_operation' => $legacy['date_operation'] ?? null,
                     'libelle' => $legacy['libelle'] ?? 'Paiement',
                     'agent_saisie_id' => null,
+                    'frais_devise' => $legacy['frais_devise'] ?? 'USD',
                 ];
             }
         } catch (\Throwable $e) {
@@ -256,6 +258,29 @@ class Eleve
         $dedupedRecords = [];
         $seenKeys = [];
         foreach ($records as $record) {
+            // A payment mirrored in the legacy table has no receipt reference.
+            // Ignore that copy when the accounting entry already exists.
+            if (strtoupper((string) ($record['type_mouvement'] ?? '')) === 'CREDIT'
+                && strpos((string) ($record['id'] ?? ''), 'legacy-') === 0) {
+                $recordTime = strtotime((string) ($record['date_operation'] ?? ''));
+                $isMirror = false;
+                foreach ($dedupedRecords as $existing) {
+                    if (strtoupper((string) ($existing['type_mouvement'] ?? '')) !== 'CREDIT'
+                        || strpos((string) ($existing['id'] ?? ''), 'legacy-') === 0
+                        || (int) ($existing['frais_id'] ?? 0) !== (int) ($record['frais_id'] ?? 0)
+                        || abs((float) ($existing['montant'] ?? 0) - (float) ($record['montant'] ?? 0)) > 0.001) {
+                        continue;
+                    }
+                    $existingTime = strtotime((string) ($existing['date_operation'] ?? ''));
+                    if ($recordTime !== false && $existingTime !== false && abs($recordTime - $existingTime) <= 2) {
+                        $isMirror = true;
+                        break;
+                    }
+                }
+                if ($isMirror) {
+                    continue;
+                }
+            }
             $key = implode('|', [
                 trim((string) ($record['date_operation'] ?? '')),
                 trim((string) ($record['frais_id'] ?? '')),

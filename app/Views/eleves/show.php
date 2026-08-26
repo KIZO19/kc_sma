@@ -1,4 +1,9 @@
 <?php require __DIR__ . '/../partials/app_header.php'; ?>
+<?php
+$totalPaidByCurrency = $totalPaidByCurrency ?? [];
+$totalDebtByCurrency = $totalDebtByCurrency ?? [];
+$entryTotalsByCurrency = $entryTotalsByCurrency ?? [];
+?>
       <section class="content-header">
         <div class="container-fluid">
           <div class="row mb-2">
@@ -57,8 +62,23 @@
                 <div class="card-header"><h3 class="card-title">Situation comptable</h3></div>
                 <div class="card-body">
                   <?php if (!empty($compte)): ?>
-                    <p><strong>Total payé :</strong> <?= number_format((float) ($totalPaid ?? 0), 2) ?></p>
-                    <p><strong>Dette de l'élève :</strong> <?= number_format(max(0, (float) ($compte['solde_debiteur'] ?? 0)), 2) ?></p>
+                    <?php $currencies = array_unique(array_merge(array_keys($totalPaidByCurrency), array_keys($totalDebtByCurrency), ['USD'])); sort($currencies); ?>
+                    <div class="table-responsive">
+                      <table class="table table-sm table-bordered mb-3">
+                        <thead>
+                          <tr><th>Devise</th><th>Total payé</th><th>Dette restante</th></tr>
+                        </thead>
+                        <tbody>
+                          <?php foreach ($currencies as $currency): ?>
+                            <tr>
+                              <td><strong><?= htmlspecialchars($currency) ?></strong></td>
+                              <td><?= number_format((float) ($totalPaidByCurrency[$currency] ?? 0), 2, ',', ' ') ?></td>
+                              <td><?= number_format((float) ($totalDebtByCurrency[$currency] ?? 0), 2, ',', ' ') ?></td>
+                            </tr>
+                          <?php endforeach; ?>
+                        </tbody>
+                      </table>
+                    </div>
                     <?php if (!empty($dettes)): ?>
                       <div class="table-responsive mt-3">
                         <table class="table table-sm table-bordered">
@@ -157,19 +177,37 @@
               <div class="card card-outline card-light">
                 <div class="card-header"><h3 class="card-title">Écritures comptables</h3></div>
                 <div class="card-body" id="ecritures">
+                  <?php if (!empty($entryTotalsByCurrency)): ?>
+                    <div class="table-responsive mb-3">
+                      <table class="table table-sm table-bordered mb-0">
+                        <thead><tr><th>Devise</th><th>Total débit</th><th>Total crédit</th></tr></thead>
+                        <tbody>
+                          <?php foreach ($entryTotalsByCurrency as $currency => $totals): ?>
+                            <tr>
+                              <td><strong><?= htmlspecialchars($currency) ?></strong></td>
+                              <td><?= number_format((float) ($totals['DEBIT'] ?? 0), 2, ',', ' ') ?></td>
+                              <td><?= number_format((float) ($totals['CREDIT'] ?? 0), 2, ',', ' ') ?></td>
+                            </tr>
+                          <?php endforeach; ?>
+                        </tbody>
+                      </table>
+                    </div>
+                  <?php endif; ?>
                   <?php if (empty($ecritures)): ?>
                     <div class="alert alert-info">Aucune écriture comptable trouvée.</div>
                   <?php else: ?>
                     <div class="table-responsive">
                       <table class="table table-sm table-striped">
-                        <thead><tr><th>#</th><th>Date</th><th>Type</th><th>Montant</th><th>Libellé</th></tr></thead>
+                        <thead><tr><th>#</th><th>Date</th><th>Type</th><th>Montant</th><th>Devise</th><th>Référence</th><th>Libellé</th></tr></thead>
                         <tbody>
                           <?php foreach ($ecritures as $i => $ec): ?>
                             <tr>
                               <td><?= $i+1 ?></td>
                               <td><?= htmlspecialchars(formatDate($ec['date_operation'] ?? null)) ?></td>
-                              <td><?= htmlspecialchars($ec['type_mouvement'] ?? '') ?></td>
-                              <td><?= htmlspecialchars(number_format((float) ($ec['montant'] ?? 0), 2)) ?></td>
+                              <td><span class="badge <?= (($ec['type_mouvement'] ?? '') === 'CREDIT') ? 'bg-success' : 'bg-danger' ?>"><?= htmlspecialchars($ec['type_mouvement'] ?? '') ?></span></td>
+                              <td><?= htmlspecialchars(number_format((float) ($ec['montant'] ?? 0), 2, ',', ' ')) ?></td>
+                              <td><?= htmlspecialchars($ec['frais_devise'] ?? 'USD') ?></td>
+                              <td><?= htmlspecialchars($ec['reference_recu'] ?? '-') ?></td>
                               <td><?= htmlspecialchars($ec['libelle'] ?? '') ?></td>
                             </tr>
                           <?php endforeach; ?>

@@ -805,6 +805,116 @@ class PaiementsController extends Controller
         exit;
     }
 
+    public function edit(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin', 'comptable_école']);
+        $user = Auth::refresh() ?: Auth::user();
+        if (($user['role'] ?? '') !== 'comptable_école') {
+            $this->redirect('/paiements');
+            return;
+        }
+
+        $id = (int) ($_GET['id'] ?? 0);
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            'SELECT ece.*, ce.eleve_id, el.nom, el.postnom, el.prenom, fs.type_frais, fs.devise, cb.nom_compte AS caisse_name
+             FROM ecritures_comptables_eleves ece
+             INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
+             INNER JOIN eleves el ON el.id = ce.eleve_id
+             LEFT JOIN frais_scolaires fs ON fs.id = ece.frais_id
+             LEFT JOIN caisses_banques cb ON cb.id = ece.caisse_banque_id
+             WHERE ece.id = :id AND ece.type_mouvement = \'CREDIT\' LIMIT 1'
+        );
+        $stmt->execute([':id' => $id]);
+        $payment = $stmt->fetch(\PDO::FETCH_ASSOC);
+        if (!$payment) {
+            $this->redirect('/paiements');
+            return;
+        }
+
+        $caisseStmt = $db->prepare('SELECT * FROM caisses_banques WHERE ecole_id = :ecole_id OR ecole_id IS NULL');
+        $caisseStmt->execute([':ecole_id' => $user['ecole_id'] ?? 0]);
+        $this->view('paiements/edit', [
+            'title' => APP_NAME . ' - Modifier paiement',
+            'user' => $user,
+            'role' => $user['role'] ?? 'default',
+            'roleLabel' => User::getRoleLabel($user['role'] ?? 'default'),
+            'modules' => $this->getModulesForRole($user['role'] ?? 'default'),
+            'payment' => $payment,
+            'caisses' => $caisseStmt->fetchAll(\PDO::FETCH_ASSOC),
+        ]);
+    }
+
+    public function update(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin', 'comptable_école']);
+        $user = Auth::refresh() ?: Auth::user();
+        if (($user['role'] ?? '') !== 'comptable_école') {
+            $this->redirect('/paiements');
+            return;
+        }
+
+        $id = (int) ($_POST['id'] ?? 0);
+        $newAmount = (float) ($_POST['montant'] ?? 0);
+        $newLabel = trim((string) ($_POST['libelle'] ?? 'Paiement élève'));
+        $newCaisseId = !empty($_POST['caisse_id']) ? (int) $_POST['caisse_id'] : null;
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        try {
+            $stmt = $db->prepare(
+                'SELECT ece.*, ce.eleve_id FROM ecritures_comptables_eleves ece
+                 INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
+                 WHERE ece.id = :id AND ece.type_mouvement = \'CREDIT\' FOR UPDATE'
+            );
+            $stmt->execute([':id' => $id]);
+            $payment = $stmt->fetch(\PDO::FETCH_ASSOC);
+            if (!$payment || $newAmount <= 0) {
+                throw new \RuntimeException('Paiement ou montant invalide.');
+            }
+
+            $oldAmount = (float) $payment['montant'];
+            $delta = $newAmount - $oldAmount;
+            $dette = DetteEleve::findByEleveAndFrais((int) $payment['eleve_id'], (int) $payment['frais_id']);
+            if ($dette) {
+                $available = (float) $dette['montant_restant'] + $oldAmount;
+                if ($newAmount > $available) {
+                    throw new \RuntimeException('Le nouveau montant dépasse le reste à payer de ce frais.');
+                }
+            }
+
+            $update = $db->prepare('UPDATE ecritures_comptables_eleves SET montant = :montant, libelle = :libelle, caisse_banque_id = :caisse WHERE id = :id');
+            $update->execute([':montant' => $newAmount, ':libelle' => $newLabel, ':caisse' => $newCaisseId, ':id' => $id]);
+
+            // Keep the mirrored legacy row synchronized when it can be identified.
+            $legacy = $db->prepare('SELECT pe.id FROM paiements_eleves pe WHERE pe.eleve_id = :eleve AND pe.frais_id = :frais AND ABS(pe.montant_paye - :montant) < 0.001 ORDER BY ABS(TIMESTAMPDIFF(SECOND, pe.date_paiement, :date_operation)) ASC LIMIT 1');
+            $legacy->execute([':eleve' => $payment['eleve_id'], ':frais' => $payment['frais_id'], ':montant' => $oldAmount, ':date_operation' => $payment['date_operation']]);
+            $legacyId = $legacy->fetchColumn();
+            if ($legacyId) {
+                $legacyUpdate = $db->prepare('UPDATE paiements_eleves SET montant_paye = :montant WHERE id = :id');
+                $legacyUpdate->execute([':montant' => $newAmount, ':id' => $legacyId]);
+            }
+
+            if (abs($delta) > 0.0001) {
+                $account = $db->prepare('UPDATE comptes_eleves SET solde_debiteur = solde_debiteur - :delta WHERE id = :id');
+                $account->execute([':delta' => $delta, ':id' => $payment['compte_eleve_id']]);
+                if ($dette) {
+                    $debtUpdate = $db->prepare('UPDATE dettes_eleves SET montant_restant = GREATEST(0, montant_restant - :delta) WHERE id = :id');
+                    $debtUpdate->execute([':delta' => $delta, ':id' => $dette['id']]);
+                }
+            }
+            $db->commit();
+            $_SESSION['paiements_success'] = 'Paiement modifié avec succès.';
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            $_SESSION['paiements_errors'] = [$e->getMessage()];
+        }
+        $this->redirect('/paiements');
+    }
+
     public function receipt(): void
     {
         Auth::requireAuth();
