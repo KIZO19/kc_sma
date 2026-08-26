@@ -82,6 +82,85 @@
             </div>
           </div>
 
+          <?php if (($role ?? '') === 'comptable_école'): ?>
+          <div class="row mt-3">
+            <div class="col-lg-4 col-md-6 mb-4">
+              <div class="card text-white bg-danger h-100">
+                <div class="card-body">
+                  <h5 class="card-title">Total dette</h5>
+                  <h3 class="card-text"><?= number_format($dashboardData['accounting']['totalOutstanding'] ?? 0, 2) ?> FCFA</h3>
+                  <p class="small">Somme des soldes débiteurs (année active)</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-lg-4 col-md-6 mb-4">
+              <div class="card text-white bg-success h-100">
+                <div class="card-body">
+                  <h5 class="card-title">Paiements (30j)</h5>
+                  <h3 class="card-text"><?= number_format($dashboardData['accounting']['payments30d'] ?? 0, 2) ?> FCFA</h3>
+                  <p class="small">Total des paiements reçus (30 derniers jours)</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-lg-4 col-md-12 mb-4">
+              <div class="card h-100">
+                <div class="card-body">
+                  <h5 class="card-title">Actions rapides</h5>
+                  <a href="<?= BASE_URL ?>/paiements/create" class="btn btn-primary btn-sm mb-2">Enregistrer paiement</a>
+                  <a href="<?= BASE_URL ?>/frais/create" class="btn btn-secondary btn-sm mb-2">Créer un frais</a>
+                  <a href="<?= BASE_URL ?>/comptes_eleves" class="btn btn-info btn-sm mb-2">Voir comptes élèves</a>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-lg-6">
+              <div class="card">
+                <div class="card-header bg-light">Paiements récents</div>
+                <div class="card-body p-0">
+                  <table class="table table-striped mb-0">
+                    <thead>
+                      <tr><th>Réf</th><th>Élève</th><th>Date</th><th>Montant</th></tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($dashboardData['accounting']['recentPayments'] ?? [] as $p): ?>
+                      <tr>
+                        <td><?= htmlspecialchars($p['reference_recu'] ?? '') ?></td>
+                        <td><?= htmlspecialchars(trim(($p['prenom'] ?? '') . ' ' . ($p['nom'] ?? '') . ' ' . ($p['postnom'] ?? ''))) ?></td>
+                        <td><?= htmlspecialchars($p['date_operation'] ?? '') ?></td>
+                        <td><?= number_format((float) ($p['montant'] ?? 0), 2) ?></td>
+                      </tr>
+                    <?php endforeach; ?>
+                    <?php if (empty($dashboardData['accounting']['recentPayments'])): ?>
+                      <tr><td colspan="4" class="text-center text-muted">Aucun paiement récent.</td></tr>
+                    <?php endif; ?>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            <div class="col-lg-6">
+              <div class="card">
+                <div class="card-header bg-light">Top débiteurs</div>
+                <div class="card-body p-0">
+                  <ul class="list-group list-group-flush">
+                    <?php foreach ($dashboardData['accounting']['topDebtors'] ?? [] as $d): ?>
+                      <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div><?= htmlspecialchars(trim(($d['prenom'] ?? '') . ' ' . ($d['nom'] ?? '') . ' ' . ($d['postnom'] ?? ''))) ?></div>
+                        <span class="badge bg-danger"><?= number_format((float) ($d['debt'] ?? 0), 2) ?></span>
+                      </li>
+                    <?php endforeach; ?>
+                    <?php if (empty($dashboardData['accounting']['topDebtors'])): ?>
+                      <li class="list-group-item text-center text-muted">Aucun débiteur trouvé.</li>
+                    <?php endif; ?>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+          <?php endif; ?>
+
           <div class="row">
             <?php foreach ($modules as $module): ?>
               <div class="col-lg-3 col-md-4 col-sm-6 mb-4">

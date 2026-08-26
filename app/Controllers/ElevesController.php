@@ -85,4 +85,10 @@ class ElevesController extends Controller
             'discipline' => $discipline,
         ]);
     }
+
+    // Backwards-compatible alias for routes using /eleves/view
+    public function view(): void
+    {
+        $this->show();
+    }
 }

@@ -58,7 +58,7 @@ class Router
 
         $controller = new $controllerClass();
 
-        if (!method_exists($controller, $actionName)) {
+        if (!is_callable([$controller, $actionName])) {
             if ($controllerClass !== $fallbackController) {
                 $controller = new $fallbackController();
             }

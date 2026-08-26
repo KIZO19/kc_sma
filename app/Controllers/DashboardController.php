@@ -40,11 +40,95 @@ class DashboardController extends Controller
         $table = $this->getTableDataForRole($role);
         $insights = $this->getRoleInsights($role, $user);
 
-        return [
+        $data = [
             'stats' => $stats,
             'chart' => $chart,
             'table' => $table,
             'insights' => $insights,
+        ];
+
+        if ($role === 'comptable_école') {
+            $data['accounting'] = $this->getAccountingData($user);
+        }
+
+        return $data;
+    }
+
+    private function getAccountingData(array $user): array
+    {
+        $db = Database::getConnection();
+        $ecole = (int) ($user['ecole_id'] ?? 0);
+        $params = [];
+
+        $schoolFilter = '';
+        if (($user['role'] ?? '') !== 'super_admin' && $ecole > 0) {
+            $schoolFilter = 'AND (el.ecole_id = :ecole OR EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id WHERE i.eleve_id = el.id AND c.ecole_id = :ecole))';
+            $params[':ecole'] = $ecole;
+        }
+
+        // Total outstanding (active school year)
+        try {
+            $sql = 'SELECT COALESCE(SUM(ce.solde_debiteur),0) FROM comptes_eleves ce INNER JOIN eleves el ON ce.eleve_id = el.id INNER JOIN annees_scolaires a ON ce.annee_scolaire_id = a.id AND a.est_active = 1 WHERE 1=1 ' . $schoolFilter;
+            $stmt = $db->prepare($sql);
+            foreach ($params as $k => $v) {
+                $stmt->bindValue($k, $v, \PDO::PARAM_INT);
+            }
+            $stmt->execute();
+            $totalOutstanding = (float) ($stmt->fetchColumn() ?: 0);
+        } catch (\Throwable $e) {
+            $totalOutstanding = 0.0;
+        }
+
+        // Total payments last 30 days
+        try {
+            $since = date('Y-m-d H:i:s', strtotime('-30 days'));
+            $sql = 'SELECT COALESCE(SUM(ece.montant),0) FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id INNER JOIN eleves el ON ce.eleve_id = el.id WHERE ece.type_mouvement = :type AND ece.date_operation >= :since ' . $schoolFilter;
+            $stmt = $db->prepare($sql);
+            $stmt->bindValue(':type', 'CREDIT');
+            $stmt->bindValue(':since', $since);
+            foreach ($params as $k => $v) {
+                $stmt->bindValue($k, $v, \PDO::PARAM_INT);
+            }
+            $stmt->execute();
+            $payments30d = (float) ($stmt->fetchColumn() ?: 0);
+        } catch (\Throwable $e) {
+            $payments30d = 0.0;
+        }
+
+        // Recent payments (limit 10)
+        $recentPayments = [];
+        try {
+            $sql = 'SELECT ece.id, ece.reference_recu, ece.date_operation, ece.montant, ece.libelle, el.id AS eleve_id, el.nom, el.postnom, el.prenom, cb.nom_compte FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id INNER JOIN eleves el ON ce.eleve_id = el.id LEFT JOIN caisses_banques cb ON ece.caisse_banque_id = cb.id WHERE ece.type_mouvement = :type ' . $schoolFilter . ' ORDER BY ece.date_operation DESC LIMIT 10';
+            $stmt = $db->prepare($sql);
+            $stmt->bindValue(':type', 'CREDIT');
+            foreach ($params as $k => $v) {
+                $stmt->bindValue($k, $v, \PDO::PARAM_INT);
+            }
+            $stmt->execute();
+            $recentPayments = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {
+            $recentPayments = [];
+        }
+
+        // Top debtors
+        $topDebtors = [];
+        try {
+            $sql = 'SELECT el.id AS eleve_id, el.nom, el.postnom, el.prenom, SUM(ce.solde_debiteur) AS debt FROM comptes_eleves ce INNER JOIN eleves el ON ce.eleve_id = el.id INNER JOIN annees_scolaires a ON ce.annee_scolaire_id = a.id AND a.est_active = 1 WHERE ce.solde_debiteur > 0 ' . $schoolFilter . ' GROUP BY el.id ORDER BY debt DESC LIMIT 10';
+            $stmt = $db->prepare($sql);
+            foreach ($params as $k => $v) {
+                $stmt->bindValue($k, $v, \PDO::PARAM_INT);
+            }
+            $stmt->execute();
+            $topDebtors = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {
+            $topDebtors = [];
+        }
+
+        return [
+            'totalOutstanding' => $totalOutstanding,
+            'payments30d' => $payments30d,
+            'recentPayments' => $recentPayments,
+            'topDebtors' => $topDebtors,
         ];
     }
 
