@@ -47,6 +47,11 @@
           </div>
 
           <div class="mb-3">
+            <label class="form-label">Encodage (code unique)</label>
+            <input class="form-control" name="encodage" value="<?= htmlspecialchars($old['encodage'] ?? $fee['encodage'] ?? '') ?>" required>
+          </div>
+
+          <div class="mb-3">
             <label class="form-label">Année scolaire</label>
             <select name="annee_scolaire_id" class="form-select">
               <?php foreach ($years as $y): ?>

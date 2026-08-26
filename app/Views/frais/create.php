@@ -58,6 +58,10 @@ $defaultYearId = $defaultYearId ?? 0;
                       <input type="number" name="montant_total" class="form-control" required step="0.01" min="0" value="<?= htmlspecialchars($oldInput['montant_total'] ?? '') ?>">
                     </div>
                     <div class="mb-3">
+                      <label class="form-label">Encodage (code unique)</label>
+                      <input type="text" name="encodage" class="form-control" required value="<?= htmlspecialchars($oldInput['encodage'] ?? '') ?>" placeholder="ex: FRAIS-2026-001">
+                    </div>
+                    <div class="mb-3">
                       <label class="form-label">Portée</label>
                       <select id="scopeSelect" name="scope" class="form-select">
                         <option value="class" <?= (($oldInput['scope'] ?? 'class') === 'class') ? 'selected' : '' ?>>Classe</option>

@@ -91,6 +91,7 @@ class FraisController extends Controller
             $ecoleId = (int) ($user['ecole_id'] ?? 0);
             $typeFrais = trim($_POST['type_frais'] ?? '');
             $montantTotal = trim($_POST['montant_total'] ?? '');
+            $encodage = trim($_POST['encodage'] ?? '');
             $classeId = (int) ($_POST['classe_id'] ?? 0);
             $anneeScolaireId = (int) ($_POST['annee_scolaire_id'] ?? 0);
             $scope = trim($_POST['scope'] ?? 'class');
@@ -154,6 +155,27 @@ class FraisController extends Controller
             } elseif (!array_key_exists($devise, $this->getCurrencyOptions())) {
                 $errors[] = 'La devise sélectionnée est invalide.';
             }
+            // encodage must be provided and unique per school
+            if ($encodage === '') {
+                $errors[] = 'L\'encodage du frais est requis.';
+            } else {
+                // basic sanitization: no spaces
+                if (preg_match('/\s/', $encodage)) {
+                    $errors[] = 'L\'encodage ne doit pas contenir d\'espaces.';
+                }
+            }
+
+            if (empty($errors)) {
+                // ensure encodage uniqueness
+                try {
+                    if (FraisScolaire::existsEncodage($encodage, $ecoleId)) {
+                        $errors[] = 'Un frais avec cet encodage existe déjà pour votre école.';
+                    }
+                } catch (\PDOException $e) {
+                    // Likely migration not applied (encodage column missing)
+                    $errors[] = 'La base de données nécessite une migration pour prendre en charge l\'encodage; exécutez app/Config/migration_add_encodage_to_frais.sql';
+                }
+            }
 
             if (empty($errors)) {
                 try {
@@ -165,6 +187,7 @@ class FraisController extends Controller
                     'devise' => $devise,
                     'scope' => $scope,
                     'scope_id' => $scope === 'class' ? $classeId : ($scope === 'option' || $scope === 'section' ? $scopeId : null),
+                    'encodage' => $encodage,
                     'ecole_id' => $ecoleId,
                     ]);
                 } catch (\PDOException $e) {
@@ -362,6 +385,7 @@ class FraisController extends Controller
         $id = (int) ($_POST['id'] ?? 0);
         $typeFrais = trim($_POST['type_frais'] ?? '');
         $montantTotal = trim($_POST['montant_total'] ?? '');
+        $encodage = trim($_POST['encodage'] ?? '');
         $classeId = (int) ($_POST['classe_id'] ?? 0);
         $anneeScolaireId = (int) ($_POST['annee_scolaire_id'] ?? 0);
         $scope = trim($_POST['scope'] ?? 'class');
@@ -389,6 +413,33 @@ class FraisController extends Controller
 
         if (!empty($errors)) {
             $_SESSION['frais_errors'] = $errors;
+            $_SESSION['frais_old'] = $_POST;
+            $this->redirect('/frais/edit?id=' . $id);
+            return;
+        }
+
+        // validate encodage uniqueness on update
+        if ($encodage === '') {
+            $_SESSION['frais_errors'] = ['L\'encodage du frais est requis.'];
+            $_SESSION['frais_old'] = $_POST;
+            $this->redirect('/frais/edit?id=' . $id);
+            return;
+        }
+        if (preg_match('/\s/', $encodage)) {
+            $_SESSION['frais_errors'] = ['L\'encodage ne doit pas contenir d\'espaces.'];
+            $_SESSION['frais_old'] = $_POST;
+            $this->redirect('/frais/edit?id=' . $id);
+            return;
+        }
+        try {
+            if (FraisScolaire::existsEncodage($encodage, $ecoleId, $id)) {
+                $_SESSION['frais_errors'] = ['Un frais avec cet encodage existe déjà pour votre école.'];
+                $_SESSION['frais_old'] = $_POST;
+                $this->redirect('/frais/edit?id=' . $id);
+                return;
+            }
+        } catch (\PDOException $e) {
+            $_SESSION['frais_errors'] = ['La base de données nécessite une migration pour prendre en charge l\'encodage; exécutez app/Config/migration_add_encodage_to_frais.sql'];
             $_SESSION['frais_old'] = $_POST;
             $this->redirect('/frais/edit?id=' . $id);
             return;
