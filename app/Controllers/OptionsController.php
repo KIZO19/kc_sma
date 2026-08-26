@@ -23,7 +23,13 @@ class OptionsController extends Controller
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
-        $options = Option::getAll();
+        // Only show options relevant to the user's school unless super_admin
+        if (($role === 'super_admin') || ($role === 'ecole_admin' && empty($user['ecole_id']))) {
+            $options = Option::getAll();
+        } else {
+            $ecoleId = (int) ($user['ecole_id'] ?? 0);
+            $options = $ecoleId > 0 ? Option::getAllForSchool($ecoleId) : Option::getAll();
+        }
 
         $this->view('options/index', [
             'title' => APP_NAME . ' - Options',
@@ -103,6 +109,19 @@ class OptionsController extends Controller
             return;
         }
 
+        // Authorization: only allow editing if option is linked to user's school or user is super_admin
+        $user = Auth::refresh() ?: Auth::user();
+        $role = $user['role'] ?? 'default';
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        if ($role !== 'super_admin') {
+            $linked = $ecoleId > 0 ? Option::isLinkedToSchool((int) $option['id'], $ecoleId) : false;
+            if (!$linked) {
+                $_SESSION['options_errors'] = ['Vous n\'êtes pas autorisé(e) à modifier cette option.'];
+                $this->redirect('/options');
+                return;
+            }
+        }
+
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
@@ -148,6 +167,18 @@ class OptionsController extends Controller
             $this->redirect('/options/edit?id=' . $id);
             return;
         }
+        // Authorization: ensure user can update this option
+        $user = Auth::refresh() ?: Auth::user();
+        $role = $user['role'] ?? 'default';
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        if ($role !== 'super_admin') {
+            $linked = $ecoleId > 0 ? Option::isLinkedToSchool($id, $ecoleId) : false;
+            if (!$linked) {
+                $_SESSION['options_errors'] = ['Vous n\'êtes pas autorisé(e) à modifier cette option.'];
+                $this->redirect('/options');
+                return;
+            }
+        }
 
         Option::update($id, ['nom_option' => $nomOption]);
         $_SESSION['options_success'] = 'Option mise à jour.';
@@ -164,6 +195,18 @@ class OptionsController extends Controller
             $_SESSION['options_errors'] = ['Identifiant invalide.'];
             $this->redirect('/options');
             return;
+        }
+        // Authorization: ensure user can delete this option
+        $user = Auth::refresh() ?: Auth::user();
+        $role = $user['role'] ?? 'default';
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        if ($role !== 'super_admin') {
+            $linked = $ecoleId > 0 ? Option::isLinkedToSchool($id, $ecoleId) : false;
+            if (!$linked) {
+                $_SESSION['options_errors'] = ['Vous n\'êtes pas autorisé(e) à supprimer cette option.'];
+                $this->redirect('/options');
+                return;
+            }
         }
 
         Option::delete($id);

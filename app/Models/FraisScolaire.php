@@ -58,16 +58,16 @@ class FraisScolaire
     public static function create(array $data)
     {
         $db = Database::getConnection();
-        // support optional ecole_id field
+        // support optional ecole_id and encodage fields (newer schema)
         if (array_key_exists('ecole_id', $data)) {
             $stmt = $db->prepare(
-                'INSERT INTO frais_scolaires (classe_id, type_frais, montant_total, annee_scolaire_id, devise, scope, scope_id, ecole_id)'
-                . ' VALUES (:classe_id, :type_frais, :montant_total, :annee_scolaire_id, :devise, :scope, :scope_id, :ecole_id)'
+                'INSERT INTO frais_scolaires (classe_id, type_frais, montant_total, annee_scolaire_id, devise, scope, scope_id, ecole_id, encodage)'
+                . ' VALUES (:classe_id, :type_frais, :montant_total, :annee_scolaire_id, :devise, :scope, :scope_id, :ecole_id, :encodage)'
             );
         } else {
             $stmt = $db->prepare(
-                'INSERT INTO frais_scolaires (classe_id, type_frais, montant_total, annee_scolaire_id, devise, scope, scope_id)'
-                . ' VALUES (:classe_id, :type_frais, :montant_total, :annee_scolaire_id, :devise, :scope, :scope_id)'
+                'INSERT INTO frais_scolaires (classe_id, type_frais, montant_total, annee_scolaire_id, devise, scope, scope_id, encodage)'
+                . ' VALUES (:classe_id, :type_frais, :montant_total, :annee_scolaire_id, :devise, :scope, :scope_id, :encodage)'
             );
         }
 
@@ -79,6 +79,7 @@ class FraisScolaire
             ':devise' => $data['devise'],
             ':scope' => $data['scope'] ?? 'class',
             ':scope_id' => $data['scope_id'] ?? null,
+            ':encodage' => $data['encodage'] ?? null,
         ];
         if (array_key_exists('ecole_id', $data)) {
             $params[':ecole_id'] = $data['ecole_id'] ?? null;
@@ -119,11 +120,26 @@ class FraisScolaire
         return $row ?: null;
     }
 
+    public static function existsEncodage(string $encodage, int $ecoleId, ?int $excludeId = null): bool
+    {
+        $db = Database::getConnection();
+        $sql = 'SELECT f.id FROM frais_scolaires f LEFT JOIN classes c ON c.id = f.classe_id LEFT JOIN options ao ON (f.scope = "option" AND ao.id = f.scope_id) LEFT JOIN sections ss ON (f.scope = "section" AND ss.id = f.scope_id) WHERE f.encodage = :encodage AND (f.ecole_id = :ecole_id OR c.ecole_id = :ecole_id OR (f.scope = "option" AND ao.ecole_id = :ecole_id) OR (f.scope = "section" AND ss.ecole_id = :ecole_id))';
+        if ($excludeId !== null) {
+            $sql .= ' AND f.id != :excludeId';
+        }
+        $stmt = $db->prepare($sql);
+        $params = [':encodage' => $encodage, ':ecole_id' => $ecoleId];
+        if ($excludeId !== null) $params[':excludeId'] = $excludeId;
+        $stmt->execute($params);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return (bool) $row;
+    }
+
     public static function update(int $id, array $data): bool
     {
         $db = Database::getConnection();
         $stmt = $db->prepare(
-            'UPDATE frais_scolaires SET classe_id = :classe_id, type_frais = :type_frais, montant_total = :montant_total, annee_scolaire_id = :annee_scolaire_id, devise = :devise, scope = :scope, scope_id = :scope_id, ecole_id = :ecole_id WHERE id = :id'
+            'UPDATE frais_scolaires SET classe_id = :classe_id, type_frais = :type_frais, montant_total = :montant_total, annee_scolaire_id = :annee_scolaire_id, devise = :devise, scope = :scope, scope_id = :scope_id, ecole_id = :ecole_id, encodage = :encodage WHERE id = :id'
         );
 
         $params = [
@@ -135,6 +151,7 @@ class FraisScolaire
             ':scope' => $data['scope'] ?? 'class',
             ':scope_id' => $data['scope_id'] ?? null,
             ':ecole_id' => $data['ecole_id'] ?? null,
+            ':encodage' => $data['encodage'] ?? null,
             ':id' => $id,
         ];
 

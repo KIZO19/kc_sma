@@ -25,6 +25,23 @@ class Option
         return $option ?: null;
     }
 
+    public static function getAllForSchool(int $ecoleId): array
+    {
+        $db = Database::getConnection();
+        // Return options that are linked to classes of the given school
+        $stmt = $db->prepare('SELECT DISTINCT o.id, o.nom_option FROM options o JOIN classes c ON c.option_id = o.id WHERE c.ecole_id = :ecoleId ORDER BY o.nom_option ASC');
+        $stmt->execute([':ecoleId' => $ecoleId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function isLinkedToSchool(int $optionId, int $ecoleId): bool
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare('SELECT 1 FROM classes WHERE option_id = :optionId AND ecole_id = :ecoleId LIMIT 1');
+        $stmt->execute([':optionId' => $optionId, ':ecoleId' => $ecoleId]);
+        return (bool) $stmt->fetchColumn();
+    }
+
     public static function create(array $data): bool
     {
         $db = Database::getConnection();
