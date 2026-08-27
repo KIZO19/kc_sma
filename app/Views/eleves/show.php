@@ -56,6 +56,9 @@ $entryTotalsByCurrency = $entryTotalsByCurrency ?? [];
                     <p><strong>Date de naissance:</strong> <?= htmlspecialchars(formatDate($dobRaw ?? null)) ?> <small class="text-muted">(Âge: <?= htmlspecialchars($ageDisplay) ?>)</small></p>
                   <p><strong>Adresse:</strong> <?= nl2br(htmlspecialchars($eleve['adresse'] ?? '-')) ?></p>
                   <p><strong>Parent/Tuteur:</strong> <?= htmlspecialchars($eleve['nom_pere'] ?? ($eleve['parent_nom_responsable'] ?? '-')) ?></p>
+                  <?php if (in_array($role, ['super_admin', 'comptable_école', 'préfet_école', 'sec_école'], true)): ?>
+                    <a href="<?= BASE_URL ?>/inscriptions/edit?id=<?= (int) ($eleve['id'] ?? 0) ?>" class="btn btn-sm btn-outline-primary">Modifier l’identité</a>
+                  <?php endif; ?>
                 </div>
               </div>
 

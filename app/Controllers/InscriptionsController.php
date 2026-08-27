@@ -26,6 +26,8 @@ class InscriptionsController extends Controller
         'DA_école',
     ];
 
+    private const IDENTITY_EDIT_ROLES = ['super_admin', 'comptable_école', 'préfet_école', 'sec_école'];
+
     public function index(): void
     {
         Auth::requireAuth();
@@ -51,7 +53,7 @@ class InscriptionsController extends Controller
             'sections' => $sections,
             'options' => $options,
             'canSubmit' => in_array($role, self::SUBMISSION_ROLES, true),
-            'canEdit' => in_array($role, self::SUBMISSION_ROLES, true),
+            'canEdit' => in_array($role, self::IDENTITY_EDIT_ROLES, true),
             'canApprove' => in_array($role, ['super_admin', 'sec_école', 'préfet_école', 'DP_école', 'comptable_école'], true),
         ]);
     }
@@ -433,7 +435,7 @@ class InscriptionsController extends Controller
     public function edit(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(self::SUBMISSION_ROLES);
+        Auth::requireRoles(self::IDENTITY_EDIT_ROLES);
 
         $eleveId = (int) ($_GET['id'] ?? 0);
         if ($eleveId <= 0) {
@@ -470,7 +472,7 @@ class InscriptionsController extends Controller
     public function update(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(self::SUBMISSION_ROLES);
+        Auth::requireRoles(self::IDENTITY_EDIT_ROLES);
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $eleveId = (int) ($_POST['eleve_id'] ?? 0);
