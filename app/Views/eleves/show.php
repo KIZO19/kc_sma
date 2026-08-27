@@ -33,6 +33,7 @@ $entryTotalsByCurrency = $entryTotalsByCurrency ?? [];
                   <p><strong>Nom:</strong> <?= htmlspecialchars($eleve['nom'] ?? '-') ?></p>
                   <p><strong>Postnom:</strong> <?= htmlspecialchars($eleve['postnom'] ?? '-') ?></p>
                   <p><strong>Prénom:</strong> <?= htmlspecialchars($eleve['prenom'] ?? '-') ?></p>
+                  <p><strong>Classe:</strong> <?= htmlspecialchars($currentClass ?? '-') ?></p>
                     <?php
                     $dobRaw = $eleve['date_naissance'] ?? null;
                     $ageDisplay = '-';

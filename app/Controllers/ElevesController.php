@@ -58,6 +58,16 @@ class ElevesController extends Controller
         }
 
         $compte = \App\Models\Eleve::getAccount($eleveId);
+        $currentClass = null;
+        try {
+            $classStmt = \App\Core\Database::getConnection()->prepare(
+                'SELECT c.nom_classe FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id WHERE i.eleve_id = :eleve ORDER BY i.date_inscription DESC, i.id DESC LIMIT 1'
+            );
+            $classStmt->execute([':eleve' => $eleveId]);
+            $currentClass = $classStmt->fetchColumn() ?: null;
+        } catch (\Throwable $e) {
+            $currentClass = null;
+        }
         $ecritures = \App\Models\Eleve::getAccountingEntries($eleveId);
         $totalPaid = 0.0;
         foreach ($ecritures as $ec) {
@@ -84,6 +94,7 @@ class ElevesController extends Controller
             'modules' => $this->getModulesForRole($user['role'] ?? 'default'),
             'eleve' => $eleve,
             'compte' => $compte,
+            'currentClass' => $currentClass,
             'ecritures' => $ecritures,
             'dettes' => $dettes,
             'totalPaid' => $totalPaid,
