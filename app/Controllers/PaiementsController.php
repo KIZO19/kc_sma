@@ -11,6 +11,7 @@ use App\Models\FraisScolaire;
 use App\Models\Classe;
 use App\Models\User;
 use App\Models\Eleve as EleveModel;
+use App\Services\PaymentParentNotifier;
 
 class PaiementsController extends Controller
 {
@@ -799,6 +800,19 @@ class PaiementsController extends Controller
             }
             header('Location: ' . $redirectUrl);
             exit;
+        }
+
+        try {
+            $notifier = new PaymentParentNotifier();
+            $notifier->notifyAfterPayment(
+                $eleveId,
+                (int) $fraisId,
+                $montant,
+                $libelle,
+                $fee['devise'] ?? 'USD'
+            );
+        } catch (\Throwable $e) {
+            error_log('PaiementsController::store notification failed: ' . $e->getMessage());
         }
 
         header('Location: ' . BASE_URL . '/paiements/receipt?id=' . $ecritureId);

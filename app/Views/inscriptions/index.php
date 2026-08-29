@@ -139,8 +139,16 @@
                               <tr>
                                 <td><?= $index + 1 ?></td>
                                 <td><?= htmlspecialchars($student['matricule'] ?? 'N/A') ?></td>
-                                <td><?= htmlspecialchars($student['nom']) ?></td>
-                                <td><?= htmlspecialchars($student['prenom'] ?? '-') ?></td>
+                                <td>
+                                  <a href="<?= BASE_URL ?>/eleves/show?id=<?= (int) ($student['id'] ?? 0) ?>">
+                                    <?= htmlspecialchars($student['nom'] ?? '-') ?>
+                                  </a>
+                                </td>
+                                <td>
+                                  <a href="<?= BASE_URL ?>/eleves/show?id=<?= (int) ($student['id'] ?? 0) ?>">
+                                    <?= htmlspecialchars($student['prenom'] ?? '-') ?>
+                                  </a>
+                                </td>
                                 <td><?= htmlspecialchars(formatDate($student['date_naissance'] ?? null)) ?></td>
                                 <td><?= htmlspecialchars($student['parent_nom_responsable'] ?? '-') ?></td>
                               </tr>

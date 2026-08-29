@@ -261,6 +261,8 @@ class InscriptionsController extends Controller
                 }
 
                 // After creating the inscription, assign applicable fees to the student's account
+                $appliedFees = [];
+                $appliedTotal = 0.0;
                 try {
                     $db = \App\Core\Database::getConnection();
                     $activeYear = $activeYear ?? AnneeScolaire::getActiveBySchool($ecoleId);
@@ -300,8 +302,6 @@ class InscriptionsController extends Controller
                             $currentBalance = (float) $compte['solde_debiteur'];
                         }
 
-                        $appliedFees = [];
-                        $appliedTotal = 0.0;
                         foreach ($fees as $f) {
                             $apply = false;
                             $scope = $f['scope'] ?? 'class';
