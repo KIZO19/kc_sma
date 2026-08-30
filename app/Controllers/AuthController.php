@@ -78,11 +78,15 @@ class AuthController extends Controller
                 $errors[] = 'Cet identifiant est déjà utilisé.';
             }
 
-            if (!User::isEligibleForRegistration($role, $identifiant)) {
+            $isPendingAgentRegistration = $role === 'agent_ecole';
+            if (!$isPendingAgentRegistration && !User::isEligibleForRegistration($role, $identifiant)) {
                 $errors[] = User::getRegistrationEligibilityError($role, $identifiant);
             }
+            if ($isPendingAgentRegistration && User::existsByIdentifiant($identifiant)) {
+                $errors[] = 'Cet identifiant est déjà utilisé.';
+            }
 
-            if (in_array($role, ['ecole_admin', 'agent_ecole', 'parent_ecole', 'eleve_ecole'], true)) {
+            if (!$isPendingAgentRegistration && in_array($role, ['ecole_admin', 'agent_ecole', 'parent_ecole', 'eleve_ecole'], true)) {
                 $resolvedSchoolId = $ecoleId > 0 ? $ecoleId : User::resolveSchoolIdForRole($role, $identifiant);
                 if ($resolvedSchoolId <= 0) {
                     $errors[] = 'Veuillez sélectionner une école valide pour ce compte.';
@@ -91,14 +95,21 @@ class AuthController extends Controller
 
             if (empty($errors)) {
                 try {
-                    $user = User::create([
+                    $userData = [
                         'nom_complet' => $nomComplet,
                         'identifiant' => $identifiant,
                         'mot_de_passe' => password_hash($motDePasse, PASSWORD_DEFAULT),
                         'role' => $role,
                         'statut' => 'Inactif',
-                        'ecole_id' => $ecoleId > 0 ? $ecoleId : User::resolveSchoolIdForRole($role, $identifiant),
-                    ]);
+                    ];
+
+                    if ($ecoleId > 0) {
+                        $userData['ecole_id'] = $ecoleId;
+                    } elseif (!$isPendingAgentRegistration) {
+                        $userData['ecole_id'] = User::resolveSchoolIdForRole($role, $identifiant);
+                    }
+
+                    $user = User::create($userData);
 
                     if (empty($user['id'] ?? null)) {
                         $errors[] = 'Le compte n’a pas pu être créé avec l’école sélectionnée.';

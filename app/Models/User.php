@@ -504,10 +504,15 @@ class User
             return false;
         }
 
+        $normalized = trim($identifiant);
+        if ($normalized === '') {
+            return false;
+        }
+
         return match ($role) {
             'eleve_ecole' => self::hasEnrolledStudent($identifiant),
             'parent_ecole' => self::hasParentWithEnrolledChild($identifiant),
-            'agent_ecole' => self::hasLinkedAgent($identifiant),
+            'agent_ecole' => self::hasLinkedAgent($identifiant) || !self::existsByIdentifiant($identifiant),
             'ecole_admin' => self::hasSchoolRecord($identifiant),
             default => false,
         };
@@ -518,7 +523,7 @@ class User
         return match ($role) {
             'eleve_ecole' => 'L’élève doit être inscrit dans une école avant de créer un compte.',
             'parent_ecole' => 'Le parent doit être lié à un élève inscrit dans une école avant de créer un compte.',
-            'agent_ecole' => 'L’agent doit être rattaché à une école avant de créer un compte.',
+            'agent_ecole' => 'L’agent doit exister dans le système avant de créer un compte. Il sera validé ensuite par l’administrateur de l’école.',
             'ecole_admin' => 'L’école doit exister dans la base avant de créer un compte.',
             default => 'Rôle invalide pour l’inscription.',
         };
@@ -561,7 +566,6 @@ class User
 
         $stmt = $db->prepare(
             'SELECT a.id FROM agents a '
-            . 'INNER JOIN ecoles c ON a.ecole_id = c.id '
             . 'WHERE a.email = :identifiant OR a.telephone = :identifiant OR a.nom = :identifiant OR a.prenom = :identifiant '
             . 'LIMIT 1'
         );
