@@ -53,6 +53,7 @@ class AuthController extends Controller
             $motDePasse = $_POST['mot_de_passe'] ?? '';
             $motDePasseConfirm = $_POST['mot_de_passe_confirm'] ?? '';
             $role = $_POST['role'] ?? 'eleve_ecole';
+            $ecoleId = isset($_POST['ecole_id']) ? (int) $_POST['ecole_id'] : 0;
 
             $errors = [];
 
@@ -76,36 +77,56 @@ class AuthController extends Controller
                 $errors[] = User::getRegistrationEligibilityError($role, $identifiant);
             }
 
-            if (empty($errors)) {
-                $user = User::create([
-                    'nom_complet' => $nomComplet,
-                    'identifiant' => $identifiant,
-                    'mot_de_passe' => password_hash($motDePasse, PASSWORD_DEFAULT),
-                    'role' => $role,
-                    'statut' => 'Inactif',
-                ]);
+            if (in_array($role, ['ecole_admin', 'agent_ecole', 'parent_ecole', 'eleve_ecole'], true)) {
+                $resolvedSchoolId = $ecoleId > 0 ? $ecoleId : User::resolveSchoolIdForRole($role, $identifiant);
+                if ($resolvedSchoolId <= 0) {
+                    $errors[] = 'Veuillez sélectionner une école valide pour ce compte.';
+                }
+            }
 
-                $message = 'Votre compte a été créé. Il est en attente de validation par le super administrateur.';
+            if (empty($errors)) {
+                try {
+                    $user = User::create([
+                        'nom_complet' => $nomComplet,
+                        'identifiant' => $identifiant,
+                        'mot_de_passe' => password_hash($motDePasse, PASSWORD_DEFAULT),
+                        'role' => $role,
+                        'statut' => 'Inactif',
+                        'ecole_id' => $ecoleId > 0 ? $ecoleId : User::resolveSchoolIdForRole($role, $identifiant),
+                    ]);
+
+                    if (empty($user['id'] ?? null)) {
+                        $errors[] = 'Le compte n’a pas pu être créé avec l’école sélectionnée.';
+                    }
+                } catch (\Throwable $e) {
+                    $errors[] = 'Le compte n’a pas pu être créé avec l’école sélectionnée.';
+                }
+            }
+
+            if (!empty($errors)) {
                 $this->view('auth/register', [
-                    'errors' => [],
-                    'message' => $message,
+                    'errors' => $errors,
                     'title' => APP_NAME,
                     'old' => [
                         'nom_complet' => $nomComplet,
                         'identifiant' => $identifiant,
                         'role' => $role,
+                        'ecole_id' => $ecoleId,
                     ],
                 ]);
                 return;
             }
 
+            $message = 'Votre compte a été créé. Il est en attente de validation par le super administrateur.';
             $this->view('auth/register', [
-                'errors' => $errors,
+                'errors' => [],
+                'message' => $message,
                 'title' => APP_NAME,
                 'old' => [
                     'nom_complet' => $nomComplet,
                     'identifiant' => $identifiant,
                     'role' => $role,
+                    'ecole_id' => $ecoleId,
                 ],
             ]);
             return;

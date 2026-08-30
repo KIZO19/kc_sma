@@ -59,21 +59,31 @@ class User
     public static function create(array $data): array
     {
         $db = Database::getConnection();
-        // Allow optional ecole_id when creating a user
+        $role = (string) ($data['role'] ?? '');
+        $schoolScopedRoles = ['ecole_admin', 'agent_ecole', 'enseignant_école', 'eleve_ecole', 'parent_ecole', 'comptable_école', 'sec_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'promoteur_école'];
+
+        $resolvedSchoolId = null;
+        if (in_array($role, $schoolScopedRoles, true)) {
+            $resolvedSchoolId = isset($data['ecole_id']) ? (int) $data['ecole_id'] : self::resolveSchoolIdForRole($role, (string) ($data['identifiant'] ?? ''), isset($data['reference_id']) ? (int) $data['reference_id'] : null);
+            if ($resolvedSchoolId <= 0) {
+                throw new \InvalidArgumentException('L’école est obligatoire pour ce rôle.');
+            }
+        }
+
         $fields = ['nom_complet', 'identifiant', 'mot_de_passe', 'role', 'statut'];
         $placeholders = [':nom_complet', ':identifiant', ':mot_de_passe', ':role', ':statut'];
         $params = [
             ':nom_complet' => $data['nom_complet'],
             ':identifiant' => $data['identifiant'],
             ':mot_de_passe' => $data['mot_de_passe'],
-            ':role' => $data['role'],
+            ':role' => $role,
             ':statut' => $data['statut'],
         ];
 
-        if (isset($data['ecole_id'])) {
+        if ($resolvedSchoolId !== null) {
             $fields[] = 'ecole_id';
             $placeholders[] = ':ecole_id';
-            $params[':ecole_id'] = $data['ecole_id'];
+            $params[':ecole_id'] = $resolvedSchoolId;
         }
 
         $defaultSection = self::getDefaultSectionIdForRole($data['role']);
@@ -393,8 +403,77 @@ class User
         return [
             'parent_ecole' => 'Parent',
             'agent_ecole' => 'Agent',
+            'eleve_ecole' => 'Élève',
             'ecole_admin' => 'École',
         ];
+    }
+
+    public static function resolveSchoolIdForRole(string $role, string $identifiant, ?int $referenceId = null): int
+    {
+        $normalized = trim($identifiant);
+
+        if ($normalized === '' && $referenceId === null) {
+            return 0;
+        }
+
+        $db = Database::getConnection();
+
+        if ($role === 'eleve_ecole') {
+            if ($referenceId > 0) {
+                $stmt = $db->prepare('SELECT ecole_id FROM eleves WHERE id = :reference_id LIMIT 1');
+                $stmt->execute([':reference_id' => $referenceId]);
+                $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                if (!empty($row['ecole_id'])) {
+                    return (int) $row['ecole_id'];
+                }
+            }
+
+            $stmt = $db->prepare('SELECT e.ecole_id FROM eleves e WHERE e.matricule = :identifiant OR e.email = :identifiant OR e.telephone = :identifiant LIMIT 1');
+            $stmt->execute([':identifiant' => $normalized]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            return !empty($row['ecole_id']) ? (int) $row['ecole_id'] : 0;
+        }
+
+        if ($role === 'parent_ecole') {
+            if ($referenceId > 0) {
+                $stmt = $db->prepare('SELECT ecole_id FROM parents WHERE id = :reference_id LIMIT 1');
+                $stmt->execute([':reference_id' => $referenceId]);
+                $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                if (!empty($row['ecole_id'])) {
+                    return (int) $row['ecole_id'];
+                }
+            }
+
+            $stmt = $db->prepare('SELECT ecole_id FROM parents WHERE email = :identifiant OR telephone = :identifiant LIMIT 1');
+            $stmt->execute([':identifiant' => $normalized]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            return !empty($row['ecole_id']) ? (int) $row['ecole_id'] : 0;
+        }
+
+        if ($role === 'agent_ecole' || $role === 'enseignant_école') {
+            if ($referenceId > 0) {
+                $stmt = $db->prepare('SELECT ecole_id FROM agents WHERE id = :reference_id LIMIT 1');
+                $stmt->execute([':reference_id' => $referenceId]);
+                $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                if (!empty($row['ecole_id'])) {
+                    return (int) $row['ecole_id'];
+                }
+            }
+
+            $stmt = $db->prepare('SELECT ecole_id FROM agents WHERE email = :identifiant OR telephone = :identifiant LIMIT 1');
+            $stmt->execute([':identifiant' => $normalized]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            return !empty($row['ecole_id']) ? (int) $row['ecole_id'] : 0;
+        }
+
+        if ($role === 'ecole_admin') {
+            $stmt = $db->prepare('SELECT id FROM ecoles WHERE identifiant = :identifiant OR email_officiel = :identifiant LIMIT 1');
+            $stmt->execute([':identifiant' => $normalized]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            return !empty($row['id']) ? (int) $row['id'] : 0;
+        }
+
+        return 0;
     }
 
     public static function isEligibleForRegistration(string $role, string $identifiant): bool
@@ -440,29 +519,32 @@ class User
     private static function hasParentWithEnrolledChild(string $identifiant): bool
     {
         $db = Database::getConnection();
-        try {
-            $stmt = $db->prepare('SELECT p.id FROM parents p INNER JOIN eleves e ON p.id = e.parent_id INNER JOIN ecoles c ON e.ecole_id = c.id WHERE p.identifiant = :identifiant LIMIT 1');
-            $stmt->execute([':identifiant' => $identifiant]);
-            return (bool) $stmt->fetch(PDO::FETCH_ASSOC);
-        } catch (\PDOException $e) {
-            $stmt = $db->prepare('SELECT id FROM parents WHERE identifiant = :identifiant LIMIT 1');
-            $stmt->execute([':identifiant' => $identifiant]);
-            return (bool) $stmt->fetch(PDO::FETCH_ASSOC);
-        }
+        $normalized = trim($identifiant);
+
+        $stmt = $db->prepare(
+            'SELECT p.id FROM parents p '
+            . 'INNER JOIN eleves e ON p.id = e.parent_id '
+            . 'INNER JOIN ecoles c ON e.ecole_id = c.id '
+            . 'WHERE p.email = :identifiant OR p.telephone = :identifiant OR p.nom_responsable = :identifiant '
+            . 'LIMIT 1'
+        );
+        $stmt->execute([':identifiant' => $normalized]);
+        return (bool) $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
     private static function hasLinkedAgent(string $identifiant): bool
     {
         $db = Database::getConnection();
-        try {
-            $stmt = $db->prepare('SELECT a.id FROM agents a INNER JOIN ecoles c ON a.ecole_id = c.id WHERE a.identifiant = :identifiant LIMIT 1');
-            $stmt->execute([':identifiant' => $identifiant]);
-            return (bool) $stmt->fetch(PDO::FETCH_ASSOC);
-        } catch (\PDOException $e) {
-            $stmt = $db->prepare('SELECT id FROM agents WHERE identifiant = :identifiant LIMIT 1');
-            $stmt->execute([':identifiant' => $identifiant]);
-            return (bool) $stmt->fetch(PDO::FETCH_ASSOC);
-        }
+        $normalized = trim($identifiant);
+
+        $stmt = $db->prepare(
+            'SELECT a.id FROM agents a '
+            . 'INNER JOIN ecoles c ON a.ecole_id = c.id '
+            . 'WHERE a.email = :identifiant OR a.telephone = :identifiant OR a.nom = :identifiant OR a.prenom = :identifiant '
+            . 'LIMIT 1'
+        );
+        $stmt->execute([':identifiant' => $normalized]);
+        return (bool) $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
     private static function hasSchoolRecord(string $identifiant): bool

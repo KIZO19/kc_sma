@@ -51,6 +51,17 @@ $old = $old ?? [];
           <div class="input-group-append"><div class="input-group-text"><span class="bi bi-person-badge"></span></div></div>
         </div>
         <div class="input-group mb-3">
+          <select name="ecole_id" class="form-select" required>
+            <option value="">-- Sélectionner une école --</option>
+            <?php foreach (App\Models\Ecole::getAll() as $school): ?>
+              <?php $schoolId = (int) ($school['id'] ?? 0); ?>
+              <?php if ($schoolId <= 0) continue; ?>
+              <option value="<?= $schoolId ?>" <?= ((int) ($old['ecole_id'] ?? 0) === $schoolId) ? 'selected' : '' ?>><?= htmlspecialchars($school['nom_etablissement'] ?? 'École') ?></option>
+            <?php endforeach; ?>
+          </select>
+          <div class="input-group-append"><div class="input-group-text"><span class="bi bi-building"></span></div></div>
+        </div>
+        <div class="input-group mb-3">
           <input type="text" name="identifiant" class="form-control" placeholder="Email ou téléphone" value="<?= htmlspecialchars($old['identifiant'] ?? '') ?>" required>
           <div class="input-group-append"><div class="input-group-text"><span class="bi bi-envelope"></span></div></div>
         </div>
