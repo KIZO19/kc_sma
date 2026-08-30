@@ -9,6 +9,7 @@ class RoleFactory
         return match ($role) {
             'super_admin' => new SuperAdmin(),
             'ecole_admin' => new EcoleAdmin(),
+            'agent_ecole' => new AgentEcole(),
             'préfet_école' => new PrefetEcole(),
             'DE_école' => new DEEcole(),
             'DD_école' => new DDEcole(),

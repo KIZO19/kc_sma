@@ -77,7 +77,7 @@ class Agent
         $password = bin2hex(random_bytes(4));
 
         return \App\Models\User::findOrCreateForReference([
-            'role' => 'enseignant_école',
+            'role' => 'agent_ecole',
             'reference_id' => $agent['id'],
             'ecole_id' => $ecoleId,
             'identifiant' => $identifiant,

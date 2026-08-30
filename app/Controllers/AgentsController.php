@@ -24,7 +24,7 @@ class AgentsController extends Controller
         if ($ecoleId > 0) {
             $agents = Agent::getAll($ecoleId);
             foreach ($agents as $agent) {
-                $agentAccounts[$agent['id']] = User::findByReference('enseignant_école', (int) $agent['id']);
+                $agentAccounts[$agent['id']] = User::findByReference('agent_ecole', (int) $agent['id'], (int) $ecoleId);
             }
         }
 

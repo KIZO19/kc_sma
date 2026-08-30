@@ -9,6 +9,7 @@ class Roles
         return [
             'super_admin' => 'Super Administrateur',
             'ecole_admin' => 'Administrateur École',
+            'agent_ecole' => 'Agent de l’école',
             'préfet_école' => 'Préfet des études',
             'DE_école' => 'Directeur des études',
             'DD_école' => 'Directeur Département',
