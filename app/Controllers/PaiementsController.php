@@ -1169,7 +1169,24 @@ class PaiementsController extends Controller
             $data['postnom'] ?? '',
             $data['prenom'] ?? '',
         ], fn($value) => $value !== null && trim((string) $value) !== '');
-        $eleveName = implode(', ', array_map('trim', $parts));
+        $eleveName = implode(' ', array_map('trim', $parts));
+
+        $historiquePaiements = [];
+        if ($eleveId > 0) {
+            $historiquePaiements = $this->fetchPaymentsForUser($user, 0, $eleveId);
+            $historiquePaiements = array_values(array_filter($historiquePaiements, function ($payment) use ($idParam, $data) {
+                $currentId = (string) ($payment['id'] ?? '');
+                $samePaymentId = ($currentId === (string) $idParam || $currentId === (string) ($data['id'] ?? ''));
+                $sameReference = (string) ($payment['reference_recu'] ?? '') === (string) ($data['reference_recu'] ?? '');
+                return !$samePaymentId && !$sameReference;
+            }));
+            usort($historiquePaiements, function ($a, $b) {
+                $ta = strtotime((string) ($a['date_operation'] ?? '1970-01-01 00:00:00'));
+                $tb = strtotime((string) ($b['date_operation'] ?? '1970-01-01 00:00:00'));
+                return $tb <=> $ta;
+            });
+            $historiquePaiements = array_slice($historiquePaiements, 0, 5);
+        }
 
         $this->view('paiements/qr_summary', [
             'title' => 'Paiement reçu',
@@ -1182,6 +1199,7 @@ class PaiementsController extends Controller
             'montant_paye' => (float) ($data['montant'] ?? 0),
             'date_paiement' => $data['date_operation'] ?? null,
             'reste_a_payer' => $reste,
+            'historique_paiements' => $historiquePaiements,
         ]);
     }
 }

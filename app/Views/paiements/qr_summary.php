@@ -150,6 +150,25 @@
           <div class="progress-bar" style="width: <?= $progress ?>%"></div>
         </div>
       </div>
+
+      <?php if (!empty($historique_paiements)): ?>
+        <div class="mt-4">
+          <div class="small text-uppercase text-muted fw-bold mb-2">Autres paiements</div>
+          <?php foreach ($historique_paiements as $historique): ?>
+            <?php
+              $histCurrency = strtoupper(trim($historique['transaction_devise'] ?? $historique['frais_devise'] ?? 'USD')) ?: 'USD';
+              $histAmount = (float) ($historique['montant'] ?? 0);
+              $histDate = $historique['date_operation'] ?? null;
+            ?>
+            <div class="border rounded-3 p-2 mb-2 bg-light">
+              <div class="d-flex justify-content-between align-items-center gap-2">
+                <span class="fw-semibold"><?= \App\Models\Devise::formatAmountWithCurrency($histAmount, $histCurrency) ?></span>
+                <span class="small text-muted"><?= htmlspecialchars(date('d/m/Y H:i', strtotime((string) $histDate))) ?></span>
+              </div>
+            </div>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
     </div>
 
     <div class="summary-footer">
