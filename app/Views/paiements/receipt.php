@@ -1,4 +1,8 @@
 <?php require __DIR__ . '/../partials/app_header.php'; ?>
+<?php
+$notificationStatus = $_SESSION['payment_notification_status'] ?? null;
+unset($_SESSION['payment_notification_status']);
+?>
 <style>
   /* POS receipt styling */
   .pos-receipt { width: 300px; max-width: 100%; margin: 0 auto; font-family: 'Courier New', monospace; font-size: 11px; position: relative; overflow: hidden; }
@@ -24,6 +28,16 @@
   <div class="container-fluid">
     <div class="row justify-content-center">
       <div class="col-md-6">
+        <?php if (!empty($notificationStatus)): ?>
+          <div class="alert <?= !empty($notificationStatus['sent']) ? 'alert-success' : 'alert-danger' ?> alert-dismissible fade show" role="alert">
+            <strong><?= !empty($notificationStatus['sent']) ? 'Notification envoyée' : 'Notification non envoyée' ?></strong><br>
+            <?= htmlspecialchars($notificationStatus['message'] ?? 'Statut de notification indisponible.') ?>
+            <?php if (!empty($notificationStatus['details'])): ?>
+              <div class="mt-1 small"><?= htmlspecialchars($notificationStatus['details']) ?></div>
+            <?php endif; ?>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
+          </div>
+        <?php endif; ?>
         <div class="card">
           <div class="card-body">
             <div class="pos-receipt">

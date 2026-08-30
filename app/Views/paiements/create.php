@@ -49,7 +49,8 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
                   <select name="eleve_id" class="form-select" required>
                     <option value="">-- Sélectionner un élève --</option>
                     <?php foreach (($students ?? []) as $s): ?>
-                      <option value="<?= (int) $s['id'] ?>" <?= ((int) ($oldInput['eleve_id'] ?? 0) === (int) $s['id']) ? 'selected' : '' ?>><?= htmlspecialchars(($s['prenom'] ?? '') . ' ' . ($s['nom'] ?? '') . ' ' . ($s['postnom'] ?? '')) ?></option>
+                      <?php $isSettled = !empty($s['is_settled']); ?>
+                      <option value="<?= (int) $s['id'] ?>" data-settled="<?= $isSettled ? '1' : '0' ?>" style="<?= $isSettled ? 'color:#6c757d;' : '' ?>" <?= ((int) ($oldInput['eleve_id'] ?? 0) === (int) $s['id']) ? 'selected' : '' ?>><?= htmlspecialchars(($s['prenom'] ?? '') . ' ' . ($s['nom'] ?? '') . ' ' . ($s['postnom'] ?? '')) ?><?= $isSettled ? ' — Soldé' : ' — Reste: ' . number_format((float) ($s['remaining_debt'] ?? 0), 2) ?></option>
                     <?php endforeach; ?>
                   </select>
                 </div>

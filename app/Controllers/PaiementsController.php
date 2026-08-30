@@ -570,9 +570,34 @@ class PaiementsController extends Controller
                 $totalDebtByCurrency = [];
             }
         } else {
-            // No specific eleve requested: provide a selector (scope to school)
+            // No specific eleve requested: show all students from the school, but visually separate those already settled.
             $userSchool = (int) ($user['ecole_id'] ?? 0);
-            $students = $userSchool > 0 ? Eleve::getAllBySchool($userSchool) : Eleve::getAll();
+            $allStudents = $userSchool > 0 ? Eleve::getAllBySchool($userSchool) : Eleve::getAll();
+            $students = [];
+            foreach ($allStudents as $student) {
+                $studentId = (int) ($student['id'] ?? 0);
+                if ($studentId <= 0) {
+                    continue;
+                }
+
+                try {
+                    $remaining = (float) DetteEleve::getTotalOutstandingByEleve($studentId);
+                    if ($remaining <= 0.0) {
+                        $remaining = (float) array_sum(DetteEleve::computeOutstandingFromApplicableFees($studentId));
+                    }
+                    $student['remaining_debt'] = $remaining;
+                    $student['is_settled'] = $remaining <= 0.0;
+                    $students[] = $student;
+                } catch (\Throwable $e) {
+                    $dette = DetteEleve::findByEleve($studentId);
+                    $remaining = is_array($dette) && !empty($dette)
+                        ? (float) array_sum(array_map(static fn ($row) => (float) ($row['montant_restant'] ?? 0), $dette))
+                        : 0.0;
+                    $student['remaining_debt'] = $remaining;
+                    $student['is_settled'] = $remaining <= 0.0;
+                    $students[] = $student;
+                }
+            }
             $compte = null;
         }
 
@@ -843,7 +868,7 @@ class PaiementsController extends Controller
 
         try {
             $notifier = new PaymentParentNotifier();
-            $notifier->notifyAfterPayment(
+            $_SESSION['payment_notification_status'] = $notifier->notifyAfterPayment(
                 $eleveId,
                 (int) $fraisId,
                 $montant,
@@ -851,6 +876,13 @@ class PaiementsController extends Controller
                 $fee['devise'] ?? 'USD'
             );
         } catch (\Throwable $e) {
+            $_SESSION['payment_notification_status'] = [
+                'sent' => false,
+                'status' => 'failed',
+                'reason' => 'controller_exception',
+                'message' => 'Échec de l’envoi du message au parent.',
+                'details' => $e->getMessage(),
+            ];
             error_log('PaiementsController::store notification failed: ' . $e->getMessage());
         }
 

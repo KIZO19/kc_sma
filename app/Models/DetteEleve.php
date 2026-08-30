@@ -62,6 +62,14 @@ class DetteEleve
         return (float) ($stmt->fetchColumn() ?: 0);
     }
 
+    public static function findByEleve(int $eleveId): array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare('SELECT * FROM dettes_eleves WHERE eleve_id = :eleve_id ORDER BY id DESC');
+        $stmt->execute([':eleve_id' => $eleveId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public static function getTotalOutstandingGroupedByDevise(int $eleveId): array
     {
         $db = Database::getConnection();

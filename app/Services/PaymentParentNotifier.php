@@ -8,6 +8,7 @@ use PDO;
 class PaymentParentNotifier
 {
     private string $provider;
+    private string $channel;
     private string $smsApiUrl;
     private string $smsApiToken;
     private string $smsSender;
@@ -39,6 +40,12 @@ class PaymentParentNotifier
             $this->provider = 'infobip';
         }
 
+        $configuredChannel = $this->resolveConfigValue('PAYMENT_CHANNEL', 'PAYMENT_MESSAGE_CHANNEL', 'PAYMENT_CHANNELS');
+        $this->channel = strtolower(trim($configuredChannel !== '' ? $configuredChannel : 'both'));
+        if (!in_array($this->channel, ['sms', 'whatsapp', 'both'], true)) {
+            $this->channel = 'both';
+        }
+
         $this->smsApiUrl = $smsApiUrl ?? $this->resolveConfigValue('PAYMENT_SMS_API_URL', 'SMS_API_URL');
         $this->smsApiToken = $smsApiToken ?? $this->resolveConfigValue('PAYMENT_SMS_API_TOKEN', 'SMS_API_TOKEN');
         $this->smsSender = $smsSender ?? $this->resolveConfigValue('PAYMENT_SMS_SENDER', 'SMS_FROM');
@@ -54,10 +61,10 @@ class PaymentParentNotifier
         $this->twilioWhatsappFrom = $twilioWhatsappFrom ?? $this->resolveConfigValue('PAYMENT_TWILIO_WHATSAPP_FROM', 'TWILIO_WHATSAPP_FROM');
     }
 
-    public function notifyAfterPayment(int $eleveId, int $fraisId, float $montant, string $libelle, string $devise = 'USD'): void
+    public function notifyAfterPayment(int $eleveId, int $fraisId, float $montant, string $libelle, string $devise = 'USD'): array
     {
         if ($eleveId <= 0) {
-            return;
+            return ['sent' => false, 'status' => 'failed', 'reason' => 'invalid_student', 'message' => 'Envoi impossible : élève invalide.', 'details' => 'L’identifiant de l’élève est absent ou invalide.'];
         }
 
         $db = Database::getConnection();
@@ -71,47 +78,90 @@ class PaymentParentNotifier
         $eleve = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$eleve) {
-            return;
+            return ['sent' => false, 'status' => 'failed', 'reason' => 'student_not_found', 'message' => 'Envoi impossible : élève introuvable.', 'details' => 'Aucun élève ne correspond à l’identifiant fourni.'];
         }
 
         $phone = $this->normalizePhone((string) ($eleve['parent_phone'] ?? ''));
         if ($phone === '') {
-            return;
+            return ['sent' => false, 'status' => 'failed', 'reason' => 'missing_parent_phone', 'message' => 'Envoi impossible : aucun numéro de téléphone parent n’a été trouvé.', 'details' => 'Le parent associé à l’élève n’a pas de téléphone valide ou le champ est vide.'];
         }
 
         $studentName = trim(implode(' ', array_filter([
-            $eleve['prenom'] ?? '',
             $eleve['nom'] ?? '',
             $eleve['postnom'] ?? '',
+            $eleve['prenom'] ?? '',
         ], static fn ($value) => trim((string) $value) !== '')));
 
         $paymentLabel = trim($libelle) !== '' ? $libelle : 'paiement scolaire';
         $currency = trim($devise) !== '' ? strtoupper($devise) : 'USD';
-        $message = 'Bonjour, le paiement de ' . number_format($montant, 2, ',', ' ') . ' ' . $currency . ' pour ' . $paymentLabel
-            . ' a bien été enregistré pour ' . $studentName . '.';
+        $parentName = trim((string) ($eleve['parent_nom_responsable'] ?? ''));
+        $greeting = $parentName !== '' ? 'Bonjour ' . $parentName . ',' : 'Bonjour,';
+        $message = $greeting . ' le paiement de ' . number_format($montant, 2, ',', ' ') . ' ' . $currency
+            . ' pour ' . $paymentLabel . ' a bien été enregistré pour l\'élève ' . $studentName . '.';
 
+        $attempts = [];
         if ($this->provider === 'infobip') {
-            $this->sendInfobipSms($phone, $message);
-            $this->sendInfobipWhatsapp($phone, $message);
-            return;
+            if ($this->shouldSendSms()) {
+                $attempts[] = $this->sendInfobipSms($phone, $message);
+            }
+            if ($this->shouldSendWhatsapp()) {
+                $attempts[] = $this->sendInfobipWhatsapp($phone, $message);
+            }
+        } elseif ($this->provider === 'twilio') {
+            if ($this->shouldSendSms()) {
+                $attempts[] = $this->sendTwilioSms($phone, $message);
+            }
+            if ($this->shouldSendWhatsapp()) {
+                $attempts[] = $this->sendTwilioWhatsapp($phone, $message);
+            }
+        } else {
+            if ($this->shouldSendSms() && $this->smsApiUrl !== '') {
+                $attempts[] = $this->sendSms($phone, $message);
+            }
+            if ($this->shouldSendWhatsapp() && $this->whatsappApiUrl !== '') {
+                $attempts[] = $this->sendWhatsapp($phone, $message);
+            }
         }
 
-        if ($this->provider === 'twilio') {
-            $this->sendTwilioSms($phone, $message);
-            $this->sendTwilioWhatsapp($phone, $message);
-            return;
+        if ($attempts === []) {
+            return ['sent' => false, 'status' => 'failed', 'reason' => 'no_channel_configured', 'message' => 'Envoi impossible : aucun canal de notification n’est configuré.', 'details' => 'Le fournisseur ou le canal WhatsApp/SMS n’est pas prêt pour cet envoi.'];
         }
 
-        if ($this->smsApiUrl !== '') {
-            $this->sendSms($phone, $message);
+        $successes = array_filter($attempts, static fn ($attempt) => !empty($attempt['sent']));
+        if ($successes) {
+            $firstSuccess = reset($successes);
+            return [
+                'sent' => true,
+                'status' => 'success',
+                'reason' => '',
+                'message' => 'Message ' . (($firstSuccess['channel'] ?? 'WhatsApp') === 'sms' ? 'SMS' : 'WhatsApp') . ' envoyé au parent.',
+                'details' => $firstSuccess['details'] ?? 'Le message a bien été transmis.',
+                'channel' => $firstSuccess['channel'] ?? ($this->channel === 'whatsapp' ? 'whatsapp' : 'sms'),
+            ];
         }
 
-        if ($this->whatsappApiUrl !== '') {
-            $this->sendWhatsapp($phone, $message);
-        }
+        $firstFailure = reset($attempts);
+        return [
+            'sent' => false,
+            'status' => 'failed',
+            'reason' => $firstFailure['reason'] ?? 'unknown',
+            'message' => $firstFailure['message'] ?? 'Le message n’a pas pu être envoyé au parent.',
+            'details' => $firstFailure['details'] ?? 'Une erreur inconnue est survenue pendant l’envoi.',
+            'channel' => $firstFailure['channel'] ?? ($this->channel === 'whatsapp' ? 'whatsapp' : 'sms'),
+        ];
     }
 
-    private function sendSms(string $phone, string $message): void
+    private function shouldSendSms(): bool
+    {
+        return $this->channel === 'sms' || $this->channel === 'both';
+    }
+
+    private function shouldSendWhatsapp(): bool
+    {
+        return $this->channel === 'whatsapp' || $this->channel === 'both';
+    }
+
+    private function sendSms(string $phone, string $message): array
     {
         $payload = [
             'to' => $phone,
@@ -119,27 +169,27 @@ class PaymentParentNotifier
             'text' => $message,
         ];
 
-        $this->sendJsonRequest($this->smsApiUrl, $payload, $this->smsApiToken);
+        return $this->sendJsonRequest($this->smsApiUrl, $payload, $this->smsApiToken, 'sms');
     }
 
-    private function sendWhatsapp(string $phone, string $message): void
+    private function sendWhatsapp(string $phone, string $message): array
     {
         $payload = [
             'to' => $phone,
             'message' => $message,
         ];
 
-        $this->sendJsonRequest($this->whatsappApiUrl, $payload, $this->whatsappApiToken);
+        return $this->sendJsonRequest($this->whatsappApiUrl, $payload, $this->whatsappApiToken, 'whatsapp');
     }
 
-    private function sendInfobipSms(string $phone, string $message): void
+    private function sendInfobipSms(string $phone, string $message): array
     {
         $apiKey = trim($this->infobipApiKey);
         $baseUrl = trim($this->infobipBaseUrl);
         $from = trim($this->infobipSmsFrom);
 
         if ($apiKey === '' || $baseUrl === '') {
-            return;
+            return ['sent' => false, 'channel' => 'sms', 'reason' => 'missing_infobip_config', 'message' => 'Infobip SMS non configuré.', 'details' => 'La clé API Infobip ou l’URL de base est absente.'];
         }
 
         $payload = [
@@ -150,17 +200,17 @@ class PaymentParentNotifier
             ]],
         ];
 
-        $this->sendJsonRequest($baseUrl . '/sms/2/text/advanced', $payload, $apiKey, true);
+        return $this->sendJsonRequest($baseUrl . '/sms/2/text/advanced', $payload, $apiKey, 'sms', true);
     }
 
-    private function sendInfobipWhatsapp(string $phone, string $message): void
+    private function sendInfobipWhatsapp(string $phone, string $message): array
     {
         $apiKey = trim($this->infobipApiKey);
         $baseUrl = trim($this->infobipBaseUrl);
         $from = trim($this->infobipWhatsappFrom);
 
         if ($apiKey === '' || $baseUrl === '') {
-            return;
+            return ['sent' => false, 'channel' => 'whatsapp', 'reason' => 'missing_infobip_config', 'message' => 'Infobip WhatsApp non configuré.', 'details' => 'La clé API Infobip ou l’URL de base est absente.'];
         }
 
         $payload = [
@@ -171,17 +221,17 @@ class PaymentParentNotifier
             ]],
         ];
 
-        $this->sendJsonRequest($baseUrl . '/whatsapp/1/message/text', $payload, $apiKey, true);
+        return $this->sendJsonRequest($baseUrl . '/whatsapp/1/message/text', $payload, $apiKey, 'whatsapp', true);
     }
 
-    private function sendTwilioSms(string $phone, string $message): void
+    private function sendTwilioSms(string $phone, string $message): array
     {
         $accountSid = trim($this->twilioAccountSid);
         $authToken = trim($this->twilioAuthToken);
         $from = trim($this->twilioSmsFrom);
 
         if ($accountSid === '' || $authToken === '' || $from === '') {
-            return;
+            return ['sent' => false, 'channel' => 'sms', 'reason' => 'missing_twilio_config', 'message' => 'Twilio SMS non configuré.', 'details' => 'Les identifiants Twilio SMS sont absents.'];
         }
 
         $payload = [
@@ -190,17 +240,17 @@ class PaymentParentNotifier
             'Body' => $message,
         ];
 
-        $this->sendFormRequest('https://api.twilio.com/2010-04-01/Accounts/' . $accountSid . '/Messages.json', $payload, $accountSid, $authToken);
+        return $this->sendFormRequest('https://api.twilio.com/2010-04-01/Accounts/' . $accountSid . '/Messages.json', $payload, $accountSid, $authToken, 'sms');
     }
 
-    private function sendTwilioWhatsapp(string $phone, string $message): void
+    private function sendTwilioWhatsapp(string $phone, string $message): array
     {
         $accountSid = trim($this->twilioAccountSid);
         $authToken = trim($this->twilioAuthToken);
         $from = trim($this->twilioWhatsappFrom);
 
         if ($accountSid === '' || $authToken === '' || $from === '') {
-            return;
+            return ['sent' => false, 'channel' => 'whatsapp', 'reason' => 'missing_twilio_config', 'message' => 'Twilio WhatsApp non configuré.', 'details' => 'Les identifiants Twilio WhatsApp sont absents.'];
         }
 
         $payload = [
@@ -209,19 +259,19 @@ class PaymentParentNotifier
             'Body' => $message,
         ];
 
-        $this->sendFormRequest('https://api.twilio.com/2010-04-01/Accounts/' . $accountSid . '/Messages.json', $payload, $accountSid, $authToken);
+        return $this->sendFormRequest('https://api.twilio.com/2010-04-01/Accounts/' . $accountSid . '/Messages.json', $payload, $accountSid, $authToken, 'whatsapp');
     }
 
-    private function sendJsonRequest(string $url, array $payload, string $token = '', bool $infobipMode = false): void
+    private function sendJsonRequest(string $url, array $payload, string $token = '', string $channel = 'sms', bool $infobipMode = false): array
     {
         if ($url === '') {
-            return;
+            return ['sent' => false, 'channel' => $channel, 'reason' => 'missing_url', 'message' => 'URL d’envoi absente.', 'details' => 'L’URL du fournisseur est vide.'];
         }
 
         try {
             $json = json_encode($payload);
             if ($json === false) {
-                return;
+                return ['sent' => false, 'channel' => $channel, 'reason' => 'json_encode_failed', 'message' => 'Payload invalide.', 'details' => 'Impossible de sérialiser le message JSON pour l’envoi.'];
             }
 
             $headers = [
@@ -247,10 +297,20 @@ class PaymentParentNotifier
                     CURLOPT_HTTPHEADER => $headers,
                     CURLOPT_RETURNTRANSFER => true,
                     CURLOPT_TIMEOUT => 15,
+                    CURLOPT_FAILONERROR => false,
                 ]);
-                curl_exec($ch);
+                $response = curl_exec($ch);
+                $errorNo = curl_errno($ch);
+                $statusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                $error = $errorNo !== 0 ? curl_error($ch) : null;
                 curl_close($ch);
-                return;
+
+                if ($response === false || $errorNo !== 0 || ($statusCode >= 400 && $statusCode !== 401 && $statusCode !== 402)) {
+                    $details = $error ?: 'Erreur HTTP ' . $statusCode;
+                    return ['sent' => false, 'channel' => $channel, 'reason' => 'provider_http_error', 'message' => 'Échec de l’envoi de message au parent.', 'details' => $details];
+                }
+
+                return ['sent' => true, 'channel' => $channel, 'reason' => '', 'message' => 'Message envoyé.', 'details' => 'La notification a bien été envoyée avec succès.'];
             }
 
             $context = stream_context_create([
@@ -262,13 +322,20 @@ class PaymentParentNotifier
                 ],
             ]);
 
-            @file_get_contents($url, false, $context);
+            $response = @file_get_contents($url, false, $context);
+            if ($response === false) {
+                return ['sent' => false, 'channel' => $channel, 'reason' => 'stream_context_failed', 'message' => 'Échec de l’envoi de message au parent.', 'details' => 'Le contexte HTTP local n’a pas pu envoyer la requête.'];
+            }
+
+            return ['sent' => true, 'channel' => $channel, 'reason' => '', 'message' => 'Message envoyé.', 'details' => 'La notification a bien été envoyée avec succès.'];
         } catch (\Throwable $e) {
-            error_log('PaymentParentNotifier::sendJsonRequest failed: ' . $e->getMessage());
+            $message = $e->getMessage();
+            error_log('PaymentParentNotifier::sendJsonRequest failed: ' . $message);
+            return ['sent' => false, 'channel' => $channel, 'reason' => 'exception', 'message' => 'Échec de l’envoi de message au parent.', 'details' => $message];
         }
     }
 
-    private function sendFormRequest(string $url, array $payload, string $username, string $password): void
+    private function sendFormRequest(string $url, array $payload, string $username, string $password, string $channel = 'sms'): array
     {
         try {
             if (function_exists('curl_init')) {
@@ -281,9 +348,18 @@ class PaymentParentNotifier
                     CURLOPT_USERPWD => $username . ':' . $password,
                     CURLOPT_HTTPAUTH => CURLAUTH_BASIC,
                 ]);
-                curl_exec($ch);
+                $response = curl_exec($ch);
+                $errorNo = curl_errno($ch);
+                $statusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                $error = $errorNo !== 0 ? curl_error($ch) : null;
                 curl_close($ch);
-                return;
+
+                if ($response === false || $errorNo !== 0 || ($statusCode >= 400 && $statusCode !== 401 && $statusCode !== 402)) {
+                    $details = $error ?: 'Erreur HTTP ' . $statusCode;
+                    return ['sent' => false, 'channel' => $channel, 'reason' => 'provider_http_error', 'message' => 'Échec de l’envoi de message au parent.', 'details' => $details];
+                }
+
+                return ['sent' => true, 'channel' => $channel, 'reason' => '', 'message' => 'Message envoyé.', 'details' => 'La notification a bien été envoyée avec succès.'];
             }
 
             $context = stream_context_create([
@@ -295,9 +371,16 @@ class PaymentParentNotifier
                 ],
             ]);
 
-            @file_get_contents($url, false, $context);
+            $response = @file_get_contents($url, false, $context);
+            if ($response === false) {
+                return ['sent' => false, 'channel' => $channel, 'reason' => 'stream_context_failed', 'message' => 'Échec de l’envoi de message au parent.', 'details' => 'Le contexte HTTP local n’a pas pu envoyer la requête.'];
+            }
+
+            return ['sent' => true, 'channel' => $channel, 'reason' => '', 'message' => 'Message envoyé.', 'details' => 'La notification a bien été envoyée avec succès.'];
         } catch (\Throwable $e) {
-            error_log('PaymentParentNotifier::sendFormRequest failed: ' . $e->getMessage());
+            $message = $e->getMessage();
+            error_log('PaymentParentNotifier::sendFormRequest failed: ' . $message);
+            return ['sent' => false, 'channel' => $channel, 'reason' => 'exception', 'message' => 'Échec de l’envoi de message au parent.', 'details' => $message];
         }
     }
 
