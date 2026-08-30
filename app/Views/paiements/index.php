@@ -49,6 +49,9 @@
           <?php if (!empty($canManageAccounting)): ?>
             <a href="<?= BASE_URL ?>/paiements/create<?= !empty($eleveId) ? '?eleve_id=' . (int) $eleveId : '' ?>" class="btn btn-success">Enregistrer paiement</a>
           <?php endif; ?>
+          <?php if (in_array($role ?? '', ['comptable_école', 'ecole_admin', 'super_admin'], true)): ?>
+            <a href="<?= BASE_URL ?>/paiements/gestionAutorisations" class="btn btn-outline-primary ms-2">Autorisations</a>
+          <?php endif; ?>
           <div class="btn-group ms-2" role="group">
             <button id="resetFilters" type="button" class="btn btn-outline-secondary">Réinitialiser filtres</button>
             <a href="<?= BASE_URL ?>/paiements/export?format=csv<?= (!empty($eleveId) ? '&eleve_id=' . (int) $eleveId : '') . (!empty($fraisId) ? '&frais_id=' . (int) $fraisId : '') ?>" class="btn btn-outline-secondary export-filtered" data-format="csv">Export CSV</a>

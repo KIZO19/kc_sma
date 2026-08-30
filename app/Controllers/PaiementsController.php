@@ -11,6 +11,7 @@ use App\Models\FraisScolaire;
 use App\Models\Classe;
 use App\Models\User;
 use App\Models\Eleve as EleveModel;
+use App\Models\PaiementAutorisation;
 use App\Services\PaymentParentNotifier;
 
 class PaiementsController extends Controller
@@ -64,6 +65,10 @@ class PaiementsController extends Controller
         }
         $fees = $userSchool > 0 ? FraisScolaire::getAllBySchool($userSchool) : [];
 
+        $authorizedFeeIds = in_array($role, ['super_admin', 'comptable_école'], true)
+            ? []
+            : PaiementAutorisation::getAuthorizedFeeIdsForUser($user);
+
         $this->view('paiements/index', [
             'title' => APP_NAME . ' - Paiements',
             'user' => $user,
@@ -81,7 +86,7 @@ class PaiementsController extends Controller
             'totalPaidByCurrency' => $totalPaidByCurrency,
             'totalDebt' => $totalDebt,
             'totalDebtByCurrency' => $totalDebtByCurrency,
-            'canManageAccounting' => ($role === 'comptable_école'),
+            'canManageAccounting' => ($role === 'comptable_école' || $role === 'super_admin' || !empty($authorizedFeeIds)),
         ]);
     }
 
@@ -505,24 +510,35 @@ class PaiementsController extends Controller
         throw new \RuntimeException('Impossible de générer un numéro de reçu unique.');
     }
 
+    private function canCreatePayment(array $user, ?int $fraisId = null): bool
+    {
+        $role = (string) ($user['role'] ?? '');
+        if (in_array($role, ['super_admin', 'comptable_école'], true)) {
+            return true;
+        }
+
+        return PaiementAutorisation::canUserRecordFee($user, $fraisId);
+    }
+
     public function create(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['super_admin', 'comptable_école']);
+        Auth::requireRoles(['super_admin', 'comptable_école', 'sec_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école']);
 
         $user = Auth::refresh() ?: Auth::user();
-        if (($user['role'] ?? '') !== 'comptable_école') {
-            $_SESSION['flash_error'] = 'Seul le comptable de l’école peut enregistrer un paiement.';
+        $role = $user['role'] ?? 'default';
+        $fraisIdFromRequest = !empty($_GET['frais_id']) ? (int) $_GET['frais_id'] : null;
+        if (!$this->canCreatePayment($user, $fraisIdFromRequest)) {
+            $_SESSION['flash_error'] = 'Vous n’avez pas l’autorisation de saisir un paiement pour ce frais.';
             $this->redirect('/paiements');
             return;
         }
-        $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
 
         $eleveId = (int) ($_GET['eleve_id'] ?? $_GET['id'] ?? 0);
-        // If a specific élève is requested, allow access only to the school accountant
-        if ($eleveId > 0 && (($user['role'] ?? '') !== 'comptable_école')) {
-            $_SESSION['flash_error'] = 'Accès réservé au comptable pour enregistrer un paiement pour un élève.';
+        // Access is restricted by delegated fee authorization, not by a blanket "comptable-only" rule.
+        if ($eleveId > 0 && !$this->canCreatePayment($user, $fraisIdFromRequest)) {
+            $_SESSION['flash_error'] = 'Ce rôle n’a pas encore reçu l’autorisation pour ce type de paiement.';
             header('Location: ' . BASE_URL . '/paiements');
             exit;
         }
@@ -567,6 +583,10 @@ class PaiementsController extends Controller
         $stmt->execute([':ecole_id' => $user['ecole_id'] ?? 0]);
         $caisses = $stmt->fetchAll();
 
+        $authorizedFeeIds = in_array($role, ['super_admin', 'comptable_école'], true)
+            ? []
+            : PaiementAutorisation::getAuthorizedFeeIdsForUser($user);
+
         // Fetch fees applicable to populate motif picklist
         $fees = [];
         try {
@@ -583,6 +603,7 @@ class PaiementsController extends Controller
 
                 $allFees = \App\Models\FraisScolaire::getAllBySchool($schoolIdForFees);
                 foreach ($allFees as $f) {
+                    $feeId = (int) ($f['id'] ?? 0);
                     $scope = $f['scope'] ?? 'class';
                     $scopeId = isset($f['scope_id']) ? (int) $f['scope_id'] : null;
                     $apply = false;
@@ -600,14 +621,24 @@ class PaiementsController extends Controller
                     }
 
                     if ($apply) {
+                        if (!empty($authorizedFeeIds) && !in_array($feeId, $authorizedFeeIds, true)) {
+                            continue;
+                        }
                         // attach remaining amount if a dette exists for this eleve and frais
-                        $d = DetteEleve::findByEleveAndFrais($eleveId, (int) ($f['id'] ?? 0));
+                        $d = DetteEleve::findByEleveAndFrais($eleveId, $feeId);
                         $f['remaining'] = $d ? (float) ($d['montant_restant'] ?? ($f['montant_total'] ?? 0)) : (float) ($f['montant_total'] ?? 0);
                         $fees[] = $f;
                     }
                 }
             } else {
-                $fees = \App\Models\FraisScolaire::getAllBySchool($schoolIdForFees);
+                $allFees = \App\Models\FraisScolaire::getAllBySchool($schoolIdForFees);
+                foreach ($allFees as $f) {
+                    $feeId = (int) ($f['id'] ?? 0);
+                    if (!empty($authorizedFeeIds) && !in_array($feeId, $authorizedFeeIds, true)) {
+                        continue;
+                    }
+                    $fees[] = $f;
+                }
             }
         } catch (\Throwable $e) {
             // ignore, view will show empty list
@@ -626,38 +657,22 @@ class PaiementsController extends Controller
             'caisses' => $caisses,
             'fees' => $fees,
             'paymentFormToken' => $paymentFormToken,
+            'authorizedFeeIds' => $authorizedFeeIds,
         ]);
     }
 
     public function store(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['super_admin', 'comptable_école']);
+        Auth::requireRoles(['super_admin', 'comptable_école', 'sec_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école']);
 
         $user = Auth::refresh() ?: Auth::user();
-        if (($user['role'] ?? '') !== 'comptable_école') {
-            $_SESSION['flash_error'] = 'Seul le comptable de l’école peut enregistrer un paiement.';
-            $this->redirect('/paiements');
-            return;
-        }
 
         $submittedToken = (string) ($_POST['payment_form_token'] ?? '');
         $expectedToken = (string) ($_SESSION['payment_form_token'] ?? '');
         if ($submittedToken === '' || $expectedToken === '' || !hash_equals($expectedToken, $submittedToken)) {
             $_SESSION['paiements_errors'] = ['Ce formulaire a déjà été traité ou a expiré. Rechargez la page et réessayez.'];
             header('Location: ' . BASE_URL . '/paiements/create');
-            exit;
-        }
-        $agentId = null;
-        if (!empty($user['reference_id'])) {
-            $agentId = (int) $user['reference_id'];
-        } elseif (!empty($user['id'])) {
-            $agentId = (int) $user['id'];
-        }
-
-        if (!$agentId) {
-            $_SESSION['flash_error'] = 'Impossible d\'identifier l\'agent en cours. Assurez-vous d\'être connecté en tant qu\'agent.';
-            header('Location: ' . BASE_URL . '/paiements');
             exit;
         }
 
@@ -673,6 +688,30 @@ class PaiementsController extends Controller
             'libelle' => trim($_POST['libelle'] ?? ''),
             'caisse_id' => $caisseId,
         ];
+
+        if (!$this->canCreatePayment($user, $fraisId)) {
+            $_SESSION['paiements_errors'] = ['Vous n’avez pas l’autorisation de saisir un paiement pour ce frais.'];
+            $_SESSION['paiements_old'] = $oldInput;
+            $redirectUrl = BASE_URL . '/paiements/create';
+            if ($eleveId > 0) {
+                $redirectUrl .= '?eleve_id=' . urlencode($eleveId);
+            }
+            header('Location: ' . $redirectUrl);
+            exit;
+        }
+
+        $agentId = null;
+        if (!empty($user['reference_id'])) {
+            $agentId = (int) $user['reference_id'];
+        } elseif (!empty($user['id'])) {
+            $agentId = (int) $user['id'];
+        }
+
+        if (!$agentId) {
+            $_SESSION['flash_error'] = 'Impossible d\'identifier l\'agent en cours. Assurez-vous d\'être connecté en tant qu\'agent.';
+            header('Location: ' . BASE_URL . '/paiements');
+            exit;
+        }
 
         $errors = [];
         $fee = null;
@@ -817,6 +856,49 @@ class PaiementsController extends Controller
 
         header('Location: ' . BASE_URL . '/paiements/receipt?id=' . $ecritureId);
         exit;
+    }
+
+    public function gestionAutorisations(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école']);
+
+        $user = Auth::refresh() ?: Auth::user();
+        if (!in_array($user['role'] ?? '', ['super_admin', 'ecole_admin', 'comptable_école'], true)) {
+            $this->redirect('/paiements');
+            return;
+        }
+
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        if ($ecoleId <= 0 && ($user['role'] ?? '') !== 'super_admin') {
+            $this->redirect('/dashboard');
+            return;
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $role = (string) ($_POST['role'] ?? '');
+            $fraisId = !empty($_POST['frais_id']) ? (int) $_POST['frais_id'] : 0;
+            $enabled = isset($_POST['enabled']) && (string) $_POST['enabled'] === '1';
+            if ($role !== '' && $fraisId > 0) {
+                PaiementAutorisation::setRoleAccess($ecoleId, $role, $fraisId, $enabled, (int) ($user['id'] ?? 0));
+            }
+            $_SESSION['paiements_success'] = 'Droits d’enregistrement mis à jour.';
+            $this->redirect('/paiements/gestionAutorisations');
+        }
+
+        $fees = FraisScolaire::getAllBySchool($ecoleId > 0 ? $ecoleId : (int) ($_GET['ecole_id'] ?? 0));
+        $matrix = PaiementAutorisation::getRoleAccessMatrix($ecoleId > 0 ? $ecoleId : (int) ($_GET['ecole_id'] ?? 0));
+        $roleList = PaiementAutorisation::allRoles();
+        $this->view('paiements/gestion_autorisations', [
+            'title' => APP_NAME . ' - Autorisations paiements',
+            'user' => $user,
+            'role' => $user['role'] ?? 'default',
+            'roleLabel' => User::getRoleLabel($user['role'] ?? 'default'),
+            'modules' => $this->getModulesForRole($user['role'] ?? 'default'),
+            'fees' => $fees,
+            'roleList' => $roleList,
+            'matrix' => $matrix,
+        ]);
     }
 
     public function edit(): void

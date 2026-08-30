@@ -67,7 +67,7 @@ class PageController extends Controller
             'paiements-enfant' => ['parent_ecole'],
             'agents' => ['super_admin', 'ecole_admin'],
             'parents' => ['super_admin', 'ecole_admin', 'sec_école'],
-            'settings' => ['super_admin'],
+            'settings' => ['super_admin', 'ecole_admin'],
         ];
 
         $pages = [

@@ -86,7 +86,9 @@ class Controller
                 ['name' => 'Messages', 'path' => '/messages', 'icon' => 'bi-chat-dots'],
             ],
             'ecole_admin' => [
-                ['name' => 'Écoles', 'path' => '/ecoles', 'icon' => 'bi-building'],
+                ['name' => 'École', 'path' => '/ecoles', 'icon' => 'bi-building'],
+                ['name' => 'Paramètres école', 'path' => '/ecoles', 'icon' => 'bi-gear'],
+                ['name' => 'Autorisations paiements', 'path' => '/paiements/gestionAutorisations', 'icon' => 'bi-shield-check'],
                 ['name' => 'Agents', 'path' => '/agents', 'icon' => 'bi-people-fill'],
                 ['name' => 'Parents', 'path' => '/parents', 'icon' => 'bi-people'],
                 ['name' => 'Élèves', 'path' => '/eleves', 'icon' => 'bi-person-badge'],

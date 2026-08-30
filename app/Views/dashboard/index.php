@@ -82,6 +82,34 @@
             </div>
           </div>
 
+          <?php if (($role ?? '') === 'ecole_admin'): ?>
+          <div class="row mt-3">
+            <div class="col-12 mb-4">
+              <div class="card border-primary shadow-sm h-100">
+                <div class="card-header bg-primary text-white">
+                  <h5 class="card-title mb-0">Portail de l’école</h5>
+                </div>
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-md-6">
+                      <a href="<?= BASE_URL ?>/ecoles" class="btn btn-outline-primary w-100 h-100 p-3">
+                        <i class="bi bi-gear fs-3 d-block mb-2"></i>
+                        <strong>Paramètres de l’école</strong>
+                      </a>
+                    </div>
+                    <div class="col-md-6">
+                      <a href="<?= BASE_URL ?>/paiements/gestionAutorisations" class="btn btn-outline-success w-100 h-100 p-3">
+                        <i class="bi bi-shield-check fs-3 d-block mb-2"></i>
+                        <strong>Accès paiements</strong>
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <?php endif; ?>
+
           <?php if (($role ?? '') === 'comptable_école'): ?>
           <div class="row mt-3">
             <div class="col-lg-4 col-md-6 mb-4">
