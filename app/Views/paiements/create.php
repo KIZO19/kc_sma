@@ -46,11 +46,16 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
               <?php else: ?>
                 <div class="mb-3">
                   <label class="form-label">Élève</label>
-                  <select name="eleve_id" class="form-select" required>
+                  <select name="eleve_id" id="studentSelect" class="form-select" required>
                     <option value="">-- Sélectionner un élève --</option>
                     <?php foreach (($students ?? []) as $s): ?>
                       <?php $isSettled = !empty($s['is_settled']); ?>
-                      <option value="<?= (int) $s['id'] ?>" data-settled="<?= $isSettled ? '1' : '0' ?>" style="<?= $isSettled ? 'color:#6c757d;' : '' ?>" <?= ((int) ($oldInput['eleve_id'] ?? 0) === (int) $s['id']) ? 'selected' : '' ?>><?= htmlspecialchars(($s['prenom'] ?? '') . ' ' . ($s['nom'] ?? '') . ' ' . ($s['postnom'] ?? '')) ?><?= $isSettled ? ' — Soldé' : ' — Reste: ' . number_format((float) ($s['remaining_debt'] ?? 0), 2) ?></option>
+                      <?php $fullName = trim((string) (($s['nom'] ?? '') . ' ' . ($s['postnom'] ?? '') . ' ' . ($s['prenom'] ?? ''))); ?>
+                      <?php $remaining = (float) ($s['remaining_debt'] ?? 0); ?>
+                      <?php $selected = ((int) ($oldInput['eleve_id'] ?? 0) === (int) $s['id']) ? 'selected' : ''; ?>
+                      <option value="<?= (int) $s['id'] ?>" <?= $selected ?> data-settled="<?= $isSettled ? '1' : '0' ?>" data-remaining="<?= number_format($remaining, 2, '.', '') ?>" style="<?= $isSettled ? 'color:#6c757d;' : '' ?>">
+                        <?= htmlspecialchars($fullName, ENT_QUOTES, 'UTF-8') ?><?= $isSettled ? ' — Soldé' : ' — Reste: ' . number_format($remaining, 2) ?>
+                      </option>
                     <?php endforeach; ?>
                   </select>
                 </div>
@@ -137,6 +142,27 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
 <?php require __DIR__ . '/../partials/app_footer.php'; ?>
 <script>
   document.addEventListener('DOMContentLoaded', function () {
+    const studentSelect = document.getElementById('studentSelect');
+    if (!studentSelect) {
+      return;
+    }
+
+    const options = Array.from(studentSelect.options);
+    if (!options.length) {
+      return;
+    }
+
+    const selectedValue = studentSelect.value;
+    if (!selectedValue) {
+      studentSelect.value = '';
+      return;
+    }
+
+    const matchedOption = options.find((option) => String(option.value) === String(selectedValue));
+    if (matchedOption && matchedOption.dataset.settled === '1') {
+      matchedOption.style.color = '#6c757d';
+    }
+
     const fraisSelect = document.getElementById('fraisSelect');
     const libelleInput = document.getElementById('libelleInput');
     const montantInput = document.querySelector('input[name="montant"]');

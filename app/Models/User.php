@@ -142,11 +142,20 @@ class User
         return self::getRoleEntityByRole($user['role']);
     }
 
-    public static function findByReference(string $role, int $referenceId): ?array
+    public static function findByReference(string $role, int $referenceId, ?int $ecoleId = null): ?array
     {
         $db = Database::getConnection();
-        $stmt = $db->prepare('SELECT * FROM utilisateurs WHERE role = :role AND reference_id = :reference_id LIMIT 1');
-        $stmt->execute([':role' => $role, ':reference_id' => $referenceId]);
+        $sql = 'SELECT * FROM utilisateurs WHERE role = :role AND reference_id = :reference_id';
+        $params = [':role' => $role, ':reference_id' => $referenceId];
+
+        if ($ecoleId !== null) {
+            $sql .= ' AND ecole_id = :ecole_id';
+            $params[':ecole_id'] = $ecoleId;
+        }
+
+        $sql .= ' LIMIT 1';
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         return $user ?: null;
@@ -199,11 +208,56 @@ class User
         return self::findById((int) $db->lastInsertId());
     }
 
+    public static function getSchoolScopedRoles(): array
+    {
+        return [
+            'ecole_admin',
+            'agent_ecole',
+            'enseignant_école',
+            'eleve_ecole',
+            'parent_ecole',
+            'comptable_école',
+            'sec_école',
+            'préfet_école',
+            'DE_école',
+            'DD_école',
+            'DP_école',
+            'DA_école',
+            'promoteur_école',
+        ];
+    }
+
     public static function findOrCreateForReference(array $data): array
     {
-        $existing = self::findByReference($data['role'], (int) $data['reference_id']);
+        $role = (string) ($data['role'] ?? '');
+        $referenceId = (int) ($data['reference_id'] ?? 0);
+        $ecoleId = isset($data['ecole_id']) ? (int) $data['ecole_id'] : null;
+
+        if ($referenceId <= 0) {
+            throw new \InvalidArgumentException('reference_id obligatoire pour créer un compte utilisateur lié à une école.');
+        }
+
+        $existing = self::findByReference($role, $referenceId, $ecoleId);
         if ($existing) {
+            if ($ecoleId !== null && !empty($existing['ecole_id']) && (int) $existing['ecole_id'] !== $ecoleId) {
+                $db = Database::getConnection();
+                $stmt = $db->prepare('UPDATE utilisateurs SET ecole_id = :ecole_id WHERE id = :id');
+                $stmt->execute([':ecole_id' => $ecoleId, ':id' => (int) $existing['id']]);
+                return self::findById((int) $existing['id']) ?: $existing;
+            }
             return $existing;
+        }
+
+        if ($ecoleId === null && in_array($role, self::getSchoolScopedRoles(), true)) {
+            $fallback = self::findByReference($role, $referenceId, null);
+            if ($fallback && !empty($fallback['ecole_id'])) {
+                $data['ecole_id'] = (int) $fallback['ecole_id'];
+                $ecoleId = (int) $fallback['ecole_id'];
+            }
+        }
+
+        if ($ecoleId === null && in_array($role, self::getSchoolScopedRoles(), true)) {
+            throw new \InvalidArgumentException('ecole_id obligatoire pour créer un compte utilisateur lié à une école.');
         }
 
         return self::createForReference($data);
