@@ -46,14 +46,9 @@
                 $solde = isset($compte['solde_debiteur']) ? (float) $compte['solde_debiteur'] : 0.0;
                 $dette = $solde > 0 ? $solde : 0.0;
                 $reste = isset($reste_a_payer) ? $reste_a_payer : null;
-                $qrPayload = json_encode([
-                  'eleve_id' => $ecriture['eleve_id'] ?? null,
-                  'eleve' => $eleveName,
-                  'solde' => number_format($solde, 2, '.', ''),
-                  'dette' => number_format($dette, 2, '.', ''),
-                  'reste' => is_null($reste) ? null : number_format($reste, 2, '.', ''),
-                  'reference' => $ecriture['reference_recu'] ?? '',
-                ], JSON_UNESCAPED_UNICODE);
+                $resteParFrais = isset($reste_par_frais) ? $reste_par_frais : null;
+                $montantPaye = isset($ecriture['montant']) ? (float) $ecriture['montant'] : 0.0;
+                $qrPayload = BASE_URL . '/paiements/qrSummary?id=' . urlencode((string) ($ecriture['id'] ?? ''));
                 $qrPayloadEscaped = htmlspecialchars($qrPayload, ENT_QUOTES, 'UTF-8');
               ?>
 
@@ -64,7 +59,7 @@
                 <div class="pos-row"><div>Perçu par:</div><div><?= htmlspecialchars($ecriture['agent_nom'] ?? '-') ?></div></div>
                 <div class="pos-row"><div>Fonction:</div><div><?= htmlspecialchars($ecriture['agent_fonction'] ?? '-') ?></div></div>
                 <div class="pos-line"></div>
-                <div class="pos-row"><div>Montant</div><div class="pos-amount"><?= htmlspecialchars($ecriture['montant_affiche'] ?? number_format((float) ($ecriture['montant'] ?? 0), 2)) ?></div></div>
+                <div class="pos-row"><div>Montant payé</div><div class="pos-amount"><?= htmlspecialchars($ecriture['montant_affiche'] ?? number_format((float) ($ecriture['montant'] ?? 0), 2)) ?></div></div>
                 <?php if (!empty($ecriture['montant_usd_equivalent']) && strtoupper(trim($ecriture['transaction_devise'] ?? 'USD')) !== 'USD'): ?>
                   <div class="pos-row"><div>Equivalent USD</div><div><?= number_format((float) $ecriture['montant_usd_equivalent'], 2) ?> USD</div></div>
                 <?php endif; ?>
@@ -74,10 +69,13 @@
                 <?php if (!is_null($reste)): ?>
                   <div class="pos-row"><div>Reste à payer</div><div><?= number_format((float) $reste, 2) ?></div></div>
                 <?php endif; ?>
+                <?php if (!is_null($resteParFrais) && (float) $resteParFrais !== (float) $reste): ?>
+                  <div class="pos-row"><div>Reste du frais</div><div><?= number_format((float) $resteParFrais, 2) ?></div></div>
+                <?php endif; ?>
 
                 <div class="qr">
                   <img src="https://api.qrserver.com/v1/create-qr-code?size=200x200&data=<?= urlencode($qrPayload) ?>" alt="QR code" style="width:140px;height:140px;" />
-                  <div style="font-size:11px;margin-top:6px;">Scannez pour voir le solde et la dette</div>
+                  <div style="font-size:11px;margin-top:6px;">Scannez pour voir le résumé du paiement</div>
                 </div>
 
                 <div class="pos-line"></div>

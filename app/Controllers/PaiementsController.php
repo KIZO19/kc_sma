@@ -1044,30 +1044,42 @@ class PaiementsController extends Controller
             $ecoleName = APP_NAME;
         }
 
-        // Calculate remaining amount for the related fee (if any)
+        // Calculate debt remaining according to the student’s applicable fees.
         $reste = null;
+        $resteParFrais = null;
         try {
-            $fraisId = $data['frais_id'] ?? null;
-            if (!empty($fraisId) && !empty($data['eleve_id'])) {
-                $fee = \App\Models\FraisScolaire::findById((int) $fraisId);
-                $feeTotal = $fee ? (float) ($fee['montant_total'] ?? 0) : 0.0;
+            $eleveId = (int) ($data['eleve_id'] ?? 0);
+            $fraisId = !empty($data['frais_id']) ? (int) $data['frais_id'] : 0;
 
-                // Sum payments from ecritures
-                $stmtPaid = $db->prepare('SELECT SUM(ece.montant) AS paid FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id WHERE ce.eleve_id = :eleve AND ece.frais_id = :frais');
-                $stmtPaid->execute([':eleve' => (int) $data['eleve_id'], ':frais' => (int) $fraisId]);
-                $paid1 = (float) ($stmtPaid->fetchColumn() ?: 0);
+            if ($eleveId > 0) {
+                $reste = DetteEleve::getTotalOutstandingByEleve($eleveId);
+            }
 
-                // Sum payments from legacy table
-                $stmtPaid2 = $db->prepare('SELECT SUM(pe.montant_paye) AS paid FROM paiements_eleves pe WHERE pe.eleve_id = :eleve AND pe.frais_id = :frais');
-                $stmtPaid2->execute([':eleve' => (int) $data['eleve_id'], ':frais' => (int) $fraisId]);
-                $paid2 = (float) ($stmtPaid2->fetchColumn() ?: 0);
+            if ($eleveId > 0 && $fraisId > 0) {
+                $dette = DetteEleve::findByEleveAndFrais($eleveId, $fraisId);
+                if ($dette) {
+                    $resteParFrais = (float) ($dette['montant_restant'] ?? 0);
+                } else {
+                    $fee = \App\Models\FraisScolaire::findById($fraisId);
+                    $feeTotal = $fee ? (float) ($fee['montant_total'] ?? 0) : 0.0;
+                    $stmtPaid = $db->prepare('SELECT SUM(ece.montant) AS paid FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id WHERE ce.eleve_id = :eleve AND ece.frais_id = :frais AND ece.type_mouvement = :type');
+                    $stmtPaid->execute([':eleve' => $eleveId, ':frais' => $fraisId, ':type' => 'CREDIT']);
+                    $paid1 = (float) ($stmtPaid->fetchColumn() ?: 0);
 
-                // The same payment can be mirrored in both historical tables.
-                $totalPaid = max($paid1, $paid2);
-                $reste = max(0.0, $feeTotal - $totalPaid);
+                    $stmtPaid2 = $db->prepare('SELECT SUM(pe.montant_paye) AS paid FROM paiements_eleves pe WHERE pe.eleve_id = :eleve AND pe.frais_id = :frais');
+                    $stmtPaid2->execute([':eleve' => $eleveId, ':frais' => $fraisId]);
+                    $paid2 = (float) ($stmtPaid2->fetchColumn() ?: 0);
+
+                    $resteParFrais = max(0.0, $feeTotal - max($paid1, $paid2));
+                }
+
+                if ($resteParFrais !== null) {
+                    $reste = $resteParFrais;
+                }
             }
         } catch (\Throwable $e) {
             $reste = null;
+            $resteParFrais = null;
         }
 
         $this->view('paiements/receipt', [
@@ -1080,6 +1092,88 @@ class PaiementsController extends Controller
             'compte' => $compte,
             'ecole_name' => $ecoleName,
             'ecole_logo' => $ecoleLogo,
+            'reste_a_payer' => $reste,
+            'reste_par_frais' => $resteParFrais,
+        ]);
+    }
+
+    public function qrSummary(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'parent_ecole']);
+
+        $user = Auth::refresh() ?: Auth::user();
+        $idParam = $_GET['id'] ?? null;
+        if (empty($idParam)) {
+            header('Location: ' . BASE_URL . '/paiements');
+            exit;
+        }
+
+        $db = Database::getConnection();
+        $data = null;
+
+        if (is_string($idParam) && strpos($idParam, 'legacy-') === 0) {
+            $legacyId = (int) substr($idParam, strlen('legacy-'));
+            if ($legacyId <= 0) {
+                header('Location: ' . BASE_URL . '/paiements');
+                exit;
+            }
+
+            $lstmt = $db->prepare('SELECT pe.*, el.id AS eleve_id, el.nom, el.postnom, el.prenom, pe.frais_id AS frais_id FROM paiements_eleves pe INNER JOIN eleves el ON pe.eleve_id = el.id WHERE pe.id = :id LIMIT 1');
+            $lstmt->execute([':id' => $legacyId]);
+            $legacy = $lstmt->fetch(\PDO::FETCH_ASSOC);
+            if ($legacy) {
+                $data = [
+                    'id' => 'legacy-' . $legacyId,
+                    'reference_recu' => null,
+                    'date_operation' => $legacy['date_paiement'] ?? null,
+                    'montant' => $legacy['montant_paye'] ?? 0,
+                    'libelle' => $legacy['libelle'] ?? 'Paiement',
+                    'eleve_id' => $legacy['eleve_id'] ?? null,
+                    'frais_id' => $legacy['frais_id'] ?? null,
+                    'nom' => $legacy['nom'] ?? null,
+                    'postnom' => $legacy['postnom'] ?? null,
+                    'prenom' => $legacy['prenom'] ?? null,
+                    'caisse_name' => null,
+                ];
+            }
+        } else {
+            $ecritureId = (int) $idParam;
+            if ($ecritureId > 0) {
+                $stmt = $db->prepare('SELECT ece.*, ce.eleve_id, el.nom, el.postnom, el.prenom, cb.nom_compte AS caisse_name FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id INNER JOIN eleves el ON ce.eleve_id = el.id LEFT JOIN caisses_banques cb ON ece.caisse_banque_id = cb.id WHERE ece.id = :id LIMIT 1');
+                $stmt->execute([':id' => $ecritureId]);
+                $data = $stmt->fetch(\PDO::FETCH_ASSOC);
+            }
+        }
+
+        if (!$data) {
+            header('Location: ' . BASE_URL . '/error/notFound');
+            exit;
+        }
+
+        $eleveId = (int) ($data['eleve_id'] ?? 0);
+        $fraisId = !empty($data['frais_id']) ? (int) $data['frais_id'] : 0;
+        $reste = null;
+        if ($eleveId > 0) {
+            $reste = DetteEleve::getTotalOutstandingByEleve($eleveId);
+            if ($fraisId > 0) {
+                $dette = DetteEleve::findByEleveAndFrais($eleveId, $fraisId);
+                if ($dette) {
+                    $reste = (float) ($dette['montant_restant'] ?? 0);
+                }
+            }
+        }
+
+        $this->view('paiements/qr_summary', [
+            'title' => 'Paiement reçu',
+            'user' => $user,
+            'role' => $user['role'] ?? 'default',
+            'roleLabel' => User::getRoleLabel($user['role'] ?? 'default'),
+            'modules' => $this->getModulesForRole($user['role'] ?? 'default'),
+            'ecriture' => $data,
+            'eleve_name' => trim(($data['prenom'] ?? '') . ' ' . ($data['nom'] ?? '') . ' ' . ($data['postnom'] ?? '')),
+            'montant_paye' => (float) ($data['montant'] ?? 0),
+            'date_paiement' => $data['date_operation'] ?? null,
             'reste_a_payer' => $reste,
         ]);
     }
