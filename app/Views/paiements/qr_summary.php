@@ -88,11 +88,19 @@
   }
 </style>
 
+<?php
+  $currency = strtoupper(trim($ecriture['transaction_devise'] ?? $ecriture['frais_devise'] ?? 'USD')) ?: 'USD';
+  $formatCurrency = function (float $amount) use ($currency) {
+      $usdEquivalent = $currency !== 'USD' ? \App\Models\Devise::convertToUsd($amount, $currency) : null;
+      return \App\Models\Devise::formatAmountWithCurrency($amount, $currency, $usdEquivalent);
+  };
+?>
+
 <section class="summary-shell">
   <div class="summary-card">
     <div class="summary-top">
       <div class="badge">Paiement reçu</div>
-      <div class="summary-amount"><?= number_format((float) ($montant_paye ?? 0), 2, ',', ' ') ?> USD</div>
+      <div class="summary-amount"><?= htmlspecialchars($formatCurrency((float) ($montant_paye ?? 0))) ?></div>
       <div><?= htmlspecialchars($eleve_name ?? '-') ?></div>
     </div>
 
@@ -120,7 +128,7 @@
       <div class="stat-box">
         <div>
           <div class="stat-label">Reste à payer</div>
-          <div class="stat-value"><?= number_format((float) ($reste_a_payer ?? 0), 2, ',', ' ') ?> USD</div>
+          <div class="stat-value"><?= htmlspecialchars($formatCurrency((float) ($reste_a_payer ?? 0))) ?></div>
         </div>
         <div class="text-warning">
           <i class="bi bi-wallet2 fs-4"></i>

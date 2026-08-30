@@ -1164,6 +1164,13 @@ class PaiementsController extends Controller
             }
         }
 
+        $parts = array_filter([
+            $data['nom'] ?? '',
+            $data['postnom'] ?? '',
+            $data['prenom'] ?? '',
+        ], fn($value) => $value !== null && trim((string) $value) !== '');
+        $eleveName = implode(', ', array_map('trim', $parts));
+
         $this->view('paiements/qr_summary', [
             'title' => 'Paiement reçu',
             'user' => $user,
@@ -1171,7 +1178,7 @@ class PaiementsController extends Controller
             'roleLabel' => User::getRoleLabel($user['role'] ?? 'default'),
             'modules' => $this->getModulesForRole($user['role'] ?? 'default'),
             'ecriture' => $data,
-            'eleve_name' => trim(($data['prenom'] ?? '') . ' ' . ($data['nom'] ?? '') . ' ' . ($data['postnom'] ?? '')),
+            'eleve_name' => $eleveName,
             'montant_paye' => (float) ($data['montant'] ?? 0),
             'date_paiement' => $data['date_operation'] ?? null,
             'reste_a_payer' => $reste,
