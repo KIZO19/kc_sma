@@ -310,6 +310,11 @@ class PaymentParentNotifier
                     return ['sent' => false, 'channel' => $channel, 'reason' => 'provider_http_error', 'message' => 'Échec de l’envoi de message au parent.', 'details' => $details];
                 }
 
+                $parsed = $this->parseProviderResponse($response, $infobipMode, $channel);
+                if ($parsed !== null) {
+                    return $parsed;
+                }
+
                 return ['sent' => true, 'channel' => $channel, 'reason' => '', 'message' => 'Message envoyé.', 'details' => 'La notification a bien été envoyée avec succès.'];
             }
 
@@ -325,6 +330,11 @@ class PaymentParentNotifier
             $response = @file_get_contents($url, false, $context);
             if ($response === false) {
                 return ['sent' => false, 'channel' => $channel, 'reason' => 'stream_context_failed', 'message' => 'Échec de l’envoi de message au parent.', 'details' => 'Le contexte HTTP local n’a pas pu envoyer la requête.'];
+            }
+
+            $parsed = $this->parseProviderResponse($response, $infobipMode, $channel);
+            if ($parsed !== null) {
+                return $parsed;
             }
 
             return ['sent' => true, 'channel' => $channel, 'reason' => '', 'message' => 'Message envoyé.', 'details' => 'La notification a bien été envoyée avec succès.'];
@@ -359,6 +369,11 @@ class PaymentParentNotifier
                     return ['sent' => false, 'channel' => $channel, 'reason' => 'provider_http_error', 'message' => 'Échec de l’envoi de message au parent.', 'details' => $details];
                 }
 
+                $parsed = $this->parseProviderResponse($response, false, $channel);
+                if ($parsed !== null) {
+                    return $parsed;
+                }
+
                 return ['sent' => true, 'channel' => $channel, 'reason' => '', 'message' => 'Message envoyé.', 'details' => 'La notification a bien été envoyée avec succès.'];
             }
 
@@ -382,6 +397,62 @@ class PaymentParentNotifier
             error_log('PaymentParentNotifier::sendFormRequest failed: ' . $message);
             return ['sent' => false, 'channel' => $channel, 'reason' => 'exception', 'message' => 'Échec de l’envoi de message au parent.', 'details' => $message];
         }
+    }
+
+    private function parseProviderResponse(string $response, bool $infobipMode, string $channel): ?array
+    {
+        if (trim($response) === '') {
+            return null;
+        }
+
+        $decoded = json_decode($response, true);
+        if (!is_array($decoded)) {
+            return null;
+        }
+
+        if ($infobipMode) {
+            $requestError = $decoded['requestError'] ?? null;
+            if (is_array($requestError)) {
+                $text = $requestError['serviceException']['text'] ?? $requestError['text'] ?? 'Erreur Infobip.';
+                return ['sent' => false, 'channel' => $channel, 'reason' => 'infobip_api_error', 'message' => 'Échec de l’envoi de message au parent.', 'details' => (string) $text];
+            }
+
+            $messages = $decoded['messages'] ?? [];
+            if (is_array($messages) && !empty($messages)) {
+                $status = $messages[0]['status'] ?? null;
+                if (is_array($status)) {
+                    $groupId = $status['groupId'] ?? null;
+                    $groupName = $status['groupName'] ?? null;
+                    $description = $status['description'] ?? null;
+                    if ($groupId !== null && (int) $groupId !== 1) {
+                        return ['sent' => false, 'channel' => $channel, 'reason' => 'infobip_send_failed', 'message' => 'Échec de l’envoi de message au parent.', 'details' => trim((string) ($description ?? $groupName ?? 'La plateforme Infobip a refusé l’envoi.'))];
+                    }
+                    if ($groupId !== null && (int) $groupId === 1) {
+                        return ['sent' => true, 'channel' => $channel, 'reason' => '', 'message' => 'Message envoyé.', 'details' => 'La notification a bien été envoyée avec succès.'];
+                    }
+                }
+            }
+        }
+
+        if (isset($decoded['status']) && is_array($decoded['status'])) {
+            $statusCode = $decoded['status']['code'] ?? null;
+            $statusMessage = $decoded['status']['message'] ?? null;
+            if ($statusCode !== null && (int) $statusCode >= 400) {
+                return ['sent' => false, 'channel' => $channel, 'reason' => 'provider_api_error', 'message' => 'Échec de l’envoi de message au parent.', 'details' => trim((string) ($statusMessage ?? 'Le fournisseur a refusé l’envoi.'))];
+            }
+        }
+
+        if (isset($decoded['error'])) {
+            $errorText = $decoded['error']['message'] ?? $decoded['error'] ?? 'Erreur fournisseur.';
+            return ['sent' => false, 'channel' => $channel, 'reason' => 'provider_api_error', 'message' => 'Échec de l’envoi de message au parent.', 'details' => trim((string) $errorText)];
+        }
+
+        if (isset($decoded['success']) && $decoded['success'] === false) {
+            $reason = $decoded['message'] ?? $decoded['error'] ?? 'Le fournisseur a refusé l’envoi.';
+            return ['sent' => false, 'channel' => $channel, 'reason' => 'provider_api_error', 'message' => 'Échec de l’envoi de message au parent.', 'details' => trim((string) $reason)];
+        }
+
+        return null;
     }
 
     private function normalizePhone(string $phone): string

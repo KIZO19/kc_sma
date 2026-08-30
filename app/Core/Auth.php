@@ -153,7 +153,10 @@ class Auth
             return;
         }
 
-        if (($user['role'] ?? '') !== 'super_admin' && empty($user['ecole_id'])) {
+        $role = (string) ($user['role'] ?? '');
+        $isPendingUnassignedAgent = $role === 'agent_ecole' && (($user['statut'] ?? 'Actif') === 'Inactif') && (empty($user['ecole_id']) || (int) $user['ecole_id'] === 0);
+
+        if (($user['role'] ?? '') !== 'super_admin' && empty($user['ecole_id']) && !$isPendingUnassignedAgent) {
             $_SESSION['access_error'] = 'Vous devez être affecté(e) à une école pour accéder au dashboard.';
             header('Location: ' . BASE_URL . '/profile');
             exit;

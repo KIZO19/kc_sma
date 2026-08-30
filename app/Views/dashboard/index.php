@@ -17,6 +17,11 @@
 
       <section class="content">
         <div class="container-fluid">
+          <?php if (($role ?? '') === 'agent_ecole' && (($user['statut'] ?? 'Actif') === 'Inactif') && (empty($user['ecole_id']) || (int) $user['ecole_id'] === 0)): ?>
+            <div class="alert alert-warning border-0 shadow-sm mb-4">
+              <strong>Compte en attente :</strong> votre compte agent est bien créé mais n’a pas encore été affecté à une école. L’administrateur de l’école doit le valider pour l’activer. Il sera automatiquement supprimé après 6 jours s’il n’est pas approuvé.
+            </div>
+          <?php endif; ?>
           <div class="row">
             <?php foreach ($dashboardData['stats'] ?? [] as $stat): ?>
               <div class="col-lg-3 col-md-6 col-sm-6 mb-4">

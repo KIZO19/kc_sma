@@ -21,9 +21,43 @@ class UtilisateursController extends Controller
         $isSuperAdmin = ($role === 'super_admin');
         $schoolId = Auth::getSchoolId();
 
-        $allUsers = $isSuperAdmin ? User::getAllUsers() : User::getUsersBySchool((int) $schoolId);
-        $inactiveUsers = $isSuperAdmin ? User::getInactiveUsers() : User::getInactiveUsersBySchool((int) $schoolId);
-        $unassignedUsers = $isSuperAdmin ? User::getUnassignedPersonalAccounts() : [];
+        if ($isSuperAdmin) {
+            $allUsers = User::getAllUsers();
+            $inactiveUsers = User::getInactiveUsers();
+            $unassignedUsers = User::getUnassignedPersonalAccounts();
+        } else {
+            $schoolUsers = User::getUsersBySchool((int) $schoolId);
+            $unassignedUsers = User::getUnassignedPersonalAccounts();
+            $allUsers = $schoolUsers;
+            foreach ($unassignedUsers as $pendingUser) {
+                $alreadyPresent = false;
+                foreach ($allUsers as $existingUser) {
+                    if ((int) ($existingUser['id'] ?? 0) === (int) ($pendingUser['id'] ?? 0)) {
+                        $alreadyPresent = true;
+                        break;
+                    }
+                }
+                if (!$alreadyPresent) {
+                    $allUsers[] = $pendingUser;
+                }
+            }
+
+            $inactiveUsers = User::getInactiveUsersBySchool((int) $schoolId);
+            foreach ($unassignedUsers as $pendingUser) {
+                if (($pendingUser['statut'] ?? '') === 'Inactif') {
+                    $alreadyPresent = false;
+                    foreach ($inactiveUsers as $existingUser) {
+                        if ((int) ($existingUser['id'] ?? 0) === (int) ($pendingUser['id'] ?? 0)) {
+                            $alreadyPresent = true;
+                            break;
+                        }
+                    }
+                    if (!$alreadyPresent) {
+                        $inactiveUsers[] = $pendingUser;
+                    }
+                }
+            }
+        }
         $schools = Ecole::getAll();
         $schoolPopulations = Ecole::getSchoolPopulationCounts();
 
@@ -102,11 +136,23 @@ class UtilisateursController extends Controller
     public function validate(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['super_admin', 'promoteur_école']);
+        Auth::requireRoles(['super_admin', 'ecole_admin', 'promoteur_école']);
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $userId = (int) ($_POST['user_id'] ?? 0);
-            if ($userId > 0) {
+            $user = $userId > 0 ? User::findById($userId) : null;
+            $currentUser = Auth::user();
+            $currentSchoolId = (int) ($currentUser['ecole_id'] ?? 0);
+
+            if ($userId > 0 && $user) {
+                $isPendingUnassignedAgent = ($user['role'] ?? '') === 'agent_ecole'
+                    && (($user['statut'] ?? '') === 'Inactif')
+                    && (empty($user['ecole_id']) || (int) $user['ecole_id'] === 0);
+
+                if ($isPendingUnassignedAgent && $currentSchoolId > 0) {
+                    User::assignToSchool($userId, $currentSchoolId);
+                }
+
                 User::updateStatus($userId, 'Actif');
                 $_SESSION['utilisateurs_success'] = 'Compte utilisateur validé avec succès.';
             }

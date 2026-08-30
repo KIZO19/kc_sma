@@ -68,10 +68,6 @@ class Agent
         if (!$agent) {
             throw new \RuntimeException('Agent not found');
         }
-        $ecoleId = $agent['ecole_id'] ?? null;
-        if (empty($ecoleId)) {
-            throw new \RuntimeException('Agent ' . $agent['id'] . ' has no ecole_id');
-        }
 
         $identifiant = $agent['email'] ?: $agent['telephone'] ?: 'agent' . $agent['id'] . '@local';
         $password = bin2hex(random_bytes(4));
@@ -79,10 +75,10 @@ class Agent
         return \App\Models\User::findOrCreateForReference([
             'role' => 'agent_ecole',
             'reference_id' => $agent['id'],
-            'ecole_id' => $ecoleId,
             'identifiant' => $identifiant,
             'mot_de_passe' => $password,
             'nom_complet' => trim(($agent['nom'] ?? '') . ' ' . ($agent['postnom'] ?? '') . ' ' . ($agent['prenom'] ?? '')),
+            'statut' => 'Inactif',
         ]);
     }
 }

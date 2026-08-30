@@ -17,8 +17,10 @@ class AuthController extends Controller
             $motDePasse = $_POST['mot_de_passe'] ?? '';
 
             $user = User::authenticate($identifiant, $motDePasse);
-            if ($user && $user['statut'] === 'Actif') {
-                if (($user['role'] ?? '') !== 'super_admin' && empty($user['ecole_id'])) {
+            $isPendingUnassignedAgent = $user && ($user['role'] ?? '') === 'agent_ecole' && (($user['statut'] ?? 'Actif') === 'Inactif') && (empty($user['ecole_id']) || (int) $user['ecole_id'] === 0);
+
+            if ($user && ($user['statut'] === 'Actif' || $isPendingUnassignedAgent)) {
+                if (($user['role'] ?? '') !== 'super_admin' && empty($user['ecole_id']) && !$isPendingUnassignedAgent) {
                     $error = 'Votre compte n’est pas encore affecté à une école. Contactez l’administration.';
                 } else {
                     Auth::login($user);
@@ -28,8 +30,11 @@ class AuthController extends Controller
             }
 
             $error = $error ?? 'Identifiant ou mot de passe incorrect.';
-            if ($user && $user['statut'] !== 'Actif') {
+            if ($user && $user['statut'] !== 'Actif' && !$isPendingUnassignedAgent) {
                 $error = 'Votre compte est actuellement ' . htmlspecialchars($user['statut']) . '. Contactez l’administrateur.';
+            }
+            if ($isPendingUnassignedAgent) {
+                $error = 'Votre compte est en attente de validation par l’administrateur de l’école.';
             }
 
             $this->view('auth/login', [

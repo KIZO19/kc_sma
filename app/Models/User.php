@@ -10,6 +10,8 @@ class User
 {
     public static function authenticate(string $identifiant, string $motDePasse): ?array
     {
+        self::cleanupExpiredPendingAccounts();
+
         $user = self::findByIdentifiant($identifiant);
 
         if (!$user) {
@@ -64,9 +66,15 @@ class User
 
         $resolvedSchoolId = null;
         if (in_array($role, $schoolScopedRoles, true)) {
-            $resolvedSchoolId = isset($data['ecole_id']) ? (int) $data['ecole_id'] : self::resolveSchoolIdForRole($role, (string) ($data['identifiant'] ?? ''), isset($data['reference_id']) ? (int) $data['reference_id'] : null);
-            if ($resolvedSchoolId <= 0) {
-                throw new \InvalidArgumentException('L’école est obligatoire pour ce rôle.');
+            if (isset($data['ecole_id']) && (int) $data['ecole_id'] > 0) {
+                $resolvedSchoolId = (int) $data['ecole_id'];
+            } elseif ($role === 'agent_ecole' && (($data['statut'] ?? '') === 'Inactif')) {
+                $resolvedSchoolId = null;
+            } else {
+                $resolvedSchoolId = self::resolveSchoolIdForRole($role, (string) ($data['identifiant'] ?? ''), isset($data['reference_id']) ? (int) $data['reference_id'] : null);
+                if ($resolvedSchoolId <= 0) {
+                    throw new \InvalidArgumentException('L’école est obligatoire pour ce rôle.');
+                }
             }
         }
 
@@ -258,7 +266,7 @@ class User
             return $existing;
         }
 
-        if ($ecoleId === null && in_array($role, self::getSchoolScopedRoles(), true)) {
+        if ($ecoleId === null && in_array($role, self::getSchoolScopedRoles(), true) && $role !== 'agent_ecole') {
             $fallback = self::findByReference($role, $referenceId, null);
             if ($fallback && !empty($fallback['ecole_id'])) {
                 $data['ecole_id'] = (int) $fallback['ecole_id'];
@@ -266,7 +274,7 @@ class User
             }
         }
 
-        if ($ecoleId === null && in_array($role, self::getSchoolScopedRoles(), true)) {
+        if ($ecoleId === null && in_array($role, self::getSchoolScopedRoles(), true) && $role !== 'agent_ecole') {
             throw new \InvalidArgumentException('ecole_id obligatoire pour créer un compte utilisateur lié à une école.');
         }
 
@@ -353,6 +361,20 @@ class User
         $stmt = $db->prepare('SELECT * FROM utilisateurs WHERE statut = :statut AND ecole_id = :ecole_id ORDER BY created_at ASC');
         $stmt->execute([':statut' => 'Inactif', ':ecole_id' => $ecoleId]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function cleanupExpiredPendingAccounts(): int
+    {
+        try {
+            $db = Database::getConnection();
+            $stmt = $db->prepare(
+                "DELETE FROM utilisateurs WHERE role = 'agent_ecole' AND statut = 'Inactif' AND (ecole_id IS NULL OR ecole_id = 0) AND created_at < DATE_SUB(NOW(), INTERVAL 6 DAY)"
+            );
+            $stmt->execute();
+            return $stmt->rowCount();
+        } catch (\Throwable $e) {
+            return 0;
+        }
     }
 
     public static function updateStatus(int $id, string $statut): bool
