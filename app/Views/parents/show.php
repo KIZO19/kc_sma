@@ -40,7 +40,7 @@
               <div class="table-responsive">
                 <table class="table table-striped table-hover">
                   <thead>
-                    <tr><th>Nom</th><th>Matricule</th><th>Classe</th><th>Action</th></tr>
+                    <tr><th>Nom</th><th>Matricule</th><th>Classe</th><th>Total payé</th><th>Action</th></tr>
                   </thead>
                   <tbody>
                     <?php foreach ($children as $child): ?>
@@ -49,6 +49,15 @@
                         <td><?= htmlspecialchars($childName !== '' ? $childName : '-') ?></td>
                         <td><?= htmlspecialchars($child['matricule'] ?? '-') ?></td>
                         <td><?= htmlspecialchars($child['nom_classe'] ?? '-') ?></td>
+                        <td>
+                          <?php if (!empty($child['total_paid_by_currency'])): ?>
+                            <?php foreach ($child['total_paid_by_currency'] as $currency => $totalPaid): ?>
+                              <div><?= number_format((float) $totalPaid, 2, ',', ' ') ?> <?= htmlspecialchars($currency) ?></div>
+                            <?php endforeach; ?>
+                          <?php else: ?>
+                            0,00
+                          <?php endif; ?>
+                        </td>
                         <td><a href="<?= BASE_URL ?>/eleves/show?id=<?= (int) $child['id'] ?>" class="btn btn-sm btn-outline-primary">Voir</a></td>
                       </tr>
                     <?php endforeach; ?>
