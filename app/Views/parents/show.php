@@ -40,15 +40,34 @@
               <div class="table-responsive">
                 <table class="table table-striped table-hover">
                   <thead>
-                    <tr><th>Nom</th><th>Matricule</th><th>Classe</th><th>Action</th></tr>
+                    <tr><th>Nom</th><th>Matricule</th><th>Classe</th><th>Total payé</th><th>Reste à payer</th><th>Action</th></tr>
                   </thead>
                   <tbody>
                     <?php foreach ($children as $child): ?>
                       <?php $childName = trim(($child['nom'] ?? '') . ' ' . ($child['postnom'] ?? '') . ' ' . ($child['prenom'] ?? '')); ?>
+                      <?php $financialSummary = $childrenFinancialSummaries[(int) ($child['id'] ?? 0)] ?? ['paid' => [], 'debt' => []]; ?>
                       <tr>
                         <td><?= htmlspecialchars($childName !== '' ? $childName : '-') ?></td>
                         <td><?= htmlspecialchars($child['matricule'] ?? '-') ?></td>
                         <td><?= htmlspecialchars($child['nom_classe'] ?? '-') ?></td>
+                        <td>
+                          <?php if (empty($financialSummary['paid'])): ?>
+                            0,00
+                          <?php else: ?>
+                            <?php foreach ($financialSummary['paid'] as $currency => $amount): ?>
+                              <div><?= htmlspecialchars($currency) ?> <?= number_format((float) $amount, 2, ',', ' ') ?></div>
+                            <?php endforeach; ?>
+                          <?php endif; ?>
+                        </td>
+                        <td>
+                          <?php if (empty($financialSummary['debt'])): ?>
+                            0,00
+                          <?php else: ?>
+                            <?php foreach ($financialSummary['debt'] as $currency => $amount): ?>
+                              <div><?= htmlspecialchars($currency) ?> <?= number_format((float) $amount, 2, ',', ' ') ?></div>
+                            <?php endforeach; ?>
+                          <?php endif; ?>
+                        </td>
                         <td><a href="<?= BASE_URL ?>/eleves/show?id=<?= (int) $child['id'] ?>" class="btn btn-sm btn-outline-primary">Voir</a></td>
                       </tr>
                     <?php endforeach; ?>

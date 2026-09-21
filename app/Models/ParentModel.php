@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Core\Database;
+use App\Models\DetteEleve;
 use PDO;
 
 class ParentModel
@@ -54,6 +55,55 @@ class ParentModel
         );
         $stmt->execute([':parent_id' => $parentId]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function getChildrenFinancialSummaries(array $children): array
+    {
+        $summaries = [];
+        $db = Database::getConnection();
+
+        foreach ($children as $child) {
+            $eleveId = (int) ($child['id'] ?? 0);
+            if ($eleveId <= 0) {
+                continue;
+            }
+
+            $paid = [];
+            $queries = [
+                'SELECT COALESCE(fs.devise, "USD") AS devise, SUM(ece.montant) AS total '
+                . 'FROM ecritures_comptables_eleves ece '
+                . 'INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id '
+                . 'LEFT JOIN frais_scolaires fs ON fs.id = ece.frais_id '
+                . 'WHERE ce.eleve_id = :eleve AND ece.type_mouvement = "CREDIT" '
+                . 'GROUP BY COALESCE(fs.devise, "USD")',
+                'SELECT COALESCE(fs.devise, "USD") AS devise, SUM(pe.montant_paye) AS total '
+                . 'FROM paiements_eleves pe LEFT JOIN frais_scolaires fs ON fs.id = pe.frais_id '
+                . 'WHERE pe.eleve_id = :eleve GROUP BY COALESCE(fs.devise, "USD")',
+            ];
+
+            foreach ($queries as $query) {
+                try {
+                    $stmt = $db->prepare($query);
+                    $stmt->execute([':eleve' => $eleveId]);
+                    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                        $devise = strtoupper(trim($row['devise'] ?? 'USD')) ?: 'USD';
+                        $paid[$devise] = max($paid[$devise] ?? 0.0, (float) ($row['total'] ?? 0));
+                    }
+                } catch (\Throwable $e) {
+                    // Legacy payment tables may not exist in every installation.
+                }
+            }
+
+            $debt = DetteEleve::getTotalOutstandingGroupedByDevise($eleveId);
+            if (empty($debt)) {
+                $debt = DetteEleve::computeOutstandingFromApplicableFees($eleveId);
+            }
+            ksort($paid);
+            ksort($debt);
+            $summaries[$eleveId] = ['paid' => $paid, 'debt' => $debt];
+        }
+
+        return $summaries;
     }
 
     public static function create(array $data): ?array

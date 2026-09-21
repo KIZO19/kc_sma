@@ -214,11 +214,11 @@ class PaymentParentNotifier
         }
 
         $payload = [
-            'messages' => [[
-                'from' => $from !== '' ? $from : '447860099299',
-                'to' => ltrim($phone, '+'),
+            'from' => $from !== '' ? $from : '447860099299',
+            'to' => ltrim($phone, '+'),
+            'content' => [
                 'text' => $message,
-            ]],
+            ],
         ];
 
         return $this->sendJsonRequest($baseUrl . '/whatsapp/1/message/text', $payload, $apiKey, 'whatsapp', true);
@@ -306,7 +306,8 @@ class PaymentParentNotifier
                 curl_close($ch);
 
                 if ($response === false || $errorNo !== 0 || ($statusCode >= 400 && $statusCode !== 401 && $statusCode !== 402)) {
-                    $details = $error ?: 'Erreur HTTP ' . $statusCode;
+                    $providerError = is_string($response) ? $this->parseProviderResponse($response, $infobipMode, $channel) : null;
+                    $details = $error ?: ($providerError['details'] ?? 'Erreur HTTP ' . $statusCode);
                     return ['sent' => false, 'channel' => $channel, 'reason' => 'provider_http_error', 'message' => 'Échec de l’envoi de message au parent.', 'details' => $details];
                 }
 
