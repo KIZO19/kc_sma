@@ -6,6 +6,7 @@ use App\Core\Auth;
 use App\Core\Controller;
 use App\Models\DetteEleve;
 use App\Models\Eleve;
+use App\Models\Classe;
 use App\Models\User;
 
 class ElevesController extends Controller
@@ -19,7 +20,15 @@ class ElevesController extends Controller
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
-        $students = $ecoleId > 0 ? Eleve::getAllBySchool($ecoleId) : Eleve::getAll();
+        $classes = $ecoleId > 0 ? Classe::getAllBySchool($ecoleId) : [];
+        $selectedClasseId = (int) ($_GET['classe_id'] ?? 0);
+        $validClasseIds = array_map(static fn (array $classe): int => (int) $classe['id'], $classes);
+        if ($selectedClasseId > 0 && !in_array($selectedClasseId, $validClasseIds, true)) {
+            $selectedClasseId = 0;
+        }
+        $students = $ecoleId > 0
+            ? Eleve::getAllBySchool($ecoleId, $selectedClasseId > 0 ? $selectedClasseId : null)
+            : Eleve::getAll();
 
         $this->view('eleves/index', [
             'title' => APP_NAME . ' - Élèves',
@@ -28,6 +37,8 @@ class ElevesController extends Controller
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $modules,
             'students' => $students,
+            'classes' => $classes,
+            'selectedClasseId' => $selectedClasseId,
         ]);
     }
 

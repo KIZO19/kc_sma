@@ -171,19 +171,30 @@ class Eleve
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public static function getAllBySchool(int $ecoleId): array
+    public static function getAllBySchool(int $ecoleId, ?int $classeId = null): array
     {
         $db = Database::getConnection();
-        $stmt = $db->prepare(
+        $sql =
             'SELECT DISTINCT e.*, p.nom_responsable AS parent_nom_responsable '
+            . ', (SELECT c2.nom_classe FROM inscriptions i2 INNER JOIN classes c2 ON i2.classe_id = c2.id '
+            . 'WHERE i2.eleve_id = e.id ORDER BY i2.date_inscription DESC, i2.id DESC LIMIT 1) AS nom_classe '
             . 'FROM eleves e '
             . 'LEFT JOIN parents p ON e.parent_id = p.id '
-            . 'WHERE e.ecole_id = :ecole_id OR EXISTS ('
+            . 'WHERE (e.ecole_id = :ecole_id OR p.ecole_id = :ecole_id OR EXISTS ('
             . 'SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id '
-            . 'WHERE i.eleve_id = e.id AND c.ecole_id = :ecole_id) '
-            . 'ORDER BY e.nom ASC, e.postnom ASC, e.prenom ASC'
-        );
-        $stmt->execute([':ecole_id' => $ecoleId]);
+            . 'WHERE i.eleve_id = e.id AND c.ecole_id = :ecole_id))';
+        $params = [':ecole_id' => $ecoleId];
+
+        if ($classeId !== null && $classeId > 0) {
+            $sql .= ' AND EXISTS (SELECT 1 FROM inscriptions ic INNER JOIN classes cc ON ic.classe_id = cc.id '
+                . 'WHERE ic.eleve_id = e.id AND ic.classe_id = :classe_id AND cc.ecole_id = :classe_ecole_id)';
+            $params[':classe_id'] = $classeId;
+            $params[':classe_ecole_id'] = $ecoleId;
+        }
+
+        $sql .= ' ORDER BY e.nom ASC, e.postnom ASC, e.prenom ASC';
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 

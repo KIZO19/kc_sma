@@ -44,6 +44,18 @@
                       <option value="inactif">En attente</option>
                     </select>
                   </div>
+                  <?php if (!empty($classes)): ?>
+                    <div class="col-md-3 col-sm-12">
+                      <form method="get" action="<?= BASE_URL ?>/eleves">
+                        <select name="classe_id" class="form-select" onchange="this.form.submit()" aria-label="Filtrer par classe">
+                          <option value="">Toutes les classes</option>
+                          <?php foreach ($classes as $classe): ?>
+                            <option value="<?= (int) $classe['id'] ?>" <?= ((int) ($selectedClasseId ?? 0) === (int) $classe['id']) ? 'selected' : '' ?>><?= htmlspecialchars($classe['nom_classe']) ?></option>
+                          <?php endforeach; ?>
+                        </select>
+                      </form>
+                    </div>
+                  <?php endif; ?>
                   <div class="col-md-2 col-sm-12">
                     <select id="pageSize" class="form-select">
                       <option value="5">5 / page</option>
@@ -65,6 +77,7 @@
                         <th data-sort="string">Nom</th>
                         <th data-sort="string">Postnom</th>
                         <th data-sort="string">Prénom</th>
+                        <th data-sort="string">Classe</th>
                         <th data-sort="string">Date de naissance</th>
                         <th data-sort="string">Parent</th>
                         <th data-sort="string">Statut</th>
@@ -79,6 +92,7 @@
                           <td><?= htmlspecialchars($student['nom'] ?? '-') ?></td>
                           <td><?= htmlspecialchars($student['postnom'] ?? '-') ?></td>
                           <td><?= htmlspecialchars($student['prenom'] ?? '-') ?></td>
+                          <td><?= htmlspecialchars($student['nom_classe'] ?? '-') ?></td>
                           <td><?= htmlspecialchars(formatDate($student['date_naissance'] ?? null)) ?></td>
                           <td><?= htmlspecialchars($student['parent_nom_responsable'] ?? '-') ?></td>
                           <td>
@@ -142,7 +156,7 @@
           const row = document.createElement('tr');
           row.className = 'no-data-row';
           const cell = document.createElement('td');
-          cell.colSpan = 9;
+          cell.colSpan = 10;
           cell.className = 'text-center py-4';
           cell.textContent = 'Aucun élève trouvé pour ces critères.';
           row.appendChild(cell);
