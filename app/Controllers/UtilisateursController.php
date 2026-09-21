@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Core\Auth;
 use App\Core\Controller;
+use App\Entities\Roles;
 use App\Models\Ecole;
 use App\Models\User;
 
@@ -130,7 +131,54 @@ class UtilisateursController extends Controller
             'schoolDetailsById' => $schoolDetailsById,
             'currentSchoolLogoUrl' => $currentSchoolLogoUrl,
             'isLocalAdmin' => !$isSuperAdmin,
+            'availableRoles' => Roles::list(),
         ]);
+    }
+
+    public function updateAccess(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin']);
+
+        $currentUser = Auth::user();
+        $userId = (int) ($_POST['user_id'] ?? 0);
+        $role = (string) ($_POST['role'] ?? '');
+        $statut = (string) ($_POST['statut'] ?? '');
+        $ecoleId = (int) ($_POST['ecole_id'] ?? 0);
+        $targetUser = $userId > 0 ? User::findById($userId) : null;
+        $errors = [];
+
+        if (!$targetUser) {
+            $errors[] = 'Utilisateur introuvable.';
+        } elseif ($userId === (int) ($currentUser['id'] ?? 0)) {
+            $errors[] = 'Vous ne pouvez pas modifier vos propres accès depuis cette page.';
+        }
+
+        if (!array_key_exists($role, Roles::list())) {
+            $errors[] = 'Rôle invalide.';
+        }
+        if (!in_array($statut, ['Actif', 'Inactif'], true)) {
+            $errors[] = 'Statut invalide.';
+        }
+
+        $schoolScoped = in_array($role, User::getSchoolScopedRoles(), true);
+        if ($role === 'super_admin') {
+            $ecoleId = null;
+        } elseif ($schoolScoped && $role !== 'agent_ecole' && $ecoleId <= 0) {
+            $errors[] = 'Une école est obligatoire pour ce rôle.';
+        } elseif ($ecoleId > 0 && !Ecole::findById($ecoleId)) {
+            $errors[] = 'École invalide.';
+        } elseif (!$schoolScoped) {
+            $ecoleId = null;
+        }
+
+        if (empty($errors) && User::updateAccess($userId, $role, $statut, $ecoleId > 0 ? $ecoleId : null)) {
+            $_SESSION['utilisateurs_success'] = 'Les accès de l’utilisateur ont été mis à jour.';
+        } else {
+            $_SESSION['utilisateurs_errors'] = $errors ?: ['Impossible de mettre à jour les accès.'];
+        }
+
+        $this->redirect('/utilisateurs');
     }
 
     public function validate(): void

@@ -399,6 +399,27 @@ class User
         }
     }
 
+    public static function updateAccess(int $id, string $role, string $statut, ?int $ecoleId): bool
+    {
+        try {
+            $db = Database::getConnection();
+            $sectionId = self::getDefaultSectionIdForRole($role);
+            $stmt = $db->prepare(
+                'UPDATE utilisateurs SET role = :role, statut = :statut, ecole_id = :ecole_id, section_id = :section_id WHERE id = :id'
+            );
+
+            return $stmt->execute([
+                ':role' => $role,
+                ':statut' => $statut,
+                ':ecole_id' => $ecoleId,
+                ':section_id' => $sectionId,
+                ':id' => $id,
+            ]);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
     public static function getRoleLabel(string $role): string
     {
         return match ($role) {

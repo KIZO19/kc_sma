@@ -251,17 +251,32 @@ SCRIPT;
                       <?php endif; ?>
                     </td>
                     <td>
-                      <?php if ((($account['statut'] ?? '') !== 'Actif') && (($role ?? '') === 'super_admin')): ?>
-                        <form method="post" action="<?= BASE_URL ?>/utilisateurs/validate" style="display:inline">
+                      <?php if (($role ?? '') === 'super_admin'): ?>
+                        <form method="post" action="<?= BASE_URL ?>/utilisateurs/update-access" class="d-flex flex-wrap gap-2 align-items-center">
                           <input type="hidden" name="user_id" value="<?= (int) $account['id'] ?>">
-                          <button type="submit" class="btn btn-sm btn-success">Valider</button>
+                          <select name="role" class="form-select form-select-sm" required>
+                            <?php foreach (($availableRoles ?? []) as $roleKey => $roleName): ?>
+                              <option value="<?= htmlspecialchars($roleKey) ?>" <?= (($account['role'] ?? '') === $roleKey) ? 'selected' : '' ?>><?= htmlspecialchars($roleName) ?></option>
+                            <?php endforeach; ?>
+                          </select>
+                          <select name="ecole_id" class="form-select form-select-sm">
+                            <option value="">Aucune école</option>
+                            <?php foreach (($schools ?? []) as $school): ?>
+                              <option value="<?= (int) $school['id'] ?>" <?= ((int) ($account['ecole_id'] ?? 0) === (int) $school['id']) ? 'selected' : '' ?>><?= htmlspecialchars($school['nom_etablissement']) ?></option>
+                            <?php endforeach; ?>
+                          </select>
+                          <select name="statut" class="form-select form-select-sm" required>
+                            <option value="Actif" <?= (($account['statut'] ?? '') === 'Actif') ? 'selected' : '' ?>>Actif</option>
+                            <option value="Inactif" <?= (($account['statut'] ?? '') === 'Inactif') ? 'selected' : '' ?>>Inactif</option>
+                          </select>
+                          <button type="submit" class="btn btn-sm btn-primary">Enregistrer</button>
                         </form>
                       <?php elseif ((in_array($account['role'] ?? '', ['agent_ecole', 'parent_ecole', 'enseignant_école'], true) && (empty($account['ecole_id']) || (int) $account['ecole_id'] === 0)) && (($role ?? '') === 'super_admin')): ?>
                         <form method="post" action="<?= BASE_URL ?>/utilisateurs/link" class="d-flex gap-2 align-items-center">
                           <input type="hidden" name="user_id" value="<?= (int) $account['id'] ?>">
                           <select name="ecole_id" class="form-select form-select-sm" required>
                             <option value="">Choisir une école</option>
-                            <?php foreach ($schools as $school): ?>
+                            <?php foreach (($schools ?? []) as $school): ?>
                               <option value="<?= (int) $school['id'] ?>"><?= htmlspecialchars($school['nom_etablissement']) ?></option>
                             <?php endforeach; ?>
                           </select>
