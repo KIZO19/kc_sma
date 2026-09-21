@@ -26,12 +26,6 @@ class ParentsController extends Controller
         }
 
         $role = $user['role'] ?? 'default';
-        $children = ParentModel::getChildren($parentId);
-        foreach ($children as &$child) {
-            $child['total_paid_by_currency'] = ParentModel::getTotalPaidByCurrencyForChild((int) $child['id']);
-        }
-        unset($child);
-
         $this->view('parents/show', [
             'title' => APP_NAME . ' - Profil parent',
             'user' => $user,
@@ -39,7 +33,7 @@ class ParentsController extends Controller
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $this->getModulesForRole($role),
             'parent' => $parent,
-            'children' => $children,
+            'children' => ParentModel::getChildren($parentId),
         ]);
     }
 }

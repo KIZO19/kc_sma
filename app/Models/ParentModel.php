@@ -56,52 +56,6 @@ class ParentModel
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public static function getTotalPaidByCurrencyForChild(int $eleveId): array
-    {
-        $db = Database::getConnection();
-        $totals = [];
-
-        try {
-            $stmt = $db->prepare(
-                'SELECT COALESCE(fs.devise, "USD") AS devise, COALESCE(SUM(ece.montant), 0) AS total '
-                . 'FROM ecritures_comptables_eleves ece '
-                . 'INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id '
-                . 'LEFT JOIN frais_scolaires fs ON fs.id = ece.frais_id '
-                . 'WHERE ce.eleve_id = :eleve_id AND ece.type_mouvement = :type_mouvement '
-                . 'GROUP BY COALESCE(fs.devise, "USD")'
-            );
-            $stmt->execute([':eleve_id' => $eleveId, ':type_mouvement' => 'CREDIT']);
-            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-                $currency = strtoupper(trim($row['devise'] ?? 'USD')) ?: 'USD';
-                $totals[$currency]['accounting'] = (float) ($row['total'] ?? 0);
-            }
-        } catch (\Throwable $e) {
-            // The accounting table may be unavailable in legacy installations.
-        }
-
-        try {
-            $stmt = $db->prepare(
-                'SELECT COALESCE(fs.devise, "USD") AS devise, COALESCE(SUM(pe.montant_paye), 0) AS total '
-                . 'FROM paiements_eleves pe LEFT JOIN frais_scolaires fs ON fs.id = pe.frais_id '
-                . 'WHERE pe.eleve_id = :eleve_id GROUP BY COALESCE(fs.devise, "USD")'
-            );
-            $stmt->execute([':eleve_id' => $eleveId]);
-            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-                $currency = strtoupper(trim($row['devise'] ?? 'USD')) ?: 'USD';
-                $totals[$currency]['legacy'] = (float) ($row['total'] ?? 0);
-            }
-        } catch (\Throwable $e) {
-            // The legacy table may be unavailable in newer installations.
-        }
-
-        $result = [];
-        foreach ($totals as $currency => $values) {
-            $result[$currency] = max((float) ($values['accounting'] ?? 0), (float) ($values['legacy'] ?? 0));
-        }
-        ksort($result);
-        return $result;
-    }
-
     public static function create(array $data): ?array
     {
         $db = Database::getConnection();

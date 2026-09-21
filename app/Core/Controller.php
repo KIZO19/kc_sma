@@ -120,6 +120,7 @@ class Controller
                 ['name' => 'Classes', 'path' => '/classes', 'icon' => 'bi-houses'],
                 ['name' => 'Options', 'path' => '/options', 'icon' => 'bi-grid-1x2'],
                 ['name' => 'Élèves', 'path' => '/eleves', 'icon' => 'bi-person-badge'],
+                ['name' => 'Dérogations', 'path' => '/derogations', 'icon' => 'bi-file-earmark-check'],
                 ['name' => 'Notes', 'path' => '/notes', 'icon' => 'bi-pencil-square'],
                 ['name' => 'Bulletins', 'path' => '/bulletins', 'icon' => 'bi-file-earmark-text'],
                 ['name' => 'Présences', 'path' => '/presences', 'icon' => 'bi-calendar-check'],
