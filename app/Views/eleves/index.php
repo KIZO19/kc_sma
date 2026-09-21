@@ -94,7 +94,15 @@
                           <td><?= htmlspecialchars($student['prenom'] ?? '-') ?></td>
                           <td><?= htmlspecialchars($student['nom_classe'] ?? '-') ?></td>
                           <td><?= htmlspecialchars(formatDate($student['date_naissance'] ?? null)) ?></td>
-                          <td><?= htmlspecialchars($student['parent_nom_responsable'] ?? '-') ?></td>
+                          <td>
+                            <?php if (!empty($student['parent_id']) && !empty($student['parent_nom_responsable'])): ?>
+                              <a href="<?= BASE_URL ?>/parents/show?id=<?= (int) $student['parent_id'] ?>">
+                                <?= htmlspecialchars($student['parent_nom_responsable']) ?>
+                              </a>
+                            <?php else: ?>
+                              -
+                            <?php endif; ?>
+                          </td>
                           <td>
                             <?php if (($student['statut_eleve'] ?? '') === 'actif'): ?>
                               <span class="badge bg-success">Actif</span>

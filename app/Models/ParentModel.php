@@ -43,6 +43,19 @@ class ParentModel
         return $parent ?: null;
     }
 
+    public static function getChildren(int $parentId): array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            'SELECT e.id, e.matricule, e.nom, e.postnom, e.prenom, e.statut_eleve, '
+            . '(SELECT c.nom_classe FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id '
+            . 'WHERE i.eleve_id = e.id ORDER BY i.date_inscription DESC, i.id DESC LIMIT 1) AS nom_classe '
+            . 'FROM eleves e WHERE e.parent_id = :parent_id ORDER BY e.nom ASC, e.postnom ASC, e.prenom ASC'
+        );
+        $stmt->execute([':parent_id' => $parentId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public static function create(array $data): ?array
     {
         $db = Database::getConnection();
