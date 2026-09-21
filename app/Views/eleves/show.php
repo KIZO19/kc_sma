@@ -184,7 +184,7 @@ $entryTotalsByCurrency = $entryTotalsByCurrency ?? [];
                   <?php if (!empty($entryTotalsByCurrency)): ?>
                     <div class="table-responsive mb-3">
                       <table class="table table-sm table-bordered mb-0">
-                        <thead><tr><th>Devise</th><th>Total débit</th><th>Total crédit</th></tr></thead>
+                        <thead><tr><th>Devise</th><th>Dette restante</th><th>Montant déjà payé</th></tr></thead>
                         <tbody>
                           <?php foreach ($entryTotalsByCurrency as $currency => $totals): ?>
                             <tr>
@@ -202,13 +202,15 @@ $entryTotalsByCurrency = $entryTotalsByCurrency ?? [];
                   <?php else: ?>
                     <div class="table-responsive">
                       <table class="table table-sm table-striped">
-                        <thead><tr><th>#</th><th>Date</th><th>Type</th><th>Montant</th><th>Devise</th><th>Référence</th><th>Libellé</th></tr></thead>
+                        <thead><tr><th>#</th><th>Date</th><th>Situation</th><th>Montant</th><th>Devise</th><th>Référence</th><th>Libellé</th></tr></thead>
                         <tbody>
                           <?php foreach ($ecritures as $i => $ec): ?>
                             <tr>
                               <td><?= $i+1 ?></td>
                               <td><?= htmlspecialchars(formatDate($ec['date_operation'] ?? null)) ?></td>
-                              <td><span class="badge <?= (($ec['type_mouvement'] ?? '') === 'CREDIT') ? 'bg-success' : 'bg-danger' ?>"><?= htmlspecialchars($ec['type_mouvement'] ?? '') ?></span></td>
+                              <?php $movementType = strtoupper((string) ($ec['type_mouvement'] ?? '')); ?>
+                              <?php $movementLabel = $movementType === 'CREDIT' ? 'Montant déjà payé' : 'Dette restante'; ?>
+                              <td><span class="badge <?= $movementType === 'CREDIT' ? 'bg-success' : 'bg-danger' ?>"><?= htmlspecialchars($movementLabel) ?></span></td>
                               <td><?= htmlspecialchars(number_format((float) ($ec['montant'] ?? 0), 2, ',', ' ')) ?></td>
                               <td><?= htmlspecialchars($ec['frais_devise'] ?? 'USD') ?></td>
                               <td><?= htmlspecialchars($ec['reference_recu'] ?? '-') ?></td>

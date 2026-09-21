@@ -50,7 +50,7 @@ $oldInput = $oldInput ?? [];
                   <h3 class="card-title">Formulaire d’inscription</h3>
                 </div>
                 <div class="card-body">
-                  <form method="post" action="<?= BASE_URL ?>/inscriptions/submit" autocomplete="off" enctype="multipart/form-data">
+                  <form id="registration-form" method="post" action="<?= BASE_URL ?>/inscriptions/submit" autocomplete="off" enctype="multipart/form-data">
                     <?php if (!empty($selectedSection)): ?>
                       <div class="alert alert-info">
                         Section sélectionnée : <strong><?= htmlspecialchars($selectedSection['nom_section']) ?></strong>
@@ -66,18 +66,18 @@ $oldInput = $oldInput ?? [];
                     <div class="row">
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Nom</label>
-                        <input id="nom-input" type="text" name="nom" class="form-control" required value="<?= htmlspecialchars($oldInput['nom'] ?? '') ?>">
+                        <input id="nom-input" type="text" name="nom" class="form-control" required maxlength="100" value="<?= htmlspecialchars($oldInput['nom'] ?? '') ?>">
                       </div>
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Postnom</label>
-                        <input id="postnom-input" type="text" name="postnom" class="form-control" required value="<?= htmlspecialchars($oldInput['postnom'] ?? '') ?>">
+                        <input id="postnom-input" type="text" name="postnom" class="form-control" required maxlength="100" value="<?= htmlspecialchars($oldInput['postnom'] ?? '') ?>">
                       </div>
                     </div>
 
                     <div class="row">
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Prénom</label>
-                        <input id="prenom-input" type="text" name="prenom" class="form-control" value="<?= htmlspecialchars($oldInput['prenom'] ?? '') ?>">
+                        <input id="prenom-input" type="text" name="prenom" class="form-control" maxlength="100" value="<?= htmlspecialchars($oldInput['prenom'] ?? '') ?>">
                       </div>
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Genre</label>
@@ -92,7 +92,7 @@ $oldInput = $oldInput ?? [];
                     <div class="row align-items-end">
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Date de naissance</label>
-                        <input id="date-naissance-input" type="date" name="date_naissance" class="form-control" required value="<?= htmlspecialchars($oldInput['date_naissance'] ?? '') ?>">
+                        <input id="date-naissance-input" type="date" name="date_naissance" class="form-control" required max="<?= date('Y-m-d') ?>" value="<?= htmlspecialchars($oldInput['date_naissance'] ?? '') ?>">
                       </div>
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Matricule (optionnel)</label>
@@ -106,7 +106,7 @@ $oldInput = $oldInput ?? [];
 
                     <div class="mb-3">
                       <label class="form-label">Classe</label>
-                      <select name="classe_id" class="form-select" required>
+                      <select name="classe_id" class="form-select" required <?= empty($classes) ? 'disabled' : '' ?>>
                         <option value="">Sélectionnez une classe</option>
                         <?php if (!empty($classes)): ?>
                           <?php foreach ($classes as $classe): ?>
@@ -156,17 +156,17 @@ $oldInput = $oldInput ?? [];
                       <div class="row">
                         <div class="col-md-6 mb-3">
                           <label class="form-label">Nom du parent/tuteur</label>
-                          <input type="text" name="new_parent_nom_responsable" class="form-control" value="<?= htmlspecialchars($oldInput['new_parent_nom_responsable'] ?? '') ?>">
+                          <input id="new-parent-name" type="text" name="new_parent_nom_responsable" class="form-control" maxlength="150" value="<?= htmlspecialchars($oldInput['new_parent_nom_responsable'] ?? '') ?>">
                         </div>
                         <div class="col-md-6 mb-3">
                           <label class="form-label">Téléphone du parent/tuteur</label>
-                          <input type="text" name="new_parent_telephone" class="form-control" value="<?= htmlspecialchars($oldInput['new_parent_telephone'] ?? '') ?>">
+                          <input id="new-parent-phone" type="tel" name="new_parent_telephone" class="form-control" maxlength="25" pattern="[0-9+() .-]{7,25}" value="<?= htmlspecialchars($oldInput['new_parent_telephone'] ?? '') ?>">
                         </div>
                       </div>
                       <div class="row">
                         <div class="col-md-6 mb-3">
                           <label class="form-label">Email du parent/tuteur</label>
-                          <input type="email" name="new_parent_email" class="form-control" value="<?= htmlspecialchars($oldInput['new_parent_email'] ?? '') ?>">
+                          <input id="new-parent-email" type="email" name="new_parent_email" class="form-control" maxlength="100" value="<?= htmlspecialchars($oldInput['new_parent_email'] ?? '') ?>">
                         </div>
                         <div class="col-md-6 mb-3">
                           <label class="form-label">Note</label>
@@ -235,12 +235,12 @@ $oldInput = $oldInput ?? [];
                     </div>
                     <div class="mb-3">
                       <label class="form-label">Photo de l'élève (PNG/JPEG, ≤250KB)</label>
-                      <input type="file" name="photo" accept="image/png,image/jpeg" class="form-control">
+                      <input id="student-photo" type="file" name="photo" accept="image/png,image/jpeg" class="form-control">
                       <small class="form-text text-muted">Optionnel — téléversez une photo de l'élève.</small>
                     </div>
                     <div class="d-flex justify-content-between">
                       <a href="<?= BASE_URL ?>/inscriptions" class="btn btn-secondary">Retour aux dossiers</a>
-                      <button type="submit" class="btn btn-success">Enregistrer</button>
+                      <button id="registration-submit" type="submit" class="btn btn-success">Enregistrer</button>
                     </div>
                   </form>
                 </div>
@@ -251,10 +251,14 @@ $oldInput = $oldInput ?? [];
       </section>
       <script>
         document.addEventListener('DOMContentLoaded', function () {
+          const registrationForm = document.getElementById('registration-form');
+          const registrationSubmit = document.getElementById('registration-submit');
           const existingRadio = document.getElementById('parent-choice-existing');
           const newRadio = document.getElementById('parent-choice-new');
           const existingSection = document.querySelector('.parent-choice-existing-section');
           const newSection = document.querySelector('.parent-choice-new-section');
+          const newParentName = document.getElementById('new-parent-name');
+          const newParentPhone = document.getElementById('new-parent-phone');
 
           function toggleParentSections() {
             const useNew = newRadio && newRadio.checked;
@@ -264,6 +268,8 @@ $oldInput = $oldInput ?? [];
             if (newSection) {
               newSection.classList.toggle('d-none', !useNew);
             }
+            if (newParentName) newParentName.required = useNew;
+            if (newParentPhone) newParentPhone.required = useNew;
           }
 
           if (existingRadio) {
@@ -274,6 +280,24 @@ $oldInput = $oldInput ?? [];
           }
 
           toggleParentSections();
+
+          if (registrationForm) {
+            registrationForm.addEventListener('submit', function (event) {
+              const photo = document.getElementById('student-photo');
+              if (photo && photo.files.length > 0) {
+                const file = photo.files[0];
+                if (!['image/jpeg', 'image/png'].includes(file.type) || file.size > 250 * 1024) {
+                  event.preventDefault();
+                  window.alert('La photo doit être au format PNG ou JPEG et ne pas dépasser 250 Ko.');
+                  return;
+                }
+              }
+              if (registrationSubmit) {
+                registrationSubmit.disabled = true;
+                registrationSubmit.textContent = 'Enregistrement...';
+              }
+            });
+          }
         });
       </script>
       <script>

@@ -128,19 +128,34 @@ class InscriptionsController extends Controller
             $newParentName = trim($_POST['new_parent_nom_responsable'] ?? '');
             $newParentTelephone = trim($_POST['new_parent_telephone'] ?? '');
             $newParentEmail = trim($_POST['new_parent_email'] ?? '');
+            $sectionId = (int) ($_POST['section_id'] ?? 0);
+            $optionId = (int) ($_POST['option_id'] ?? 0);
 
             $errors = [];
+            $activeYear = null;
             if ($nom === '') {
                 $errors[] = 'Le nom de l’élève est requis.';
             }
             if ($postnom === '') {
                 $errors[] = 'Le postnom de l’élève est requis.';
             }
-            if ($genre === '') {
+            if (!in_array($genre, ['M', 'F'], true)) {
                 $errors[] = 'Le genre de l’élève est requis.';
             }
-            if ($dateNaissance === '') {
-                $errors[] = 'La date de naissance est requise.';
+            $birthDate = \DateTime::createFromFormat('Y-m-d', $dateNaissance);
+            if (!$birthDate || $birthDate->format('Y-m-d') !== $dateNaissance) {
+                $errors[] = 'La date de naissance est invalide.';
+            } elseif ($birthDate > new \DateTime('today')) {
+                $errors[] = 'La date de naissance ne peut pas être dans le futur.';
+            }
+            if (!in_array($parentChoice, ['existing', 'new'], true)) {
+                $errors[] = 'Le choix du parent est invalide.';
+            }
+            if ($newParentEmail !== '' && !filter_var($newParentEmail, FILTER_VALIDATE_EMAIL)) {
+                $errors[] = 'L’adresse email du parent est invalide.';
+            }
+            if ($parentChoice === 'new' && $newParentTelephone !== '' && !preg_match('/^[0-9+() .-]{7,25}$/', $newParentTelephone)) {
+                $errors[] = 'Le téléphone du parent contient des caractères invalides.';
             }
 
             if (empty($matricule)) {
@@ -170,21 +185,42 @@ class InscriptionsController extends Controller
                 $selectedClass = Classe::findById($classeId);
                 if (!$selectedClass || (int) ($selectedClass['ecole_id'] ?? 0) !== $ecoleId) {
                     $errors[] = 'La classe sélectionnée est invalide ou n’appartient pas à votre école.';
+                } else {
+                    if ($sectionId > 0 && (int) ($selectedClass['section_id'] ?? 0) !== $sectionId) {
+                        $errors[] = 'La classe sélectionnée ne correspond pas à la section demandée.';
+                    }
+                    if ($optionId > 0 && (int) ($selectedClass['option_id'] ?? 0) !== $optionId) {
+                        $errors[] = 'La classe sélectionnée ne correspond pas à l’option demandée.';
+                    }
                 }
             }
 
             if (empty($errors)) {
-                if ($parentChoice === 'new' && $newParentName !== '' && $newParentTelephone !== '') {
-                    $newParent = ParentModel::create([
-                        'ecole_id' => $user['ecole_id'] ?? null,
-                        'nom_responsable' => $newParentName,
-                        'telephone' => $newParentTelephone,
-                        'email' => $newParentEmail !== '' ? $newParentEmail : null,
-                        'mot_de_passe' => password_hash(bin2hex(random_bytes(6)), PASSWORD_DEFAULT),
-                    ]);
+                $activeYear = AnneeScolaire::getActiveBySchool($ecoleId);
+                if (!$activeYear || empty($activeYear['id'])) {
+                    $errors[] = 'Aucune année scolaire active n’est configurée pour cette école.';
+                }
+            }
 
-                    if (!empty($newParent['id'])) {
-                        $parentId = (int) $newParent['id'];
+            if (empty($errors)) {
+                if ($parentChoice === 'new') {
+                    try {
+                        $newParent = ParentModel::create([
+                            'ecole_id' => $user['ecole_id'] ?? null,
+                            'nom_responsable' => $newParentName,
+                            'telephone' => $newParentTelephone,
+                            'email' => $newParentEmail !== '' ? $newParentEmail : null,
+                            'mot_de_passe' => password_hash(bin2hex(random_bytes(6)), PASSWORD_DEFAULT),
+                        ]);
+
+                        if (!empty($newParent['id'])) {
+                            $parentId = (int) $newParent['id'];
+                        } else {
+                            $errors[] = 'Impossible de créer le parent/tuteur.';
+                        }
+                    } catch (\Throwable $e) {
+                        error_log('InscriptionsController::create parent error: ' . $e->getMessage());
+                        $errors[] = 'Impossible de créer le parent/tuteur. Vérifiez ses coordonnées.';
                     }
                 }
 
@@ -197,6 +233,12 @@ class InscriptionsController extends Controller
 
                 if ($parentChoice !== 'existing') {
                     $parentId = $parentId > 0 ? $parentId : 0;
+                }
+
+                if (!empty($errors)) {
+                    $_SESSION['inscriptions_errors'] = $errors;
+                    $_SESSION['inscriptions_old'] = $_POST;
+                    $this->redirect('/inscriptions/create');
                 }
 
                 $studentSchoolId = $ecoleId;
@@ -250,7 +292,6 @@ class InscriptionsController extends Controller
                 }
 
                 if ($newStudent) {
-                    $activeYear = AnneeScolaire::getActiveBySchool($ecoleId);
                     if ($activeYear) {
                         Inscription::create([
                             'eleve_id' => (int) $newStudent['id'],
