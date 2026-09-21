@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Core\Auth;
 use App\Core\Controller;
+use App\Models\Ecole;
 use App\Models\User;
 
 class ProfileController extends Controller
@@ -15,6 +16,15 @@ class ProfileController extends Controller
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
+        $schools = [];
+        $agents = [];
+        if ($role === 'super_admin') {
+            $schools = Ecole::getAll();
+            $agents = array_values(array_filter(
+                User::getAllUsers(),
+                static fn (array $account): bool => ($account['role'] ?? '') === 'agent_ecole'
+            ));
+        }
 
         $this->view('profile/index', [
             'title' => APP_NAME . ' - Mon profil',
@@ -22,11 +32,45 @@ class ProfileController extends Controller
             'role' => $role,
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $modules,
+            'schools' => $schools,
+            'agents' => $agents,
             'success' => $_GET['success'] ?? null,
             'errors' => $_SESSION['profile_errors'] ?? [],
         ]);
 
         unset($_SESSION['profile_errors']);
+    }
+
+    public function assignAgent(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin']);
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->redirect('/profile');
+        }
+
+        $agentId = (int) ($_POST['agent_id'] ?? 0);
+        $schoolId = (int) ($_POST['ecole_id'] ?? 0);
+        $agent = $agentId > 0 ? User::findById($agentId) : null;
+        $school = $schoolId > 0 ? Ecole::findById($schoolId) : null;
+
+        if (!$agent || ($agent['role'] ?? '') !== 'agent_ecole') {
+            $_SESSION['profile_errors'] = ['L’utilisateur sélectionné n’est pas un agent valide.'];
+            $this->redirect('/profile');
+        }
+
+        if (!$school) {
+            $_SESSION['profile_errors'] = ['L’école sélectionnée est introuvable.'];
+            $this->redirect('/profile');
+        }
+
+        if (!User::assignToSchool($agentId, $schoolId)) {
+            $_SESSION['profile_errors'] = ['L’affectation de l’agent a échoué.'];
+            $this->redirect('/profile');
+        }
+
+        $this->redirect('/profile?success=agent');
     }
 
     public function update(): void

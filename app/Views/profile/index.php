@@ -22,7 +22,9 @@
             <?php unset($_SESSION['access_error']); ?>
           <?php endif; ?>
           <?php if (!empty($success)): ?>
-            <div class="alert alert-success">Profil mis à jour avec succès.</div>
+            <div class="alert alert-success">
+              <?= $success === 'agent' ? 'Agent affecté à l’école avec succès.' : 'Profil mis à jour avec succès.' ?>
+            </div>
           <?php endif; ?>
           <?php if (!empty($errors)): ?>
             <div class="alert alert-danger">
@@ -73,6 +75,71 @@
               </div>
             </div>
           </div>
+
+          <?php if (($role ?? '') === 'super_admin'): ?>
+            <div class="row mt-4">
+              <div class="col-lg-8">
+                <div class="card">
+                  <div class="card-header">
+                    <h3 class="card-title">Affecter les agents aux écoles</h3>
+                  </div>
+                  <div class="card-body">
+                    <?php if (empty($agents)): ?>
+                      <div class="alert alert-info mb-0">Aucun compte agent disponible.</div>
+                    <?php elseif (empty($schools)): ?>
+                      <div class="alert alert-warning mb-0">Aucune école disponible.</div>
+                    <?php else: ?>
+                      <div class="table-responsive">
+                        <table class="table table-striped align-middle mb-0">
+                          <thead>
+                            <tr>
+                              <th>Agent</th>
+                              <th>École actuelle</th>
+                              <th>Affecter à</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <?php foreach ($agents as $agent): ?>
+                              <tr>
+                                <td>
+                                  <div><?= htmlspecialchars($agent['nom_complet'] ?? '') ?></div>
+                                  <small class="text-muted"><?= htmlspecialchars($agent['identifiant'] ?? '') ?></small>
+                                </td>
+                                <td>
+                                  <?php
+                                    $currentSchoolName = 'Non affecté';
+                                    foreach ($schools as $school) {
+                                        if ((int) ($school['id'] ?? 0) === (int) ($agent['ecole_id'] ?? 0)) {
+                                            $currentSchoolName = $school['nom_etablissement'] ?? 'École';
+                                            break;
+                                        }
+                                    }
+                                  ?>
+                                  <?= htmlspecialchars($currentSchoolName) ?>
+                                </td>
+                                <td>
+                                  <form method="post" action="<?= BASE_URL ?>/profile/assign-agent" class="d-flex gap-2">
+                                    <input type="hidden" name="agent_id" value="<?= (int) $agent['id'] ?>">
+                                    <select name="ecole_id" class="form-select form-select-sm" required>
+                                      <option value="">Choisir une école</option>
+                                      <?php foreach ($schools as $school): ?>
+                                        <option value="<?= (int) $school['id'] ?>" <?= (int) ($agent['ecole_id'] ?? 0) === (int) ($school['id'] ?? 0) ? 'selected' : '' ?>><?= htmlspecialchars($school['nom_etablissement'] ?? 'École') ?></option>
+                                      <?php endforeach; ?>
+                                    </select>
+                                    <button type="submit" class="btn btn-sm btn-primary">Affecter</button>
+                                  </form>
+                                </td>
+                              </tr>
+                            <?php endforeach; ?>
+                          </tbody>
+                        </table>
+                      </div>
+                    <?php endif; ?>
+                  </div>
+                </div>
+              </div>
+            </div>
+          <?php endif; ?>
         </div>
       </section>
 <?php require __DIR__ . '/../partials/app_footer.php'; ?>
