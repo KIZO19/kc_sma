@@ -34,9 +34,15 @@ class RecouvrementsController extends Controller
     private function fetchOutstandingDebts(array $user): array
     {
         $db = Database::getConnection();
-        $sql = 'SELECT d.id, d.eleve_id, d.montant_initial, d.montant_restant, d.devise, d.date_creation,
+        $sql = 'SELECT d.id, d.eleve_id, d.frais_id, d.montant_initial, d.montant_restant, d.devise, d.date_creation,
                        e.matricule, e.nom, e.postnom, e.prenom,
-                       fs.type_frais, s.annee AS annee_scolaire
+                       fs.type_frais, s.annee AS annee_scolaire,
+                       COALESCE((SELECT c.nom_classe
+                                 FROM inscriptions i
+                                 INNER JOIN classes c ON c.id = i.classe_id
+                                 WHERE i.eleve_id = e.id
+                                 ORDER BY i.date_inscription DESC, i.id DESC
+                                 LIMIT 1), \'Classe non définie\') AS nom_classe
                 FROM dettes_eleves d
                 INNER JOIN eleves e ON e.id = d.eleve_id
                 INNER JOIN frais_scolaires fs ON fs.id = d.frais_id
@@ -49,7 +55,7 @@ class RecouvrementsController extends Controller
             $params[':ecole_id'] = (int) $user['ecole_id'];
         }
 
-        $sql .= ' ORDER BY d.montant_restant DESC, e.nom ASC, e.postnom ASC, e.prenom ASC';
+        $sql .= ' ORDER BY nom_classe ASC, e.nom ASC, e.postnom ASC, e.prenom ASC, d.montant_restant DESC';
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
 

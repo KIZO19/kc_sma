@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS derogations (
+    id INT NOT NULL AUTO_INCREMENT,
+    ecole_id INT NOT NULL,
+    eleve_id INT NOT NULL,
+    date_fin DATE NOT NULL,
+    motif VARCHAR(500) NOT NULL,
+    statut ENUM('En_attente', 'Approuvee', 'Refusee') NOT NULL DEFAULT 'En_attente',
+    commentaire VARCHAR(500) DEFAULT NULL,
+    demandeur_id INT NOT NULL,
+    validateur_id INT DEFAULT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    decided_at TIMESTAMP NULL DEFAULT NULL,
+    PRIMARY KEY (id),
+    KEY idx_derogations_ecole (ecole_id),
+    KEY idx_derogations_eleve (eleve_id),
+    KEY idx_derogations_statut_date (statut, date_fin),
+    CONSTRAINT fk_derogations_ecole FOREIGN KEY (ecole_id) REFERENCES ecoles (id) ON DELETE CASCADE,
+    CONSTRAINT fk_derogations_eleve FOREIGN KEY (eleve_id) REFERENCES eleves (id) ON DELETE CASCADE,
+    CONSTRAINT fk_derogations_demandeur FOREIGN KEY (demandeur_id) REFERENCES utilisateurs (id),
+    CONSTRAINT fk_derogations_validateur FOREIGN KEY (validateur_id) REFERENCES utilisateurs (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

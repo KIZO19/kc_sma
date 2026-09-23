@@ -4,15 +4,23 @@ namespace App\Controllers;
 
 use App\Core\Auth;
 use App\Core\Controller;
+use App\Models\Derogation;
+use App\Models\DetteEleve;
 use App\Models\Eleve;
-use App\Models\Exoneration;
-use App\Models\FraisScolaire;
 use App\Models\User;
 
 class DerogationsController extends Controller
 {
     private const REQUEST_ROLES = ['comptable_école', 'préfet_école'];
-    private const VALIDATION_ROLES = ['promoteur_école'];
+    private const VALIDATION_ROLES = [
+        'promoteur_école',
+        'préfet_école',
+        'sec_école',
+        'DE_école',
+        'DD_école',
+        'DP_école',
+        'DA_école',
+    ];
 
     public function index(): void
     {
@@ -22,7 +30,6 @@ class DerogationsController extends Controller
         $role = $user['role'] ?? 'default';
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
         $students = $ecoleId > 0 ? Eleve::getAllBySchool($ecoleId) : [];
-        $fees = $ecoleId > 0 ? FraisScolaire::getAllBySchool($ecoleId) : [];
 
         $this->view('derogations/index', [
             'title' => APP_NAME . ' - Dérogations',
@@ -31,8 +38,7 @@ class DerogationsController extends Controller
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $this->getModulesForRole($role),
             'students' => $students,
-            'fees' => $fees,
-            'requests' => Exoneration::getAllBySchool($ecoleId),
+            'requests' => Derogation::getAllBySchool($ecoleId),
             'canRequest' => in_array($role, self::REQUEST_ROLES, true),
             'canValidate' => in_array($role, self::VALIDATION_ROLES, true),
         ]);
@@ -45,35 +51,28 @@ class DerogationsController extends Controller
         $user = Auth::refresh() ?: Auth::user();
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
         $eleveId = (int) ($_POST['eleve_id'] ?? 0);
-        $fraisId = (int) ($_POST['frais_id'] ?? 0);
-        $montant = (float) ($_POST['montant'] ?? 0);
+        $dateFin = trim((string) ($_POST['date_fin'] ?? ''));
         $motif = trim((string) ($_POST['motif'] ?? ''));
         $student = $ecoleId > 0 ? Eleve::findByIdAndSchool($eleveId, $ecoleId) : null;
-        $fees = $ecoleId > 0 ? FraisScolaire::getAllBySchool($ecoleId) : [];
-        $fee = null;
-        foreach ($fees as $candidate) {
-            if ((int) ($candidate['id'] ?? 0) === $fraisId) {
-                $fee = $candidate;
-                break;
-            }
-        }
         $errors = [];
-        if (!$student || !$fee) $errors[] = 'Élève ou frais invalide pour cette école.';
-        if ($montant <= 0) $errors[] = 'Le montant exonéré doit être supérieur à zéro.';
+        $date = \DateTimeImmutable::createFromFormat('Y-m-d', $dateFin);
+        $dateErrors = \DateTimeImmutable::getLastErrors();
+        if (!$student) $errors[] = 'Élève invalide pour cette école.';
+        if ($student && DetteEleve::getTotalOutstandingByEleve($eleveId) <= 0) $errors[] = 'Cet élève n’a aucune dette restante.';
+        if (!$date || ($dateErrors !== false && ($dateErrors['warning_count'] > 0 || $dateErrors['error_count'] > 0))) $errors[] = 'La date de fin est invalide.';
+        if ($date && $date < new \DateTimeImmutable('today')) $errors[] = 'La date de fin doit être aujourd’hui ou une date future.';
         if ($motif === '') $errors[] = 'Le motif est obligatoire.';
-        if ($student && $fee && $montant > (float) ($fee['montant_total'] ?? 0)) $errors[] = 'Le montant dépasse le montant du frais.';
+        if ($student && Derogation::hasPendingOrActive($eleveId, $ecoleId)) $errors[] = 'Cet élève dispose déjà d’une demande en attente ou d’une dérogation active.';
 
         if (!$errors) {
-            Exoneration::create([
+            Derogation::create([
                 'ecole_id' => $ecoleId,
                 'eleve_id' => $eleveId,
-                'frais_id' => $fraisId,
-                'montant' => $montant,
-                'devise' => strtoupper((string) ($fee['devise'] ?? 'USD')),
+                'date_fin' => $dateFin,
                 'motif' => $motif,
                 'demandeur_id' => (int) ($user['id'] ?? 0),
             ]);
-            $_SESSION['derogations_success'] = 'La demande d’exonération a été envoyée au promoteur.';
+            $_SESSION['derogations_success'] = 'La demande de dérogation a été envoyée au promoteur.';
         } else {
             $_SESSION['derogations_errors'] = $errors;
         }
@@ -86,9 +85,9 @@ class DerogationsController extends Controller
         Auth::requireRoles(self::VALIDATION_ROLES);
         $user = Auth::refresh() ?: Auth::user();
         $status = ($_POST['decision'] ?? '') === 'Approuvee' ? 'Approuvee' : 'Refusee';
-        $ok = Exoneration::decide((int) ($_POST['id'] ?? 0), (int) ($user['id'] ?? 0), $status, trim((string) ($_POST['commentaire'] ?? '')));
+        $ok = Derogation::decide((int) ($_POST['id'] ?? 0), (int) ($user['ecole_id'] ?? 0), (int) ($user['id'] ?? 0), $status, trim((string) ($_POST['commentaire'] ?? '')));
         $_SESSION[$ok ? 'derogations_success' : 'derogations_errors'] = $ok
-            ? ($status === 'Approuvee' ? 'Exonération approuvée et dette réduite.' : 'Demande d’exonération refusée.')
+            ? ($status === 'Approuvee' ? 'Dérogation approuvée : l’élève est protégé jusqu’à la date indiquée.' : 'Demande de dérogation refusée.')
             : ['La décision n’a pas pu être enregistrée.'];
         $this->redirect('/derogations');
     }

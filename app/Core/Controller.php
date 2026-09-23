@@ -146,6 +146,7 @@ class Controller
                 ['name' => 'Options', 'path' => '/options', 'icon' => 'bi-grid-1x2'],
                 ['name' => 'Parents', 'path' => '/parents', 'icon' => 'bi-people'],
                 ['name' => 'Élèves', 'path' => '/eleves', 'icon' => 'bi-person-badge'],
+                ['name' => 'Dérogations', 'path' => '/derogations', 'icon' => 'bi-file-earmark-check'],
                 ['name' => 'Notes', 'path' => '/notes', 'icon' => 'bi-pencil-square'],
                 ['name' => 'Présences', 'path' => '/presences', 'icon' => 'bi-calendar-check'],
                 ['name' => 'Générer mot de passe', 'path' => '/ecoles/generatePassword', 'icon' => 'bi-key'],

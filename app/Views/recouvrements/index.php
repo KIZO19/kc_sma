@@ -75,6 +75,7 @@ $currencies = array_unique(array_merge(array_keys($summary['initial'] ?? []), ar
                 </tr>
               </thead>
               <tbody>
+                <?php $currentClass = null; ?>
                 <?php foreach ($debts as $debt): ?>
                   <?php
                     $initial = (float) ($debt['montant_initial'] ?? 0);
@@ -82,8 +83,17 @@ $currencies = array_unique(array_merge(array_keys($summary['initial'] ?? []), ar
                     $paid = max(0, $initial - $remaining);
                     $progress = $initial > 0 ? min(100, max(0, ($paid / $initial) * 100)) : 0;
                     $name = trim(($debt['nom'] ?? '') . ' ' . ($debt['postnom'] ?? '') . ' ' . ($debt['prenom'] ?? ''));
+                    $studentClass = trim((string) ($debt['nom_classe'] ?? 'Classe non définie')) ?: 'Classe non définie';
                   ?>
-                  <tr data-search="<?= htmlspecialchars(strtolower($name . ' ' . ($debt['matricule'] ?? '') . ' ' . ($debt['type_frais'] ?? '')), ENT_QUOTES, 'UTF-8') ?>">
+                  <?php if ($currentClass !== $studentClass): ?>
+                    <?php $currentClass = $studentClass; ?>
+                    <tr class="table-primary">
+                      <td colspan="7" class="fw-semibold">
+                        <i class="bi bi-mortarboard me-1"></i><?= htmlspecialchars($studentClass) ?>
+                      </td>
+                    </tr>
+                  <?php endif; ?>
+                  <tr data-search="<?= htmlspecialchars(strtolower($studentClass . ' ' . $name . ' ' . ($debt['matricule'] ?? '') . ' ' . ($debt['type_frais'] ?? '')), ENT_QUOTES, 'UTF-8') ?>">
                     <td>
                       <div class="fw-semibold"><?= htmlspecialchars($name) ?></div>
                       <small class="text-muted"><?= htmlspecialchars($debt['matricule'] ?? 'Sans matricule') ?></small>
@@ -102,6 +112,19 @@ $currencies = array_unique(array_merge(array_keys($summary['initial'] ?? []), ar
                       <a class="btn btn-sm btn-outline-primary" href="<?= BASE_URL ?>/paiements?eleve_id=<?= (int) $debt['eleve_id'] ?>" title="Voir les paiements">
                         <i class="bi bi-eye"></i><span class="visually-hidden">Voir les paiements</span>
                       </a>
+                      <details class="d-inline-block text-start mt-1">
+                        <summary class="btn btn-sm btn-outline-warning" title="Demander une dérogation">
+                          <i class="bi bi-file-earmark-check"></i><span class="visually-hidden">Demander une dérogation</span>
+                        </summary>
+                        <form method="post" action="<?= BASE_URL ?>/derogations/request" class="border rounded bg-white shadow-sm p-3 mt-2" style="min-width: 280px; position: absolute; right: 1rem; z-index: 10;">
+                          <input type="hidden" name="eleve_id" value="<?= (int) $debt['eleve_id'] ?>">
+                          <label class="form-label small mb-1">Protéger l’élève jusqu’au</label>
+                          <input class="form-control form-control-sm mb-2" name="date_fin" type="date" min="<?= date('Y-m-d') ?>" required>
+                          <label class="form-label small mb-1">Motif</label>
+                          <textarea class="form-control form-control-sm mb-2" name="motif" rows="2" maxlength="500" required></textarea>
+                          <button class="btn btn-sm btn-warning w-100" type="submit">Demander au promoteur</button>
+                        </form>
+                      </details>
                     </td>
                   </tr>
                 <?php endforeach; ?>
