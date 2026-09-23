@@ -102,6 +102,44 @@
               </div>
             </div>
           </div>
+
+          <div class="card mt-3">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+              <span>Dettes par frais, classe, option et section</span>
+              <a href="<?= BASE_URL ?>/recouvrements" class="btn btn-sm btn-outline-primary">Voir les recouvrements</a>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-striped table-hover align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th>Frais</th>
+                      <th>Classe</th>
+                      <th>Option</th>
+                      <th>Section</th>
+                      <th class="text-end">Dette restante</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                  <?php foreach ($dashboardData['accounting']['debtBreakdown'] ?? [] as $breakdown): ?>
+                    <tr>
+                      <td><?= htmlspecialchars($breakdown['type_frais'] ?? 'Frais scolaire') ?></td>
+                      <td><?= htmlspecialchars($breakdown['nom_classe'] ?? 'Classe non définie') ?></td>
+                      <td><?= htmlspecialchars($breakdown['nom_option'] ?? 'Sans option') ?></td>
+                      <td><?= htmlspecialchars($breakdown['nom_section'] ?? 'Section non définie') ?></td>
+                      <td class="text-end fw-semibold text-danger">
+                        <?= number_format((float) ($breakdown['dette_restante'] ?? 0), 2, ',', ' ') ?> <?= htmlspecialchars($breakdown['devise'] ?? '') ?>
+                      </td>
+                    </tr>
+                  <?php endforeach; ?>
+                  <?php if (empty($dashboardData['accounting']['debtBreakdown'])): ?>
+                    <tr><td colspan="5" class="text-center text-muted">Aucune dette restante.</td></tr>
+                  <?php endif; ?>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
           <?php endif; ?>
 
           <?php if (($role ?? '') === 'comptable_école'): ?>
@@ -110,8 +148,8 @@
               <div class="card text-white bg-danger h-100">
                 <div class="card-body">
                   <h5 class="card-title">Total dette</h5>
-                  <h3 class="card-text"><?= number_format($dashboardData['accounting']['totalOutstanding'] ?? 0, 2) ?> FCFA</h3>
-                  <p class="small">Somme des soldes débiteurs (année active)</p>
+                  <h3 class="card-text"><?= number_format($dashboardData['accounting']['totalOutstanding'] ?? 0, 2) ?></h3>
+                  <p class="small">Dette restante calculée par frais</p>
                 </div>
               </div>
             </div>
@@ -119,7 +157,7 @@
               <div class="card text-white bg-success h-100">
                 <div class="card-body">
                   <h5 class="card-title">Paiements (30j)</h5>
-                  <h3 class="card-text"><?= number_format($dashboardData['accounting']['payments30d'] ?? 0, 2) ?> FCFA</h3>
+                  <h3 class="card-text"><?= number_format($dashboardData['accounting']['payments30d'] ?? 0, 2) ?></h3>
                   <p class="small">Total des paiements reçus (30 derniers jours)</p>
                 </div>
               </div>

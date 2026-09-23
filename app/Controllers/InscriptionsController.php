@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Core\Auth;
 use App\Core\Controller;
+use App\Core\Database;
 use App\Models\Eleve;
 use App\Models\AnneeScolaire;
 use App\Models\Classe;
@@ -69,6 +70,7 @@ class InscriptionsController extends Controller
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
         $parents = $ecoleId > 0 ? ParentModel::getAllBySchool($ecoleId) : [];
         $sections = Section::getAll();
+        $options = Option::getAll();
         $selectedSection = null;
         $selectedOption = null;
         $sectionId = (int) ($_GET['section_id'] ?? 0);
@@ -103,6 +105,8 @@ class InscriptionsController extends Controller
             'classes' => $classes,
             'selectedSection' => $selectedSection,
             'selectedOption' => $selectedOption,
+            'sections' => $sections,
+            'options' => $options,
             'oldInput' => $oldInput,
         ]);
     }
@@ -142,6 +146,15 @@ class InscriptionsController extends Controller
             if (!in_array($genre, ['M', 'F'], true)) {
                 $errors[] = 'Le genre de l’élève est requis.';
             }
+            if ($classeId <= 0) {
+                $errors[] = 'La classe associée est requise pour l’inscription.';
+            }
+            if ($sectionId <= 0) {
+                $errors[] = 'La section de l’élève est requise pour l’inscription.';
+            }
+            if ($optionId <= 0) {
+                $errors[] = 'L’option de l’élève est requise pour l’inscription.';
+            }
             $birthDate = \DateTime::createFromFormat('Y-m-d', $dateNaissance);
             if (!$birthDate || $birthDate->format('Y-m-d') !== $dateNaissance) {
                 $errors[] = 'La date de naissance est invalide.';
@@ -168,10 +181,6 @@ class InscriptionsController extends Controller
                 }
             }
 
-            if ($classeId <= 0) {
-                $errors[] = 'La classe associée est requise pour l’inscription.';
-            }
-
             if ($parentChoice === 'new') {
                 if ($newParentName === '') {
                     $errors[] = 'Le nom du parent/tuteur est requis lorsque vous créez un nouveau parent.';
@@ -192,6 +201,9 @@ class InscriptionsController extends Controller
                     if ($optionId > 0 && (int) ($selectedClass['option_id'] ?? 0) !== $optionId) {
                         $errors[] = 'La classe sélectionnée ne correspond pas à l’option demandée.';
                     }
+                        if (!$this->isAllowedClassLevel((string) ($selectedClass['nom_classe'] ?? ''), $sectionId)) {
+                            $errors[] = 'Le niveau de la classe ne correspond pas à la section sélectionnée.';
+                        }
                 }
             }
 
@@ -495,6 +507,19 @@ class InscriptionsController extends Controller
         $modules = $this->getModulesForRole($role);
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
         $parents = $ecoleId > 0 ? ParentModel::getAllBySchool($ecoleId) : [];
+        $classes = $ecoleId > 0 ? Classe::getAllBySchool($ecoleId) : [];
+        $sections = Section::getAll();
+        $options = Option::getAll();
+        $db = Database::getConnection();
+        $inscriptionStmt = $db->prepare(
+            'SELECT i.*, c.section_id, c.option_id
+             FROM inscriptions i
+             INNER JOIN classes c ON c.id = i.classe_id
+             WHERE i.eleve_id = :eleve_id
+             ORDER BY i.date_inscription DESC, i.id DESC LIMIT 1'
+        );
+        $inscriptionStmt->execute([':eleve_id' => $eleveId]);
+        $currentInscription = $inscriptionStmt->fetch() ?: [];
         $oldInput = $_SESSION['inscriptions_old'] ?? [];
         unset($_SESSION['inscriptions_old']);
 
@@ -506,6 +531,10 @@ class InscriptionsController extends Controller
             'modules' => $modules,
             'student' => $student,
             'parents' => $parents,
+            'classes' => $classes,
+            'sections' => $sections,
+            'options' => $options,
+            'currentInscription' => $currentInscription,
             'oldInput' => $oldInput,
         ]);
     }
@@ -524,6 +553,9 @@ class InscriptionsController extends Controller
             $dateNaissance = trim($_POST['date_naissance'] ?? '');
             $matricule = trim($_POST['matricule'] ?? '');
             $parentId = (int) ($_POST['parent_id'] ?? 0);
+            $classeId = (int) ($_POST['classe_id'] ?? 0);
+            $sectionId = (int) ($_POST['section_id'] ?? 0);
+            $optionId = (int) ($_POST['option_id'] ?? 0);
 
             $errors = [];
             if ($eleveId <= 0) {
@@ -541,12 +573,31 @@ class InscriptionsController extends Controller
             if ($dateNaissance === '') {
                 $errors[] = 'La date de naissance est requise.';
             }
+            if ($classeId <= 0) {
+                $errors[] = 'La classe est requise.';
+            }
+            if ($sectionId <= 0) {
+                $errors[] = 'La section est requise.';
+            }
+            if ($optionId <= 0) {
+                $errors[] = 'L’option est requise.';
+            }
 
             $user = Auth::refresh() ?: Auth::user();
             $ecoleId = (int) ($user['ecole_id'] ?? 0);
+            $db = Database::getConnection();
             $student = Eleve::findByIdAndSchool($eleveId, $ecoleId);
             if (!$student) {
                 $errors[] = 'Élève introuvable ou n’appartenant pas à votre école.';
+            }
+
+            $selectedClass = $classeId > 0 ? Classe::findById($classeId) : null;
+            if (!$selectedClass || (int) ($selectedClass['ecole_id'] ?? 0) !== $ecoleId) {
+                $errors[] = 'La classe sélectionnée est invalide ou n’appartient pas à votre école.';
+            } elseif ((int) ($selectedClass['section_id'] ?? 0) !== $sectionId || (int) ($selectedClass['option_id'] ?? 0) !== $optionId) {
+                $errors[] = 'La classe sélectionnée ne correspond pas à la section et à l’option choisies.';
+            } elseif (!$this->isAllowedClassLevel((string) ($selectedClass['nom_classe'] ?? ''), $sectionId)) {
+                $errors[] = 'Le niveau de la classe ne correspond pas à la section sélectionnée.';
             }
 
             if (empty($matricule)) {
@@ -574,6 +625,18 @@ class InscriptionsController extends Controller
                     'village' => trim($_POST['village'] ?? null),
                     'num_permanent' => trim($_POST['num_permanent'] ?? null),
                 ];
+
+                $inscriptionStmt = $db->prepare(
+                    'SELECT id FROM inscriptions WHERE eleve_id = :eleve_id ORDER BY date_inscription DESC, id DESC LIMIT 1'
+                );
+                $inscriptionStmt->execute([':eleve_id' => $eleveId]);
+                $currentInscriptionId = (int) ($inscriptionStmt->fetchColumn() ?: 0);
+                if ($currentInscriptionId <= 0) {
+                    $errors[] = 'Aucune inscription scolaire à mettre à jour n’a été trouvée.';
+                } else {
+                    $updateInscription = $db->prepare('UPDATE inscriptions SET classe_id = :classe_id WHERE id = :id');
+                    $updateInscription->execute([':classe_id' => $classeId, ':id' => $currentInscriptionId]);
+                }
 
                 $existingStudent = Eleve::findById($eleveId);
                 $existingMatricule = $existingStudent['matricule'] ?? '';
@@ -850,5 +913,20 @@ class InscriptionsController extends Controller
         }
 
         return substr((string) date('Y'), -2) . substr((string) (date('Y') + 1), -2);
+    }
+
+    private function isAllowedClassLevel(string $className, int $sectionId): bool
+    {
+        if (!preg_match('/^\s*(\d+)\s*(?:e|er|ère|ere|ème|eme|ième|ieme)?/iu', trim($className), $matches)) {
+            return false;
+        }
+
+        $level = (int) $matches[1];
+        return match ($sectionId) {
+            1 => $level >= 1 && $level <= 3,
+            2 => $level >= 1 && $level <= 6,
+            3 => $level === 7 || $level === 8 || ($level >= 1 && $level <= 4),
+            default => false,
+        };
     }
 }

@@ -3,6 +3,13 @@
 $parents = $parents ?? [];
 $oldInput = $oldInput ?? [];
 $student = $student ?? [];
+$classes = $classes ?? [];
+$sections = $sections ?? [];
+$options = $options ?? [];
+$currentInscription = $currentInscription ?? [];
+$selectedClasseId = (int) ($oldInput['classe_id'] ?? ($currentInscription['classe_id'] ?? 0));
+$selectedSectionId = (int) ($oldInput['section_id'] ?? ($currentInscription['section_id'] ?? 0));
+$selectedOptionId = (int) ($oldInput['option_id'] ?? ($currentInscription['option_id'] ?? 0));
 ?>
       <section class="content-header">
         <div class="container-fluid">
@@ -88,6 +95,40 @@ $student = $student ?? [];
                         <label class="form-label">Matricule</label>
                         <input type="text" name="matricule" class="form-control" value="<?= htmlspecialchars($oldInput['matricule'] ?? $student['matricule']) ?>" placeholder="Si vide, un matricule sera généré automatiquement">
                         <div class="form-text">Le matricule doit contenir 4 lettres majuscules suivies de 5 chiffres (ex. ABCD12345).</div>
+                      </div>
+                    </div>
+
+                    <div class="row">
+                      <div class="col-md-4 mb-3">
+                        <label class="form-label">Section <span class="text-danger">*</span></label>
+                        <select name="section_id" class="form-select" required>
+                          <option value="">Sélectionnez une section</option>
+                          <?php foreach ($sections as $section): ?>
+                            <option value="<?= (int) $section['id'] ?>" <?= $selectedSectionId === (int) $section['id'] ? 'selected' : '' ?>><?= htmlspecialchars($section['nom_section']) ?></option>
+                          <?php endforeach; ?>
+                        </select>
+                      </div>
+                      <div class="col-md-4 mb-3">
+                        <label class="form-label">Option <span class="text-danger">*</span></label>
+                        <select name="option_id" class="form-select" required>
+                          <option value="">Sélectionnez une option</option>
+                          <?php foreach ($options as $option): ?>
+                            <option value="<?= (int) $option['id'] ?>" <?= $selectedOptionId === (int) $option['id'] ? 'selected' : '' ?>><?= htmlspecialchars($option['nom_option']) ?></option>
+                          <?php endforeach; ?>
+                        </select>
+                      </div>
+                      <div class="col-md-4 mb-3">
+                        <label class="form-label">Classe <span class="text-danger">*</span></label>
+                        <select name="classe_id" class="form-select" required>
+                          <option value="">Sélectionnez une classe</option>
+                          <?php foreach ($classes as $classe): ?>
+                            <option value="<?= (int) $classe['id'] ?>" <?= $selectedClasseId === (int) $classe['id'] ? 'selected' : '' ?>>
+                              <?= htmlspecialchars($classe['nom_classe']) ?>
+                              <?php if (!empty($classe['nom_section'])): ?> - <?= htmlspecialchars($classe['nom_section']) ?><?php endif; ?>
+                              <?php if (!empty($classe['nom_option'])): ?> (<?= htmlspecialchars($classe['nom_option']) ?>)<?php endif; ?>
+                            </option>
+                          <?php endforeach; ?>
+                        </select>
                       </div>
                     </div>
 

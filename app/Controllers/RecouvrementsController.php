@@ -125,27 +125,27 @@ class RecouvrementsController extends Controller
     private function fetchOutstandingDebts(array $user, array $filters = []): array
     {
         $db = Database::getConnection();
-        $sql = 'SELECT d.id, d.eleve_id, d.frais_id, d.montant_initial, d.montant_restant, d.devise, d.date_creation,
+        $sql = 'SELECT MAX(d.id) AS id, d.eleve_id, d.frais_id,
+                       MAX(d.montant_initial) AS montant_initial,
+                       GREATEST(0, MAX(d.montant_initial) - GREATEST(
+                         COALESCE((SELECT SUM(ece.montant) FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id WHERE ce.eleve_id = d.eleve_id AND ece.frais_id = d.frais_id AND ece.type_mouvement = \'CREDIT\'), 0),
+                         COALESCE((SELECT SUM(pe.montant_paye) FROM paiements_eleves pe WHERE pe.eleve_id = d.eleve_id AND pe.frais_id = d.frais_id), 0)
+                       )) AS montant_restant,
+                       d.devise, MAX(d.date_creation) AS date_creation,
                        e.matricule, e.nom, e.postnom, e.prenom,
                        fs.type_frais, s.annee AS annee_scolaire,
-                       COALESCE((SELECT c.nom_classe
-                                 FROM inscriptions i
-                                 INNER JOIN classes c ON c.id = i.classe_id
-                                 WHERE i.eleve_id = e.id
-                                 ORDER BY i.date_inscription DESC, i.id DESC
-                                 LIMIT 1), \'Classe non définie\') AS nom_classe
+                       COALESCE((SELECT c.nom_classe FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id WHERE i.eleve_id = e.id ORDER BY i.date_inscription DESC, i.id DESC LIMIT 1), \'Classe non définie\') AS nom_classe
                 FROM dettes_eleves d
                 INNER JOIN eleves e ON e.id = d.eleve_id
                 INNER JOIN frais_scolaires fs ON fs.id = d.frais_id
                 LEFT JOIN annees_scolaires s ON s.id = d.annee_scolaire_id
-                WHERE d.montant_restant > 0';
+                WHERE 1 = 1';
         $params = [];
 
         if (($user['role'] ?? '') !== 'super_admin' && (int) ($user['ecole_id'] ?? 0) > 0) {
             $sql .= ' AND e.ecole_id = :ecole_id';
             $params[':ecole_id'] = (int) $user['ecole_id'];
         }
-
         if (!empty($filters['q'])) {
             $sql .= ' AND CONCAT_WS(\' \', e.nom, e.postnom, e.prenom, e.matricule, fs.type_frais) LIKE :search';
             $params[':search'] = '%' . $filters['q'] . '%';
@@ -158,19 +158,21 @@ class RecouvrementsController extends Controller
             $sql .= ' AND UPPER(d.devise) = :devise';
             $params[':devise'] = $filters['devise'];
         }
+
+        $sql .= ' GROUP BY d.eleve_id, d.frais_id, d.devise, e.matricule, e.nom, e.postnom, e.prenom, fs.type_frais, s.annee
+                  HAVING montant_restant > 0';
         if ($filters['montant_min'] !== null && $filters['montant_min'] !== '') {
-            $sql .= ' AND d.montant_restant >= :montant_min';
+            $sql .= ' AND montant_restant >= :montant_min';
             $params[':montant_min'] = $filters['montant_min'];
         }
         if ($filters['montant_max'] !== null && $filters['montant_max'] !== '') {
-            $sql .= ' AND d.montant_restant <= :montant_max';
+            $sql .= ' AND montant_restant <= :montant_max';
             $params[':montant_max'] = $filters['montant_max'];
         }
+        $sql .= ' ORDER BY nom_classe ASC, e.nom ASC, e.postnom ASC, e.prenom ASC, montant_restant DESC';
 
-        $sql .= ' ORDER BY nom_classe ASC, e.nom ASC, e.postnom ASC, e.prenom ASC, d.montant_restant DESC';
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
-
         return $stmt->fetchAll();
     }
 

@@ -100,6 +100,10 @@ class ClassesController extends Controller
                 $errors[] = 'La section est requise.';
             }
 
+            if (!$this->isAllowedClassLevel($nomClasse, $sectionId)) {
+                $errors[] = 'Le niveau doit respecter la section : maternelle 1 à 3, primaire 1 à 6, secondaire 7e, 8e ou 1e à 4e.';
+            }
+
             if (!in_array($role, self::PRIMARY_ROLES, true) && $sectionId !== 1 && $sectionId !== 2) {
                 $errors[] = 'Vous n’êtes pas autorisé à créer une classe hors primaire ou maternelle.';
             }
@@ -127,5 +131,20 @@ class ClassesController extends Controller
         }
 
         $this->redirect('/classes/create');
+    }
+
+    private function isAllowedClassLevel(string $className, int $sectionId): bool
+    {
+        if (!preg_match('/^\s*(\d+)\s*(?:e|er|ère|ere|ème|eme|ième|ieme)?/iu', trim($className), $matches)) {
+            return false;
+        }
+
+        $level = (int) $matches[1];
+        return match ($sectionId) {
+            1 => $level >= 1 && $level <= 3,
+            2 => $level >= 1 && $level <= 6,
+            3 => $level === 7 || $level === 8 || ($level >= 1 && $level <= 4),
+            default => false,
+        };
     }
 }

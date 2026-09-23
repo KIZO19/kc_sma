@@ -68,18 +68,8 @@ class DashboardController extends Controller
             $params[':ecole'] = $ecole;
         }
 
-        // Total outstanding (active school year)
-        try {
-            $sql = 'SELECT COALESCE(SUM(ce.solde_debiteur),0) FROM comptes_eleves ce INNER JOIN eleves el ON ce.eleve_id = el.id INNER JOIN annees_scolaires a ON ce.annee_scolaire_id = a.id AND a.est_active = 1 WHERE 1=1 ' . $schoolFilter;
-            $stmt = $db->prepare($sql);
-            foreach ($params as $k => $v) {
-                $stmt->bindValue($k, $v, \PDO::PARAM_INT);
-            }
-            $stmt->execute();
-            $totalOutstanding = (float) ($stmt->fetchColumn() ?: 0);
-        } catch (\Throwable $e) {
-            $totalOutstanding = 0.0;
-        }
+        // Keep the dashboard debt total consistent with the recouvrements page.
+        $totalOutstanding = $this->sumOutstandingDebt($ecole);
 
         // Total payments last 30 days
         try {
@@ -115,9 +105,28 @@ class DashboardController extends Controller
         // Top debtors
         $topDebtors = [];
         try {
-            $sql = 'SELECT el.id AS eleve_id, el.nom, el.postnom, el.prenom, SUM(ce.solde_debiteur) AS debt FROM comptes_eleves ce INNER JOIN eleves el ON ce.eleve_id = el.id INNER JOIN annees_scolaires a ON ce.annee_scolaire_id = a.id AND a.est_active = 1 WHERE ce.solde_debiteur > 0 ' . $schoolFilter . ' GROUP BY el.id ORDER BY debt DESC LIMIT 10';
+                        $sql = 'SELECT el.id AS eleve_id, el.nom, el.postnom, el.prenom, SUM(outstanding.montant_restant) AS debt
+                                        FROM (
+                                            SELECT d.eleve_id, d.frais_id,
+                                                         GREATEST(0, MAX(d.montant_initial) - GREATEST(
+                                                             COALESCE((SELECT SUM(ece.montant) FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce2 ON ce2.id = ece.compte_eleve_id WHERE ce2.eleve_id = d.eleve_id AND ece.frais_id = d.frais_id AND ece.type_mouvement = \'CREDIT\'), 0),
+                                                             COALESCE((SELECT SUM(pe.montant_paye) FROM paiements_eleves pe WHERE pe.eleve_id = d.eleve_id AND pe.frais_id = d.frais_id), 0)
+                                                         )) AS montant_restant
+                                            FROM dettes_eleves d
+                                            INNER JOIN eleves el2 ON el2.id = d.eleve_id
+                                            WHERE 1 = 1 ' . (($schoolFilter !== '') ? 'AND (el2.ecole_id = :ecole_top OR EXISTS (SELECT 1 FROM inscriptions i2 INNER JOIN classes c2 ON i2.classe_id = c2.id WHERE i2.eleve_id = el2.id AND c2.ecole_id = :ecole_top))' : '') . '
+                                            GROUP BY d.eleve_id, d.frais_id
+                                            HAVING montant_restant > 0
+                                        ) AS outstanding
+                                        INNER JOIN eleves el ON el.id = outstanding.eleve_id
+                                        GROUP BY el.id, el.nom, el.postnom, el.prenom
+                                        ORDER BY debt DESC LIMIT 10';
+                        $topParams = [];
+                        if ($schoolFilter !== '') {
+                                $topParams[':ecole_top'] = $ecole;
+                        }
             $stmt = $db->prepare($sql);
-            foreach ($params as $k => $v) {
+                        foreach ($topParams as $k => $v) {
                 $stmt->bindValue($k, $v, \PDO::PARAM_INT);
             }
             $stmt->execute();
@@ -131,7 +140,71 @@ class DashboardController extends Controller
             'payments30d' => $payments30d,
             'recentPayments' => $recentPayments,
             'topDebtors' => $topDebtors,
+            'debtBreakdown' => $this->getDebtBreakdown($ecole),
         ];
+    }
+
+    private function getDebtBreakdown(int $schoolId): array
+    {
+        try {
+            $db = Database::getConnection();
+            $schoolFilter = '';
+            $params = [];
+            if ($schoolId > 0) {
+                $schoolFilter = 'WHERE (el.ecole_id = :ecole_breakdown_a OR EXISTS (
+                    SELECT 1 FROM inscriptions si INNER JOIN classes sc ON si.classe_id = sc.id
+                    WHERE si.eleve_id = el.id AND sc.ecole_id = :ecole_breakdown_b
+                ))';
+                $params[':ecole_breakdown_a'] = $schoolId;
+                $params[':ecole_breakdown_b'] = $schoolId;
+            }
+
+            $sql = 'SELECT fs.type_frais,
+                           debt.devise,
+                           COALESCE(c.nom_classe, \'Classe non définie\') AS nom_classe,
+                           COALESCE(o.nom_option, \'Sans option\') AS nom_option,
+                           COALESCE(s.nom_section, \'Section non définie\') AS nom_section,
+                           SUM(debt.montant_restant) AS dette_restante
+                    FROM (
+                        SELECT d.eleve_id, d.frais_id, d.devise,
+                               GREATEST(0, MAX(d.montant_initial) - GREATEST(
+                                   COALESCE((SELECT SUM(ece.montant)
+                                             FROM ecritures_comptables_eleves ece
+                                             INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
+                                             WHERE ce.eleve_id = d.eleve_id AND ece.frais_id = d.frais_id
+                                               AND ece.type_mouvement = \'CREDIT\'), 0),
+                                   COALESCE((SELECT SUM(pe.montant_paye)
+                                             FROM paiements_eleves pe
+                                             WHERE pe.eleve_id = d.eleve_id AND pe.frais_id = d.frais_id), 0)
+                               )) AS montant_restant
+                        FROM dettes_eleves d
+                        INNER JOIN eleves el ON el.id = d.eleve_id
+                        ' . $schoolFilter . '
+                        GROUP BY d.eleve_id, d.frais_id, d.devise
+                        HAVING montant_restant > 0
+                    ) AS debt
+                    INNER JOIN frais_scolaires fs ON fs.id = debt.frais_id
+                    LEFT JOIN inscriptions i ON i.id = (
+                        SELECT latest.id FROM inscriptions latest
+                        WHERE latest.eleve_id = debt.eleve_id
+                        ORDER BY latest.date_inscription DESC, latest.id DESC LIMIT 1
+                    )
+                    LEFT JOIN classes c ON c.id = i.classe_id
+                    LEFT JOIN options o ON o.id = c.option_id
+                    LEFT JOIN sections s ON s.id = c.section_id
+                    GROUP BY fs.type_frais, debt.devise, c.nom_classe, o.nom_option, s.nom_section
+                    ORDER BY s.nom_section ASC, o.nom_option ASC, c.nom_classe ASC, fs.type_frais ASC';
+
+            $stmt = $db->prepare($sql);
+            foreach ($params as $key => $value) {
+                $stmt->bindValue($key, $value, PDO::PARAM_INT);
+            }
+            $stmt->execute();
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {
+            error_log('DashboardController::getDebtBreakdown failed: ' . $e->getMessage());
+            return [];
+        }
     }
 
     private function getStatsForRole(string $role, array $user = []): array
@@ -502,12 +575,29 @@ class DashboardController extends Controller
     {
         try {
             $db = Database::getConnection();
-            $sql = 'SELECT COALESCE(SUM(ce.solde_debiteur),0) FROM comptes_eleves ce INNER JOIN eleves el ON el.id = ce.eleve_id';
+                        $sql = 'SELECT COALESCE(SUM(outstanding.montant_restant), 0) FROM (
+                                             SELECT d.eleve_id, d.frais_id, d.devise,
+                                                            GREATEST(0, MAX(d.montant_initial) - GREATEST(
+                                                                COALESCE((SELECT SUM(ece.montant)
+                                                                                    FROM ecritures_comptables_eleves ece
+                                                                                    INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
+                                                                                    WHERE ce.eleve_id = d.eleve_id AND ece.frais_id = d.frais_id
+                                                                                        AND ece.type_mouvement = \'CREDIT\'), 0),
+                                                                COALESCE((SELECT SUM(pe.montant_paye)
+                                                                                    FROM paiements_eleves pe
+                                                                                    WHERE pe.eleve_id = d.eleve_id AND pe.frais_id = d.frais_id), 0)
+                                                            )) AS montant_restant
+                                             FROM dettes_eleves d
+                                             INNER JOIN eleves el ON el.id = d.eleve_id
+                                             WHERE 1 = 1';
             $params = [];
             if ($schoolId > 0) {
-                $sql .= ' WHERE (el.ecole_id = :ecole OR EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id WHERE i.eleve_id = el.id AND c.ecole_id = :ecole))';
+                                $sql .= ' AND (el.ecole_id = :ecole OR EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id WHERE i.eleve_id = el.id AND c.ecole_id = :ecole))';
                 $params[':ecole'] = $schoolId;
             }
+                        $sql .= ' GROUP BY d.eleve_id, d.frais_id, d.devise
+                                            HAVING montant_restant > 0
+                                        ) AS outstanding';
             $stmt = $db->prepare($sql);
             foreach ($params as $key => $value) {
                 $stmt->bindValue($key, $value, PDO::PARAM_INT);

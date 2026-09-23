@@ -1,6 +1,8 @@
 <?php require __DIR__ . '/../partials/app_header.php'; ?>
 <?php
 $parents = $parents ?? [];
+$sections = $sections ?? [];
+$options = $options ?? [];
 $oldInput = $oldInput ?? [];
 $pageStyles = <<<STYLE
 <style>
@@ -68,18 +70,6 @@ STYLE;
                 </div>
                 <div class="card-body">
                   <form id="registration-form" method="post" action="<?= BASE_URL ?>/inscriptions/submit" autocomplete="off" novalidate enctype="multipart/form-data">
-                    <?php if (!empty($selectedSection)): ?>
-                      <div class="alert alert-info">
-                        Section sélectionnée : <strong><?= htmlspecialchars($selectedSection['nom_section']) ?></strong>
-                        <?php if (!empty($selectedOption)): ?>
-                          <br>Option sélectionnée : <strong><?= htmlspecialchars($selectedOption['nom_option']) ?></strong>
-                        <?php endif; ?>
-                      </div>
-                      <input type="hidden" name="section_id" value="<?= (int) $selectedSection['id'] ?>">
-                      <?php if (!empty($selectedOption)): ?>
-                        <input type="hidden" name="option_id" value="<?= (int) $selectedOption['id'] ?>">
-                      <?php endif; ?>
-                    <?php endif; ?>
                     <div class="row">
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Nom</label>
@@ -122,6 +112,28 @@ STYLE;
                     </div>
 
                     <div class="mb-3">
+                      <div class="row">
+                        <div class="col-md-6 mb-3">
+                          <label class="form-label">Section <span class="text-danger">*</span></label>
+                          <select name="section_id" class="form-select" required>
+                            <option value="">Sélectionnez une section</option>
+                            <?php foreach ($sections as $section): ?>
+                              <?php $sectionValue = (int) ($oldInput['section_id'] ?? ($selectedSection['id'] ?? 0)); ?>
+                              <option value="<?= (int) $section['id'] ?>" <?= $sectionValue === (int) $section['id'] ? 'selected' : '' ?>><?= htmlspecialchars($section['nom_section']) ?></option>
+                            <?php endforeach; ?>
+                          </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                          <label class="form-label">Option <span class="text-danger">*</span></label>
+                          <select name="option_id" class="form-select" required>
+                            <option value="">Sélectionnez une option</option>
+                            <?php foreach ($options as $option): ?>
+                              <?php $optionValue = (int) ($oldInput['option_id'] ?? ($selectedOption['id'] ?? 0)); ?>
+                              <option value="<?= (int) $option['id'] ?>" <?= $optionValue === (int) $option['id'] ? 'selected' : '' ?>><?= htmlspecialchars($option['nom_option']) ?></option>
+                            <?php endforeach; ?>
+                          </select>
+                        </div>
+                      </div>
                       <label class="form-label">Classe</label>
                       <select name="classe_id" class="form-select" required <?= empty($classes) ? 'disabled' : '' ?>>
                         <option value="">Sélectionnez une classe</option>
