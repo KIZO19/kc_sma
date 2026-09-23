@@ -5,6 +5,7 @@ $classes = $classes ?? [];
 $debts = $debts ?? [];
 $summary = $summary ?? [];
 $feeColumns = $feeColumns ?? [];
+$feeColumns = $feeColumns ?? [];
 $formatAmount = static fn ($amount) => number_format((float) $amount, 2, ',', ' ');
 $currencies = array_unique(array_merge(array_keys($summary['initial'] ?? []), array_keys($summary['remaining'] ?? [])));
 $exportColumns = [
@@ -87,6 +88,19 @@ $exportQuery = static function (string $format, array $columns) use ($filters): 
             <?php foreach ($exportColumns as $key => $label): ?><div class="col-6 col-md-3"><label class="form-check"><input class="form-check-input layout-column" type="checkbox" value="<?= $key ?>" checked><span class="form-check-label"><?= htmlspecialchars($label) ?></span></label></div><?php endforeach; ?>
           </div><small class="text-muted">Les colonnes sélectionnées seront utilisées pour les exports.</small></div>
         </details>
+        <div class="d-flex flex-wrap align-items-center gap-2 w-100 pt-2 border-top">
+          <div class="input-group" style="max-width: 360px;">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input id="recouvrementsGridSearch" type="search" class="form-control" placeholder="Rechercher dans la liste..." aria-label="Rechercher dans la liste">
+          </div>
+          <label class="small text-muted ms-md-auto" for="recouvrementsPageSize">Lignes</label>
+          <select id="recouvrementsPageSize" class="form-select form-select-sm" style="width: auto;" aria-label="Nombre de lignes par page">
+            <option value="10">10</option><option value="25" selected>25</option><option value="50">50</option><option value="100">100</option>
+          </select>
+          <span id="recouvrementsGridInfo" class="small text-muted"></span>
+          <button id="recouvrementsPrev" class="btn btn-sm btn-outline-secondary" type="button" title="Page précédente"><i class="bi bi-chevron-left"></i></button>
+          <button id="recouvrementsNext" class="btn btn-sm btn-outline-secondary" type="button" title="Page suivante"><i class="bi bi-chevron-right"></i></button>
+        </div>
       </div>
       <div class="card-body p-0">
         <?php if (empty($debts)): ?>
@@ -99,13 +113,13 @@ $exportQuery = static function (string $format, array $columns) use ($filters): 
             <table class="table table-hover align-middle mb-0" id="recouvrementsTable">
               <thead class="table-light">
                 <tr>
-                  <th>Élève</th>
+                  <th class="grid-sortable" data-sort-key="eleve">Élève <i class="bi bi-arrow-down-up small"></i></th>
                   <?php foreach ($feeColumns as $feeColumn): ?>
-                    <th class="text-end">Payé - <?= htmlspecialchars($feeColumn) ?></th>
+                    <th class="text-end grid-sortable" data-sort-key="<?= htmlspecialchars(strtolower($feeColumn), ENT_QUOTES, 'UTF-8') ?>">Payé - <?= htmlspecialchars($feeColumn) ?> <i class="bi bi-arrow-down-up small"></i></th>
                   <?php endforeach; ?>
-                  <th class="text-end">Montant initial</th>
-                  <th class="text-end">Déjà payé</th>
-                  <th class="text-end">Dette restante</th>
+                  <th class="text-end grid-sortable" data-sort-key="initial">Montant initial <i class="bi bi-arrow-down-up small"></i></th>
+                  <th class="text-end grid-sortable" data-sort-key="paye">Déjà payé <i class="bi bi-arrow-down-up small"></i></th>
+                  <th class="text-end grid-sortable" data-sort-key="restant">Dette restante <i class="bi bi-arrow-down-up small"></i></th>
                   <th class="text-end">Action</th>
                 </tr>
               </thead>
@@ -133,9 +147,9 @@ $exportQuery = static function (string $format, array $columns) use ($filters): 
                       </td>
                     </tr>
                   <?php endif; ?>
-                  <tr data-search="<?= htmlspecialchars(strtolower($studentClass . ' ' . $name . ' ' . ($debt['matricule'] ?? '') . ' ' . ($debt['frais_liste'] ?? '')), ENT_QUOTES, 'UTF-8') ?>">
+                  <tr class="recouvrements-grid-row" data-class="<?= htmlspecialchars($studentClass, ENT_QUOTES, 'UTF-8') ?>" data-search="<?= htmlspecialchars(strtolower($studentClass . ' ' . $name . ' ' . ($debt['matricule'] ?? '') . ' ' . ($debt['frais_liste'] ?? '')), ENT_QUOTES, 'UTF-8') ?>">
                     <td>
-                      <div class="fw-semibold"><?= htmlspecialchars($name) ?></div>
+                      <div class="fw-semibold" data-grid-value="eleve"><?= htmlspecialchars($name) ?></div>
                       <small class="text-muted"><?= htmlspecialchars($debt['matricule'] ?? 'Sans matricule') ?></small>
                     </td>
                     <?php foreach ($feeColumns as $feeColumn): ?>
@@ -207,6 +221,86 @@ $exportQuery = static function (string $format, array $columns) use ($filters): 
     };
     columnChecks.forEach((check) => check.addEventListener('change', updateExports));
     updateExports();
+
+    const table = document.getElementById('recouvrementsTable');
+    const tbody = table?.querySelector('tbody');
+    const gridSearch = document.getElementById('recouvrementsGridSearch');
+    const pageSizeSelect = document.getElementById('recouvrementsPageSize');
+    const gridInfo = document.getElementById('recouvrementsGridInfo');
+    const previousButton = document.getElementById('recouvrementsPrev');
+    const nextButton = document.getElementById('recouvrementsNext');
+    if (!table || !tbody || !gridSearch || !pageSizeSelect) return;
+
+    const rows = [...tbody.querySelectorAll('.recouvrements-grid-row')];
+    const headers = [...table.querySelectorAll('thead th[data-sort-key]')];
+    let page = 1;
+    let sortKey = '';
+    let sortDirection = 1;
+
+    const numericValue = (value) => {
+      const match = String(value || '').replace(/\s/g, '').match(/-?[\d]+(?:[,.][\d]+)?/);
+      return match ? Number(match[0].replace(',', '.')) : 0;
+    };
+    const headerIndex = (key) => headers.findIndex((header) => header.dataset.sortKey === key);
+    const getCellValue = (row, key) => {
+      const index = headerIndex(key);
+      return index >= 0 ? (row.children[index]?.textContent || '').trim() : '';
+    };
+    const isNumericSort = (key) => ['initial', 'paye', 'restant'].includes(key) || key !== 'eleve' && headerIndex(key) > 0;
+
+    const renderGrid = () => {
+      const query = gridSearch.value.trim().toLowerCase();
+      const pageSize = Number(pageSizeSelect.value) || 25;
+      let visibleRows = rows.filter((row) => (row.dataset.search || '').includes(query));
+      if (sortKey) {
+        visibleRows.sort((left, right) => {
+          const leftValue = getCellValue(left, sortKey);
+          const rightValue = getCellValue(right, sortKey);
+          if (isNumericSort(sortKey)) return (numericValue(leftValue) - numericValue(rightValue)) * sortDirection;
+          return leftValue.localeCompare(rightValue, 'fr', { sensitivity: 'base' }) * sortDirection;
+        });
+      }
+
+      const total = visibleRows.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      page = Math.min(page, totalPages);
+      const start = (page - 1) * pageSize;
+      const pageRows = visibleRows.slice(start, start + pageSize);
+      tbody.replaceChildren();
+      let currentClass = null;
+      pageRows.forEach((row) => {
+        const studentClass = row.dataset.class || 'Classe non définie';
+        if (studentClass !== currentClass) {
+          currentClass = studentClass;
+          const classRow = document.createElement('tr');
+          classRow.className = 'table-primary';
+          const cell = document.createElement('td');
+          cell.colSpan = table.tHead.rows[0].cells.length;
+          cell.className = 'fw-semibold';
+          cell.innerHTML = '<i class="bi bi-mortarboard me-1"></i>' + studentClass.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[char]);
+          classRow.appendChild(cell);
+          tbody.appendChild(classRow);
+        }
+        tbody.appendChild(row);
+      });
+      if (gridInfo) gridInfo.textContent = total ? `${start + 1}-${Math.min(start + pageSize, total)} sur ${total}` : 'Aucun résultat';
+      if (previousButton) previousButton.disabled = page <= 1;
+      if (nextButton) nextButton.disabled = page >= totalPages;
+    };
+
+    gridSearch.addEventListener('input', () => { page = 1; renderGrid(); });
+    pageSizeSelect.addEventListener('change', () => { page = 1; renderGrid(); });
+    previousButton?.addEventListener('click', () => { page -= 1; renderGrid(); });
+    nextButton?.addEventListener('click', () => { page += 1; renderGrid(); });
+    headers.forEach((header) => header.addEventListener('click', () => {
+      const nextKey = header.dataset.sortKey || '';
+      sortDirection = sortKey === nextKey ? sortDirection * -1 : 1;
+      sortKey = nextKey;
+      headers.forEach((item) => item.classList.remove('text-primary'));
+      header.classList.add('text-primary');
+      renderGrid();
+    }));
+    renderGrid();
   })();
 </script>
 <?php require __DIR__ . '/../partials/app_footer.php'; ?>
