@@ -52,7 +52,7 @@ class PageController extends Controller
             'presences' => ['super_admin', 'ecole_admin', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'eleve_ecole'],
             'evaluations' => ['super_admin', 'ecole_admin', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école'],
             'evenements' => ['super_admin', 'ecole_admin', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'eleve_ecole', 'parent_ecole'],
-            'facturation' => ['super_admin', 'ecole_admin', 'comptable_école'],
+            'facturation' => ['comptable_école', 'promoteur_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école'],
             'comptes' => ['super_admin', 'ecole_admin', 'comptable_école'],
             'rapports' => ['super_admin', 'ecole_admin', 'comptable_école', 'sec_école'],
             'statistiques' => ['super_admin', 'ecole_admin'],
