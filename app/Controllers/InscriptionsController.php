@@ -634,7 +634,11 @@ class InscriptionsController extends Controller
         Auth::requireAuth();
         header('Content-Type: application/json');
         $provinces = [
-            'Kinshasa', 'Nord-Kivu', 'Sud-Kivu', 'Haut-Katanga', 'Kongo Central', 'Équateur', 'Maniema', 'Ituri'
+            'Bas-Uele', 'Équateur', 'Haut-Katanga', 'Haut-Lomami', 'Haut-Uele',
+            'Ituri', 'Kasaï', 'Kasaï-Central', 'Kasaï-Oriental', 'Kinshasa',
+            'Kongo-Central', 'Kwango', 'Kwilu', 'Lomami', 'Lualaba', 'Mai-Ndombe',
+            'Maniema', 'Mongala', 'Nord-Kivu', 'Nord-Ubangi', 'Sankuru', 'Sud-Kivu',
+            'Sud-Ubangi', 'Tanganyika', 'Tshopo', 'Tshuapa'
         ];
         echo json_encode(array_values($provinces));
         exit;
@@ -646,11 +650,32 @@ class InscriptionsController extends Controller
         header('Content-Type: application/json');
         $province = trim($_GET['province'] ?? '');
         $map = [
-            'Kinshasa' => ['Funa','Kalamu','Kasa-Vubu','Lingwala'],
-            'Nord-Kivu' => ['Goma','Beni','Masisi','Rutshuru'],
-            'Sud-Kivu' => ['Uvira','Bukavu','Fizi'],
-            'Haut-Katanga' => ['Lubumbashi','Kambove','Likasi'],
-            'Kongo Central' => ['Matadi','Boma','Kimpese'],
+            'Bas-Uele' => ['Buta'],
+            'Équateur' => ['Mbandaka'],
+            'Haut-Katanga' => ['Lubumbashi', 'Likasi', 'Kasumbalesa'],
+            'Haut-Lomami' => ['Kamina'],
+            'Haut-Uele' => ['Isiro'],
+            'Ituri' => ['Bunia'],
+            'Kasaï' => ['Tshikapa'],
+            'Kasaï-Central' => ['Kananga'],
+            'Kasaï-Oriental' => ['Mbuji-Mayi'],
+            'Kinshasa' => ['Kinshasa'],
+            'Kongo-Central' => ['Matadi', 'Boma', 'Muanda'],
+            'Kwango' => ['Kenge'],
+            'Kwilu' => ['Bandundu', 'Kikwit'],
+            'Lomami' => ['Kabinda'],
+            'Lualaba' => ['Kolwezi'],
+            'Mai-Ndombe' => ['Inongo'],
+            'Maniema' => ['Kindu'],
+            'Mongala' => ['Lisala'],
+            'Nord-Kivu' => ['Goma', 'Beni', 'Butembo'],
+            'Nord-Ubangi' => ['Gbadolite'],
+            'Sankuru' => ['Lusambo'],
+            'Sud-Kivu' => ['Bukavu', 'Uvira', 'Baraka'],
+            'Sud-Ubangi' => ['Gemena', 'Zongo'],
+            'Tanganyika' => ['Kalemie'],
+            'Tshopo' => ['Kisangani'],
+            'Tshuapa' => ['Boende'],
         ];
         $list = $map[$province] ?? [];
         echo json_encode(array_values($list));

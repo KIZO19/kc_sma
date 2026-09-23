@@ -54,34 +54,23 @@
             <div class="col-lg-4">
               <div class="card card-outline shadow-sm h-100">
                 <div class="card-header bg-info">
-                  <h3 class="card-title text-white">Aperçu rapide</h3>
+                  <h3 class="card-title text-white"><?= htmlspecialchars($dashboardData['overview']['title'] ?? 'Aperçu rapide') ?></h3>
                 </div>
                 <div class="card-body">
                   <div class="mb-4">
-                    <h5 class="mb-1">Vue synthétique</h5>
-                    <p class="text-muted">Suivi des commandes, présences et performances en temps réel.</p>
+                    <h5 class="mb-1"><?= htmlspecialchars($dashboardData['overview']['title'] ?? 'Vue synthétique') ?></h5>
+                    <p class="text-muted">Suivi des points clés qui influencent la gestion quotidienne de l’établissement.</p>
                   </div>
-                  <div class="progress-group mb-3">
-                    <span class="progress-text">Taux de présence</span>
-                    <span class="float-right"><b>92%</b></span>
-                    <div class="progress progress-sm">
-                      <div class="progress-bar bg-success" style="width:92%"></div>
+
+                  <?php foreach ($dashboardData['overview']['items'] ?? [] as $item): ?>
+                    <div class="progress-group mb-3">
+                      <span class="progress-text"><?= htmlspecialchars($item['label'] ?? '') ?></span>
+                      <span class="float-right"><b><?= htmlspecialchars($item['value'] ?? '0') ?></b></span>
+                      <div class="progress progress-sm">
+                        <div class="progress-bar <?= htmlspecialchars($item['color'] ?? 'bg-primary') ?>" style="width: <?= isset($item['value']) && is_numeric(str_replace(['%', ',', ' '], '', (string) $item['value'])) ? min(100, max(10, (int) str_replace(['%', ',', ' '], '', (string) $item['value']))) : 75 ?>%"></div>
+                      </div>
                     </div>
-                  </div>
-                  <div class="progress-group mb-3">
-                    <span class="progress-text">Satisfaction</span>
-                    <span class="float-right"><b>87%</b></span>
-                    <div class="progress progress-sm">
-                      <div class="progress-bar bg-warning" style="width:87%"></div>
-                    </div>
-                  </div>
-                  <div class="progress-group">
-                    <span class="progress-text">Paiements traités</span>
-                    <span class="float-right"><b>74%</b></span>
-                    <div class="progress progress-sm">
-                      <div class="progress-bar bg-primary" style="width:74%"></div>
-                    </div>
-                  </div>
+                  <?php endforeach; ?>
                 </div>
               </div>
             </div>
@@ -217,20 +206,30 @@
   document.addEventListener('DOMContentLoaded', function () {
     const chartCtx = document.getElementById('dashboardChart');
     if (chartCtx) {
+      const chartData = <?= json_encode($dashboardData['chart'] ?? []) ?>;
+      const datasets = chartData.datasets && chartData.datasets.length
+        ? chartData.datasets
+        : [{
+            label: chartData.label || 'Indicateur scolaire',
+            data: chartData.values || [],
+            borderColor: chartData.borderColor || '#0d6efd',
+            backgroundColor: chartData.backgroundColor || 'rgba(13, 110, 253, 0.15)',
+            tension: 0.3,
+            fill: false,
+          }];
+
       new Chart(chartCtx, {
         type: 'line',
         data: {
-          labels: <?= json_encode($dashboardData['chart']['labels'] ?? []) ?>,
-          datasets: [{
-            label: <?= json_encode($dashboardData['chart']['label'] ?? 'Indicateur scolaire') ?>,
-            data: <?= json_encode($dashboardData['chart']['values'] ?? []) ?>,
-            borderColor: <?= json_encode($dashboardData['chart']['borderColor'] ?? '#0d6efd') ?>,
-            backgroundColor: <?= json_encode($dashboardData['chart']['backgroundColor'] ?? 'rgba(13, 110, 253, 0.15)') ?>,
-          }]
+          labels: chartData.labels || [],
+          datasets: datasets
         },
         options: {
           responsive: true,
-          plugins: { legend: { display: false } },
+          plugins: {
+            legend: { display: chartData.datasets && chartData.datasets.length > 1 },
+            tooltip: { mode: 'index', intersect: false }
+          },
           scales: { y: { beginAtZero: true } }
         }
       });

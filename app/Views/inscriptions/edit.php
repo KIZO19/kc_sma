@@ -201,13 +201,17 @@ $student = $student ?? [];
           }
 
           const LOCAL_LOCATIONS = {
-            provinces: ['Kinshasa','Nord-Kivu','Sud-Kivu','Haut-Katanga','Kongo Central','Équateur','Maniema','Ituri'],
+            provinces: ['Bas-Uele','Équateur','Haut-Katanga','Haut-Lomami','Haut-Uele','Ituri','Kasaï','Kasaï-Central','Kasaï-Oriental','Kinshasa','Kongo-Central','Kwango','Kwilu','Lomami','Lualaba','Mai-Ndombe','Maniema','Mongala','Nord-Kivu','Nord-Ubangi','Sankuru','Sud-Kivu','Sud-Ubangi','Tanganyika','Tshopo','Tshuapa'],
             territoires: {
-              'Kinshasa': ['Funa','Kalamu','Kasa-Vubu','Lingwala'],
-              'Nord-Kivu': ['Goma','Beni','Masisi','Rutshuru'],
-              'Sud-Kivu': ['Uvira','Bukavu','Fizi'],
-              'Haut-Katanga': ['Lubumbashi','Kambove','Likasi'],
-              'Kongo Central': ['Matadi','Boma','Kimpese']
+              'Bas-Uele': ['Buta'], 'Équateur': ['Mbandaka'],
+              'Haut-Katanga': ['Lubumbashi','Likasi','Kasumbalesa'], 'Haut-Lomami': ['Kamina'],
+              'Haut-Uele': ['Isiro'], 'Ituri': ['Bunia'], 'Kasaï': ['Tshikapa'],
+              'Kasaï-Central': ['Kananga'], 'Kasaï-Oriental': ['Mbuji-Mayi'], 'Kinshasa': ['Kinshasa'],
+              'Kongo-Central': ['Matadi','Boma','Muanda'], 'Kwango': ['Kenge'], 'Kwilu': ['Bandundu','Kikwit'],
+              'Lomami': ['Kabinda'], 'Lualaba': ['Kolwezi'], 'Mai-Ndombe': ['Inongo'], 'Maniema': ['Kindu'],
+              'Mongala': ['Lisala'], 'Nord-Kivu': ['Goma','Beni','Butembo'], 'Nord-Ubangi': ['Gbadolite'],
+              'Sankuru': ['Lusambo'], 'Sud-Kivu': ['Bukavu','Uvira','Baraka'], 'Sud-Ubangi': ['Gemena','Zongo'],
+              'Tanganyika': ['Kalemie'], 'Tshopo': ['Kisangani'], 'Tshuapa': ['Boende']
             },
             secteurs: {
               'Goma': ['Sector 1','Sector 2'],

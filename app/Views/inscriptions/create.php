@@ -2,6 +2,23 @@
 <?php
 $parents = $parents ?? [];
 $oldInput = $oldInput ?? [];
+$pageStyles = <<<STYLE
+<style>
+  .registration-card { width: 100%; }
+  .registration-card .form-control,
+  .registration-card .form-select { min-width: 0; }
+  .registration-card .form-actions { gap: .75rem; }
+  @media (max-width: 575.98px) {
+    .content-header h1 { font-size: 1.5rem; }
+    .content-header .breadcrumb { float: none !important; flex-wrap: wrap; margin-top: .75rem; }
+    .registration-card .card-body { padding: 1rem .75rem; }
+    .registration-card .form-actions { flex-direction: column-reverse; }
+    .registration-card .form-actions .btn { width: 100%; }
+    .registration-card .input-group { flex-wrap: nowrap; }
+    .registration-card .input-group .btn { white-space: nowrap; }
+  }
+</style>
+STYLE;
 ?>
       <section class="content-header">
         <div class="container-fluid">
@@ -45,12 +62,12 @@ $oldInput = $oldInput ?? [];
 
           <div class="row justify-content-center">
             <div class="col-lg-8">
-              <div class="card card-outline card-success">
+              <div class="card card-outline card-success registration-card">
                 <div class="card-header">
                   <h3 class="card-title">Formulaire d’inscription</h3>
                 </div>
                 <div class="card-body">
-                  <form id="registration-form" method="post" action="<?= BASE_URL ?>/inscriptions/submit" autocomplete="off" enctype="multipart/form-data">
+                  <form id="registration-form" method="post" action="<?= BASE_URL ?>/inscriptions/submit" autocomplete="off" novalidate enctype="multipart/form-data">
                     <?php if (!empty($selectedSection)): ?>
                       <div class="alert alert-info">
                         Section sélectionnée : <strong><?= htmlspecialchars($selectedSection['nom_section']) ?></strong>
@@ -66,11 +83,11 @@ $oldInput = $oldInput ?? [];
                     <div class="row">
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Nom</label>
-                        <input id="nom-input" type="text" name="nom" class="form-control" required maxlength="100" value="<?= htmlspecialchars($oldInput['nom'] ?? '') ?>">
+                        <input id="nom-input" type="text" name="nom" class="form-control" required minlength="2" maxlength="100" value="<?= htmlspecialchars($oldInput['nom'] ?? '') ?>">
                       </div>
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Postnom</label>
-                        <input id="postnom-input" type="text" name="postnom" class="form-control" required maxlength="100" value="<?= htmlspecialchars($oldInput['postnom'] ?? '') ?>">
+                        <input id="postnom-input" type="text" name="postnom" class="form-control" required minlength="2" maxlength="100" value="<?= htmlspecialchars($oldInput['postnom'] ?? '') ?>">
                       </div>
                     </div>
 
@@ -97,7 +114,7 @@ $oldInput = $oldInput ?? [];
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Matricule (optionnel)</label>
                         <div class="input-group">
-                          <input id="matricule-input" type="text" name="matricule" class="form-control" placeholder="Généré automatiquement si vide" value="<?= htmlspecialchars($oldInput['matricule'] ?? '') ?>">
+                          <input id="matricule-input" type="text" name="matricule" class="form-control" pattern="[A-Z]{4}[0-9]{5}" maxlength="9" placeholder="Généré automatiquement si vide" value="<?= htmlspecialchars($oldInput['matricule'] ?? '') ?>">
                           <button id="generate-matricule-btn" type="button" class="btn btn-outline-secondary">Aperçu</button>
                         </div>
                         <div id="matricule-preview" class="form-text text-muted mt-1">Aperçu du matricule généré disponible après saisie du nom et du postnom. Format attendu : 4 lettres majuscules suivies de 5 chiffres (ex. ABCD12345).</div>
@@ -238,7 +255,7 @@ $oldInput = $oldInput ?? [];
                       <input id="student-photo" type="file" name="photo" accept="image/png,image/jpeg" class="form-control">
                       <small class="form-text text-muted">Optionnel — téléversez une photo de l'élève.</small>
                     </div>
-                    <div class="d-flex justify-content-between">
+                    <div class="d-flex justify-content-between form-actions">
                       <a href="<?= BASE_URL ?>/inscriptions" class="btn btn-secondary">Retour aux dossiers</a>
                       <button id="registration-submit" type="submit" class="btn btn-success">Enregistrer</button>
                     </div>
@@ -283,6 +300,14 @@ $oldInput = $oldInput ?? [];
 
           if (registrationForm) {
             registrationForm.addEventListener('submit', function (event) {
+              registrationForm.classList.add('was-validated');
+              if (!registrationForm.checkValidity()) {
+                event.preventDefault();
+                const firstInvalid = registrationForm.querySelector(':invalid');
+                if (firstInvalid) firstInvalid.focus();
+                return;
+              }
+
               const photo = document.getElementById('student-photo');
               if (photo && photo.files.length > 0) {
                 const file = photo.files[0];
@@ -352,13 +377,17 @@ $oldInput = $oldInput ?? [];
           }
 
           const LOCAL_LOCATIONS = {
-            provinces: ['Kinshasa','Nord-Kivu','Sud-Kivu','Haut-Katanga','Kongo Central','Équateur','Maniema','Ituri'],
+            provinces: ['Bas-Uele','Équateur','Haut-Katanga','Haut-Lomami','Haut-Uele','Ituri','Kasaï','Kasaï-Central','Kasaï-Oriental','Kinshasa','Kongo-Central','Kwango','Kwilu','Lomami','Lualaba','Mai-Ndombe','Maniema','Mongala','Nord-Kivu','Nord-Ubangi','Sankuru','Sud-Kivu','Sud-Ubangi','Tanganyika','Tshopo','Tshuapa'],
             territoires: {
-              'Kinshasa': ['Funa','Kalamu','Kasa-Vubu','Lingwala'],
-              'Nord-Kivu': ['Goma','Beni','Masisi','Rutshuru'],
-              'Sud-Kivu': ['Uvira','Bukavu','Fizi'],
-              'Haut-Katanga': ['Lubumbashi','Kambove','Likasi'],
-              'Kongo Central': ['Matadi','Boma','Kimpese']
+              'Bas-Uele': ['Buta'], 'Équateur': ['Mbandaka'],
+              'Haut-Katanga': ['Lubumbashi','Likasi','Kasumbalesa'], 'Haut-Lomami': ['Kamina'],
+              'Haut-Uele': ['Isiro'], 'Ituri': ['Bunia'], 'Kasaï': ['Tshikapa'],
+              'Kasaï-Central': ['Kananga'], 'Kasaï-Oriental': ['Mbuji-Mayi'], 'Kinshasa': ['Kinshasa'],
+              'Kongo-Central': ['Matadi','Boma','Muanda'], 'Kwango': ['Kenge'], 'Kwilu': ['Bandundu','Kikwit'],
+              'Lomami': ['Kabinda'], 'Lualaba': ['Kolwezi'], 'Mai-Ndombe': ['Inongo'], 'Maniema': ['Kindu'],
+              'Mongala': ['Lisala'], 'Nord-Kivu': ['Goma','Beni','Butembo'], 'Nord-Ubangi': ['Gbadolite'],
+              'Sankuru': ['Lusambo'], 'Sud-Kivu': ['Bukavu','Uvira','Baraka'], 'Sud-Ubangi': ['Gemena','Zongo'],
+              'Tanganyika': ['Kalemie'], 'Tshopo': ['Kisangani'], 'Tshuapa': ['Boende']
             },
             secteurs: {
               'Goma': ['Sector 1','Sector 2'],
