@@ -1,7 +1,29 @@
 <?php require __DIR__ . '/../partials/app_header.php'; ?>
 <?php
+$filters = $filters ?? [];
+$classes = $classes ?? [];
+$debts = $debts ?? [];
+$summary = $summary ?? [];
+$feeColumns = $feeColumns ?? [];
 $formatAmount = static fn ($amount) => number_format((float) $amount, 2, ',', ' ');
 $currencies = array_unique(array_merge(array_keys($summary['initial'] ?? []), array_keys($summary['remaining'] ?? [])));
+$exportColumns = [
+  'classe' => 'Classe', 'eleve' => 'Élève', 'matricule' => 'Matricule',
+  'frais' => 'Frais', 'initial' => 'Montant initial',
+  'paye' => 'Montant déjà payé', 'restant' => 'Dette restante',
+];
+$exportQuery = static function (string $format, array $columns) use ($filters): string {
+   $query = array_filter([
+     'format' => $format,
+     'q' => $filters['q'] ?? '',
+     'classe' => $filters['classe'] ?? '',
+     'devise' => $filters['devise'] ?? '',
+     'montant_min' => $filters['montant_min'] ?? '',
+     'montant_max' => $filters['montant_max'] ?? '',
+     'colonnes' => implode(',', $columns),
+   ], static fn ($value) => $value !== '' && $value !== null);
+   return BASE_URL . '/recouvrements/export?' . http_build_query($query);
+};
 ?>
 <section class="content-header">
   <div class="container-fluid">
@@ -10,9 +32,12 @@ $currencies = array_unique(array_merge(array_keys($summary['initial'] ?? []), ar
         <h1 class="mb-1">Recouvrements</h1>
         <p class="text-muted mb-0">Suivi des élèves ayant encore une dette à régler.</p>
       </div>
-      <a class="btn btn-primary" href="<?= BASE_URL ?>/paiements">
-        <i class="bi bi-wallet2 me-1"></i>Enregistrer un paiement
-      </a>
+      <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-primary" href="<?= BASE_URL ?>/paiements"><i class="bi bi-wallet2 me-1"></i>Enregistrer un paiement</a>
+        <a id="exportPdf" class="btn btn-outline-danger" href="<?= $exportQuery('pdf', array_keys($exportColumns)) ?>"><i class="bi bi-file-earmark-pdf me-1"></i>PDF</a>
+        <a id="exportExcel" class="btn btn-outline-success" href="<?= $exportQuery('excel', array_keys($exportColumns)) ?>"><i class="bi bi-file-earmark-spreadsheet me-1"></i>Excel</a>
+        <a id="exportCsv" class="btn btn-outline-secondary" href="<?= $exportQuery('csv', array_keys($exportColumns)) ?>"><i class="bi bi-filetype-csv me-1"></i>CSV</a>
+      </div>
     </div>
   </div>
 </section>
@@ -49,10 +74,19 @@ $currencies = array_unique(array_merge(array_keys($summary['initial'] ?? []), ar
     <div class="card card-outline card-primary">
       <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <h3 class="card-title mb-0">Dossiers à recouvrer</h3>
-        <div class="input-group" style="max-width: 360px;">
-          <span class="input-group-text"><i class="bi bi-search"></i></span>
-          <input id="recouvrementSearch" type="search" class="form-control" placeholder="Rechercher un élève ou des frais..." aria-label="Rechercher">
-        </div>
+        <form method="get" action="<?= BASE_URL ?>/recouvrements" class="row g-2 align-items-end w-100">
+          <div class="col-12 col-md-3"><label class="form-label small mb-1">Recherche</label><input name="q" value="<?= htmlspecialchars($filters['q'] ?? '') ?>" type="search" class="form-control" placeholder="Élève, matricule, frais"></div>
+          <div class="col-12 col-md-2"><label class="form-label small mb-1">Classe</label><select name="classe" class="form-select"><option value="">Toutes</option><?php foreach (($classes ?? []) as $class): ?><option value="<?= htmlspecialchars($class['nom_classe']) ?>" <?= ($filters['classe'] ?? '') === $class['nom_classe'] ? 'selected' : '' ?>><?= htmlspecialchars($class['nom_classe']) ?></option><?php endforeach; ?></select></div>
+          <div class="col-6 col-md-2"><label class="form-label small mb-1">Devise</label><input name="devise" value="<?= htmlspecialchars($filters['devise'] ?? '') ?>" class="form-control" placeholder="USD"></div>
+          <div class="col-6 col-md-2"><label class="form-label small mb-1">Dette min.</label><input name="montant_min" value="<?= htmlspecialchars((string) ($filters['montant_min'] ?? '')) ?>" type="number" min="0" step="0.01" class="form-control"></div>
+          <div class="col-6 col-md-2"><label class="form-label small mb-1">Dette max.</label><input name="montant_max" value="<?= htmlspecialchars((string) ($filters['montant_max'] ?? '')) ?>" type="number" min="0" step="0.01" class="form-control"></div>
+          <div class="col-6 col-md-1"><button class="btn btn-primary w-100" type="submit" title="Filtrer"><i class="bi bi-funnel"></i></button></div>
+        </form>
+        <details class="w-100"><summary class="btn btn-sm btn-outline-secondary">Personnaliser la mise en page</summary>
+          <div class="border rounded p-2 mt-2"><div class="row g-2">
+            <?php foreach ($exportColumns as $key => $label): ?><div class="col-6 col-md-3"><label class="form-check"><input class="form-check-input layout-column" type="checkbox" value="<?= $key ?>" checked><span class="form-check-label"><?= htmlspecialchars($label) ?></span></label></div><?php endforeach; ?>
+          </div><small class="text-muted">Les colonnes sélectionnées seront utilisées pour les exports.</small></div>
+        </details>
       </div>
       <div class="card-body p-0">
         <?php if (empty($debts)): ?>
@@ -66,8 +100,9 @@ $currencies = array_unique(array_merge(array_keys($summary['initial'] ?? []), ar
               <thead class="table-light">
                 <tr>
                   <th>Élève</th>
-                  <th>Frais</th>
-                  <th>Année scolaire</th>
+                  <?php foreach ($feeColumns as $feeColumn): ?>
+                    <th class="text-end">Payé - <?= htmlspecialchars($feeColumn) ?></th>
+                  <?php endforeach; ?>
                   <th class="text-end">Montant initial</th>
                   <th class="text-end">Déjà payé</th>
                   <th class="text-end">Dette restante</th>
@@ -78,36 +113,45 @@ $currencies = array_unique(array_merge(array_keys($summary['initial'] ?? []), ar
                 <?php $currentClass = null; ?>
                 <?php foreach ($debts as $debt): ?>
                   <?php
-                    $initial = (float) ($debt['montant_initial'] ?? 0);
-                    $remaining = (float) ($debt['montant_restant'] ?? 0);
-                    $paid = max(0, $initial - $remaining);
-                    $progress = $initial > 0 ? min(100, max(0, ($paid / $initial) * 100)) : 0;
+                    $initialTotal = array_sum($debt['initial_by_currency'] ?? []);
+                    $remainingTotal = array_sum($debt['remaining_by_currency'] ?? []);
+                    $paidTotal = array_sum($debt['paid_by_currency'] ?? []);
+                    $progress = $initialTotal > 0 ? min(100, max(0, ($paidTotal / $initialTotal) * 100)) : 0;
                     $name = trim(($debt['nom'] ?? '') . ' ' . ($debt['postnom'] ?? '') . ' ' . ($debt['prenom'] ?? ''));
                     $studentClass = trim((string) ($debt['nom_classe'] ?? 'Classe non définie')) ?: 'Classe non définie';
+                    $formatAmounts = static function (array $amounts) use ($formatAmount): string {
+                      $values = [];
+                      foreach ($amounts as $currency => $amount) $values[] = $formatAmount($amount) . ' ' . $currency;
+                      return implode('<br>', $values);
+                    };
                   ?>
                   <?php if ($currentClass !== $studentClass): ?>
                     <?php $currentClass = $studentClass; ?>
                     <tr class="table-primary">
-                      <td colspan="7" class="fw-semibold">
+                      <td colspan="<?= 5 + count($feeColumns) ?>" class="fw-semibold">
                         <i class="bi bi-mortarboard me-1"></i><?= htmlspecialchars($studentClass) ?>
                       </td>
                     </tr>
                   <?php endif; ?>
-                  <tr data-search="<?= htmlspecialchars(strtolower($studentClass . ' ' . $name . ' ' . ($debt['matricule'] ?? '') . ' ' . ($debt['type_frais'] ?? '')), ENT_QUOTES, 'UTF-8') ?>">
+                  <tr data-search="<?= htmlspecialchars(strtolower($studentClass . ' ' . $name . ' ' . ($debt['matricule'] ?? '') . ' ' . ($debt['frais_liste'] ?? '')), ENT_QUOTES, 'UTF-8') ?>">
                     <td>
                       <div class="fw-semibold"><?= htmlspecialchars($name) ?></div>
                       <small class="text-muted"><?= htmlspecialchars($debt['matricule'] ?? 'Sans matricule') ?></small>
                     </td>
-                    <td><?= htmlspecialchars($debt['type_frais'] ?? 'Frais scolaire') ?></td>
-                    <td><?= htmlspecialchars($debt['annee_scolaire'] ?? 'Non précisée') ?></td>
-                    <td class="text-end"><?= $formatAmount($initial) ?> <?= htmlspecialchars($debt['devise'] ?? 'USD') ?></td>
+                    <?php foreach ($feeColumns as $feeColumn): ?>
+                      <?php $feePaid = $debt['frais_details'][$feeColumn]['paid_by_currency'] ?? []; ?>
+                      <td class="text-end">
+                        <?= $feePaid ? $formatAmounts($feePaid) : '<span class="text-muted">-</span>' ?>
+                      </td>
+                    <?php endforeach; ?>
+                    <td class="text-end"><?= $formatAmounts($debt['initial_by_currency'] ?? []) ?></td>
                     <td class="text-end">
-                      <?= $formatAmount($paid) ?> <?= htmlspecialchars($debt['devise'] ?? 'USD') ?>
+                      <?= $formatAmounts($debt['paid_by_currency'] ?? []) ?>
                       <div class="progress mt-1" style="height: 5px;" title="<?= round($progress) ?> % payé">
                         <div class="progress-bar bg-success" style="width: <?= $progress ?>%"></div>
                       </div>
                     </td>
-                    <td class="text-end fw-semibold text-danger"><?= $formatAmount($remaining) ?> <?= htmlspecialchars($debt['devise'] ?? 'USD') ?></td>
+                    <td class="text-end fw-semibold text-danger"><?= $formatAmounts($debt['remaining_by_currency'] ?? []) ?></td>
                     <td class="text-end">
                       <a class="btn btn-sm btn-outline-primary" href="<?= BASE_URL ?>/paiements?eleve_id=<?= (int) $debt['eleve_id'] ?>" title="Voir les paiements">
                         <i class="bi bi-eye"></i><span class="visually-hidden">Voir les paiements</span>
@@ -138,22 +182,31 @@ $currencies = array_unique(array_merge(array_keys($summary['initial'] ?? []), ar
   </div>
 </section>
 
+<div class="container-fluid text-end text-muted small mt-3 mb-2">
+  Liste générée le <?= date('d/m/Y à H:i') ?>
+</div>
+
 <script>
   (() => {
-    const input = document.getElementById('recouvrementSearch');
-    const table = document.getElementById('recouvrementsTable');
-    const empty = document.getElementById('recouvrementEmptySearch');
-    if (!input || !table) return;
-    input.addEventListener('input', () => {
-      const query = input.value.trim().toLowerCase();
-      let visible = 0;
-      table.querySelectorAll('tbody tr').forEach((row) => {
-        const match = !query || (row.dataset.search || '').includes(query);
-        row.classList.toggle('d-none', !match);
-        if (match) visible++;
+    const columnChecks = [...document.querySelectorAll('.layout-column')];
+    const exportLinks = {
+      pdf: document.getElementById('exportPdf'),
+      excel: document.getElementById('exportExcel'),
+      csv: document.getElementById('exportCsv')
+    };
+    const baseUrls = Object.fromEntries(Object.entries(exportLinks).map(([format, link]) => [format, link ? link.href : '']));
+    const updateExports = () => {
+      const selected = columnChecks.filter((check) => check.checked).map((check) => check.value);
+      const columns = selected.length ? selected : columnChecks.map((check) => check.value);
+      Object.entries(exportLinks).forEach(([format, link]) => {
+        if (!link) return;
+        const url = new URL(baseUrls[format], window.location.origin);
+        url.searchParams.set('colonnes', columns.join(','));
+        link.href = url.toString();
       });
-      if (empty) empty.classList.toggle('d-none', visible !== 0);
-    });
+    };
+    columnChecks.forEach((check) => check.addEventListener('change', updateExports));
+    updateExports();
   })();
 </script>
 <?php require __DIR__ . '/../partials/app_footer.php'; ?>

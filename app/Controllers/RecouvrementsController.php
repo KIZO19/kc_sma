@@ -18,8 +18,9 @@ class RecouvrementsController extends Controller
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
         $filters = $this->getFilters();
-        $debts = $this->fetchOutstandingDebts($user, $filters);
+        $debts = $this->aggregateByStudent($this->fetchOutstandingDebts($user, $filters));
         $summary = $this->buildSummary($debts);
+        $feeColumns = $this->getFeeColumns($debts);
 
         $this->view('recouvrements/index', [
             'title' => APP_NAME . ' - Recouvrements',
@@ -29,6 +30,7 @@ class RecouvrementsController extends Controller
             'modules' => $modules,
             'debts' => $debts,
             'summary' => $summary,
+            'feeColumns' => $feeColumns,
             'filters' => $filters,
             'classes' => $this->fetchClasses($user),
         ]);
@@ -41,7 +43,7 @@ class RecouvrementsController extends Controller
 
         $user = Auth::refresh() ?: Auth::user();
         $filters = $this->getFilters();
-        $debts = $this->fetchOutstandingDebts($user, $filters);
+        $debts = $this->aggregateByStudent($this->fetchOutstandingDebts($user, $filters));
         $format = strtolower(trim((string) ($_GET['format'] ?? 'csv')));
         $columns = $this->getExportColumns();
 
@@ -64,11 +66,13 @@ class RecouvrementsController extends Controller
                 'debts' => $debts,
                 'columns' => $columns,
                 'title' => 'Liste des recouvrements',
+                'generatedAt' => date('d/m/Y à H:i'),
             ]);
             if (class_exists('\\Dompdf\\Dompdf')) {
-                $dompdf = new \\Dompdf\\Dompdf();
+                $dompdfClass = '\\Dompdf\\Dompdf';
+                $dompdf = new $dompdfClass();
                 $dompdf->loadHtml($html);
-                $dompdf->setPaper('A4', 'landscape');
+                $dompdf->setPaper('A4', 'portrait');
                 $dompdf->render();
                 header('Content-Type: application/pdf');
                 header('Content-Disposition: attachment; filename="recouvrements_' . date('Ymd_His') . '.pdf"');
@@ -80,6 +84,7 @@ class RecouvrementsController extends Controller
                 'debts' => $debts,
                 'columns' => $columns,
                 'title' => 'Liste des recouvrements',
+                'generatedAt' => date('d/m/Y à H:i'),
                 'printFallback' => true,
             ]);
             return;
@@ -142,7 +147,7 @@ class RecouvrementsController extends Controller
         }
 
         if (!empty($filters['q'])) {
-            $sql .= ' AND CONCAT_WS(\' \", e.nom, e.postnom, e.prenom, e.matricule, fs.type_frais) LIKE :search';
+            $sql .= ' AND CONCAT_WS(\' \', e.nom, e.postnom, e.prenom, e.matricule, fs.type_frais) LIKE :search';
             $params[':search'] = '%' . $filters['q'] . '%';
         }
         if (!empty($filters['classe'])) {
@@ -171,7 +176,7 @@ class RecouvrementsController extends Controller
 
     private function getExportColumns(): array
     {
-        $allowed = ['classe', 'eleve', 'matricule', 'frais', 'annee', 'initial', 'paye', 'restant'];
+        $allowed = ['classe', 'eleve', 'matricule', 'frais', 'initial', 'paye', 'restant'];
         $requested = array_map('trim', explode(',', (string) ($_GET['colonnes'] ?? '')));
         $columns = array_values(array_intersect($allowed, $requested));
         return $columns ?: $allowed;
@@ -181,26 +186,99 @@ class RecouvrementsController extends Controller
     {
         return array_map(static fn (string $column): string => [
             'classe' => 'Classe', 'eleve' => 'Élève', 'matricule' => 'Matricule',
-            'frais' => 'Frais', 'annee' => 'Année scolaire', 'initial' => 'Montant initial',
+            'frais' => 'Frais', 'initial' => 'Montant initial',
             'paye' => 'Montant déjà payé', 'restant' => 'Dette restante',
         ][$column], $columns);
     }
 
     private function getExportRow(array $debt, array $columns): array
     {
-        $initial = (float) ($debt['montant_initial'] ?? 0);
-        $remaining = (float) ($debt['montant_restant'] ?? 0);
         $values = [
             'classe' => $debt['nom_classe'] ?? 'Classe non définie',
             'eleve' => trim(($debt['nom'] ?? '') . ' ' . ($debt['postnom'] ?? '') . ' ' . ($debt['prenom'] ?? '')),
             'matricule' => $debt['matricule'] ?? '',
-            'frais' => $debt['type_frais'] ?? '',
-            'annee' => $debt['annee_scolaire'] ?? '',
-            'initial' => number_format($initial, 2, '.', '') . ' ' . ($debt['devise'] ?? 'USD'),
-            'paye' => number_format(max(0, $initial - $remaining), 2, '.', '') . ' ' . ($debt['devise'] ?? 'USD'),
-            'restant' => number_format($remaining, 2, '.', '') . ' ' . ($debt['devise'] ?? 'USD'),
+            'frais' => $debt['frais_details_liste'] ?? ($debt['frais_liste'] ?? ''),
+            'initial' => $this->formatAmountsByCurrency($debt['initial_by_currency'] ?? []),
+            'paye' => $this->formatAmountsByCurrency($debt['paid_by_currency'] ?? []),
+            'restant' => $this->formatAmountsByCurrency($debt['remaining_by_currency'] ?? []),
         ];
         return array_map(static fn (string $column): string => $values[$column], $columns);
+    }
+
+    private function aggregateByStudent(array $debts): array
+    {
+        $grouped = [];
+        foreach ($debts as $debt) {
+            $studentId = (int) ($debt['eleve_id'] ?? 0);
+            $currency = strtoupper(trim((string) ($debt['devise'] ?? 'USD'))) ?: 'USD';
+            if (!isset($grouped[$studentId])) {
+                $grouped[$studentId] = [
+                    'eleve_id' => $studentId,
+                    'matricule' => $debt['matricule'] ?? '',
+                    'nom' => $debt['nom'] ?? '',
+                    'postnom' => $debt['postnom'] ?? '',
+                    'prenom' => $debt['prenom'] ?? '',
+                    'nom_classe' => $debt['nom_classe'] ?? 'Classe non définie',
+                    'frais' => [],
+                    'frais_details' => [],
+                    'initial_by_currency' => [],
+                    'paid_by_currency' => [],
+                    'remaining_by_currency' => [],
+                ];
+            }
+
+            $initial = (float) ($debt['montant_initial'] ?? 0);
+            $remaining = (float) ($debt['montant_restant'] ?? 0);
+            $feeName = trim((string) ($debt['type_frais'] ?? 'Frais scolaire')) ?: 'Frais scolaire';
+            $grouped[$studentId]['frais'][] = $feeName;
+            if (!isset($grouped[$studentId]['frais_details'][$feeName])) {
+                $grouped[$studentId]['frais_details'][$feeName] = [
+                    'initial_by_currency' => [],
+                    'paid_by_currency' => [],
+                    'remaining_by_currency' => [],
+                ];
+            }
+            $grouped[$studentId]['frais_details'][$feeName]['initial_by_currency'][$currency] = ($grouped[$studentId]['frais_details'][$feeName]['initial_by_currency'][$currency] ?? 0) + $initial;
+            $grouped[$studentId]['frais_details'][$feeName]['paid_by_currency'][$currency] = ($grouped[$studentId]['frais_details'][$feeName]['paid_by_currency'][$currency] ?? 0) + max(0, $initial - $remaining);
+            $grouped[$studentId]['frais_details'][$feeName]['remaining_by_currency'][$currency] = ($grouped[$studentId]['frais_details'][$feeName]['remaining_by_currency'][$currency] ?? 0) + $remaining;
+            $grouped[$studentId]['initial_by_currency'][$currency] = ($grouped[$studentId]['initial_by_currency'][$currency] ?? 0) + $initial;
+            $grouped[$studentId]['paid_by_currency'][$currency] = ($grouped[$studentId]['paid_by_currency'][$currency] ?? 0) + max(0, $initial - $remaining);
+            $grouped[$studentId]['remaining_by_currency'][$currency] = ($grouped[$studentId]['remaining_by_currency'][$currency] ?? 0) + $remaining;
+        }
+
+        foreach ($grouped as &$student) {
+            $student['frais'] = array_values(array_unique(array_filter($student['frais'])));
+            $student['frais_liste'] = implode(', ', $student['frais']);
+            $details = [];
+            foreach ($student['frais_details'] as $feeName => $feeAmounts) {
+                $details[] = $feeName . ': payé ' . $this->formatAmountsByCurrency($feeAmounts['paid_by_currency'])
+                    . ', reste ' . $this->formatAmountsByCurrency($feeAmounts['remaining_by_currency']);
+            }
+            $student['frais_details_liste'] = implode(' | ', $details);
+        }
+        unset($student);
+
+        return array_values($grouped);
+    }
+
+    private function getFeeColumns(array $debts): array
+    {
+        $fees = [];
+        foreach ($debts as $debt) {
+            foreach (array_keys($debt['frais_details'] ?? []) as $feeName) {
+                $fees[$feeName] = true;
+            }
+        }
+        return array_keys($fees);
+    }
+
+    private function formatAmountsByCurrency(array $amounts): string
+    {
+        $formatted = [];
+        foreach ($amounts as $currency => $amount) {
+            $formatted[] = number_format((float) $amount, 2, '.', '') . ' ' . $currency;
+        }
+        return implode(' | ', $formatted);
     }
 
     private function buildSummary(array $debts): array
@@ -213,13 +291,24 @@ class RecouvrementsController extends Controller
         ];
 
         foreach ($debts as $debt) {
-            $currency = strtoupper(trim((string) ($debt['devise'] ?? 'USD'))) ?: 'USD';
             $summary['students'][(int) $debt['eleve_id']] = true;
-            $summary['initial'][$currency] = ($summary['initial'][$currency] ?? 0) + (float) $debt['montant_initial'];
-            $summary['remaining'][$currency] = ($summary['remaining'][$currency] ?? 0) + (float) $debt['montant_restant'];
+            foreach (($debt['initial_by_currency'] ?? []) as $currency => $amount) {
+                $summary['initial'][$currency] = ($summary['initial'][$currency] ?? 0) + (float) $amount;
+            }
+            foreach (($debt['remaining_by_currency'] ?? []) as $currency => $amount) {
+                $summary['remaining'][$currency] = ($summary['remaining'][$currency] ?? 0) + (float) $amount;
+            }
         }
 
         $summary['students'] = count($summary['students']);
         return $summary;
+    }
+
+    private function renderViewToString(string $view, array $data = []): string
+    {
+        extract($data);
+        ob_start();
+        require dirname(__DIR__) . '/Views/' . $view . '.php';
+        return (string) ob_get_clean();
     }
 }
