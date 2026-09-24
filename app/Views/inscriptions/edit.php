@@ -101,7 +101,7 @@ $selectedOptionId = (int) ($oldInput['option_id'] ?? ($currentInscription['optio
                     <div class="row">
                       <div class="col-md-4 mb-3">
                         <label class="form-label">Section <span class="text-danger">*</span></label>
-                        <select name="section_id" class="form-select" required>
+                        <select id="edit-section-select" name="section_id" class="form-select" required>
                           <option value="">Sélectionnez une section</option>
                           <?php foreach ($sections as $section): ?>
                             <option value="<?= (int) $section['id'] ?>" <?= $selectedSectionId === (int) $section['id'] ? 'selected' : '' ?>><?= htmlspecialchars($section['nom_section']) ?></option>
@@ -110,19 +110,19 @@ $selectedOptionId = (int) ($oldInput['option_id'] ?? ($currentInscription['optio
                       </div>
                       <div class="col-md-4 mb-3">
                         <label class="form-label">Option <span class="text-danger">*</span></label>
-                        <select name="option_id" class="form-select" required>
+                        <select id="edit-option-select" name="option_id" class="form-select" required>
                           <option value="">Sélectionnez une option</option>
                           <?php foreach ($options as $option): ?>
-                            <option value="<?= (int) $option['id'] ?>" <?= $selectedOptionId === (int) $option['id'] ? 'selected' : '' ?>><?= htmlspecialchars($option['nom_option']) ?></option>
+                            <option value="<?= (int) $option['id'] ?>" data-section-id="<?= (int) ($option['section_id'] ?? 0) ?>" <?= $selectedOptionId === (int) $option['id'] ? 'selected' : '' ?>><?= htmlspecialchars($option['nom_option']) ?></option>
                           <?php endforeach; ?>
                         </select>
                       </div>
                       <div class="col-md-4 mb-3">
                         <label class="form-label">Classe <span class="text-danger">*</span></label>
-                        <select name="classe_id" class="form-select" required>
+                        <select id="edit-classe-select" name="classe_id" class="form-select" required>
                           <option value="">Sélectionnez une classe</option>
                           <?php foreach ($classes as $classe): ?>
-                            <option value="<?= (int) $classe['id'] ?>" <?= $selectedClasseId === (int) $classe['id'] ? 'selected' : '' ?>>
+                            <option value="<?= (int) $classe['id'] ?>" data-section-id="<?= (int) ($classe['section_id'] ?? 0) ?>" data-option-id="<?= (int) ($classe['option_id'] ?? 0) ?>" <?= $selectedClasseId === (int) $classe['id'] ? 'selected' : '' ?>>
                               <?= htmlspecialchars($classe['nom_classe']) ?>
                               <?php if (!empty($classe['nom_section'])): ?> - <?= htmlspecialchars($classe['nom_section']) ?><?php endif; ?>
                               <?php if (!empty($classe['nom_option'])): ?> (<?= htmlspecialchars($classe['nom_option']) ?>)<?php endif; ?>
@@ -221,6 +221,69 @@ $selectedOptionId = (int) ($oldInput['option_id'] ?? ($currentInscription['optio
           </div>
         </div>
       </section>
+      <script>
+        document.addEventListener('DOMContentLoaded', function () {
+          const sectionSelect = document.getElementById('edit-section-select');
+          const optionSelect = document.getElementById('edit-option-select');
+          const classSelect = document.getElementById('edit-classe-select');
+          if (!sectionSelect || !optionSelect || !classSelect) return;
+
+          const classOptions = Array.from(classSelect.options).slice(1).map((option) => ({
+            value: option.value,
+            label: option.textContent,
+            sectionId: option.dataset.sectionId,
+            optionId: option.dataset.optionId
+          }));
+          const academicOptions = Array.from(optionSelect.options).slice(1).map((option) => ({
+            value: option.value,
+            label: option.textContent,
+            sectionId: option.dataset.sectionId
+          }));
+
+          function filterOptions() {
+            const sectionId = sectionSelect.value;
+            const currentValue = optionSelect.value;
+            optionSelect.innerHTML = '<option value="">Sélectionnez une option</option>';
+            academicOptions
+              .filter((item) => !sectionId || item.sectionId === sectionId)
+              .forEach((item) => {
+                const option = document.createElement('option');
+                option.value = item.value;
+                option.textContent = item.label;
+                optionSelect.appendChild(option);
+              });
+            if (academicOptions.some((item) => item.value === currentValue && (!sectionId || item.sectionId === sectionId))) {
+              optionSelect.value = currentValue;
+            }
+          }
+
+          function filterClasses() {
+            const sectionId = sectionSelect.value;
+            const optionId = optionSelect.value;
+            const currentValue = classSelect.value;
+            classSelect.innerHTML = '<option value="">Sélectionnez une classe</option>';
+            classOptions
+              .filter((item) => {
+                if (!sectionId || !optionId) return true;
+                return item.sectionId === sectionId && item.optionId === optionId;
+              })
+              .forEach((item) => {
+                const option = document.createElement('option');
+                option.value = item.value;
+                option.textContent = item.label;
+                classSelect.appendChild(option);
+              });
+            if (classOptions.some((item) => item.value === currentValue && (!sectionId || !optionId || (item.sectionId === sectionId && item.optionId === optionId)))) {
+              classSelect.value = currentValue;
+            }
+          }
+
+          sectionSelect.addEventListener('change', function () { filterOptions(); filterClasses(); });
+          optionSelect.addEventListener('change', filterClasses);
+          filterOptions();
+          filterClasses();
+        });
+      </script>
       <script>
         (function () {
           const baseUrl = '<?= BASE_URL ?>';

@@ -10,7 +10,7 @@ class Option
     public static function getAll(): array
     {
         $db = Database::getConnection();
-        $stmt = $db->prepare('SELECT id, nom_option FROM options ORDER BY nom_option ASC');
+        $stmt = $db->prepare('SELECT id, nom_option, section_id FROM options ORDER BY nom_option ASC');
         $stmt->execute();
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }

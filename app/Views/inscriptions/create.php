@@ -115,7 +115,7 @@ STYLE;
                       <div class="row">
                         <div class="col-md-6 mb-3">
                           <label class="form-label">Section <span class="text-danger">*</span></label>
-                          <select name="section_id" class="form-select" required>
+                          <select id="registration-section-select" name="section_id" class="form-select" required>
                             <option value="">Sélectionnez une section</option>
                             <?php foreach ($sections as $section): ?>
                               <?php $sectionValue = (int) ($oldInput['section_id'] ?? ($selectedSection['id'] ?? 0)); ?>
@@ -125,21 +125,21 @@ STYLE;
                         </div>
                         <div class="col-md-6 mb-3">
                           <label class="form-label">Option <span class="text-danger">*</span></label>
-                          <select name="option_id" class="form-select" required>
+                          <select id="registration-option-select" name="option_id" class="form-select" required>
                             <option value="">Sélectionnez une option</option>
                             <?php foreach ($options as $option): ?>
                               <?php $optionValue = (int) ($oldInput['option_id'] ?? ($selectedOption['id'] ?? 0)); ?>
-                              <option value="<?= (int) $option['id'] ?>" <?= $optionValue === (int) $option['id'] ? 'selected' : '' ?>><?= htmlspecialchars($option['nom_option']) ?></option>
+                              <option value="<?= (int) $option['id'] ?>" data-section-id="<?= (int) ($option['section_id'] ?? 0) ?>" <?= $optionValue === (int) $option['id'] ? 'selected' : '' ?>><?= htmlspecialchars($option['nom_option']) ?></option>
                             <?php endforeach; ?>
                           </select>
                         </div>
                       </div>
                       <label class="form-label">Classe</label>
-                      <select name="classe_id" class="form-select" required <?= empty($classes) ? 'disabled' : '' ?>>
+                      <select id="registration-classe-select" name="classe_id" class="form-select" required <?= empty($classes) ? 'disabled' : '' ?>>
                         <option value="">Sélectionnez une classe</option>
                         <?php if (!empty($classes)): ?>
                           <?php foreach ($classes as $classe): ?>
-                            <option value="<?= (int) $classe['id'] ?>" <?= ((int) ($oldInput['classe_id'] ?? 0) === (int) $classe['id']) ? 'selected' : '' ?>>
+                            <option value="<?= (int) $classe['id'] ?>" data-section-id="<?= (int) ($classe['section_id'] ?? 0) ?>" data-option-id="<?= (int) ($classe['option_id'] ?? 0) ?>" <?= ((int) ($oldInput['classe_id'] ?? 0) === (int) $classe['id']) ? 'selected' : '' ?>>
                               <?= htmlspecialchars($classe['nom_classe']) ?>
                               <?php if (!empty($classe['nom_section'])): ?>
                                 - <?= htmlspecialchars($classe['nom_section']) ?>
@@ -278,6 +278,64 @@ STYLE;
           </div>
         </div>
       </section>
+      <script>
+        document.addEventListener('DOMContentLoaded', function () {
+          const sectionSelect = document.getElementById('registration-section-select');
+          const optionSelect = document.getElementById('registration-option-select');
+          const classSelect = document.getElementById('registration-classe-select');
+          if (!sectionSelect || !optionSelect || !classSelect) return;
+
+          const options = Array.from(optionSelect.options).slice(1).map((item) => ({
+            value: item.value,
+            label: item.textContent,
+            sectionId: item.dataset.sectionId
+          }));
+          const classes = Array.from(classSelect.options).slice(1).map((item) => ({
+            value: item.value,
+            label: item.textContent,
+            sectionId: item.dataset.sectionId,
+            optionId: item.dataset.optionId
+          }));
+
+          function refreshOptions() {
+            const sectionId = sectionSelect.value;
+            const currentValue = optionSelect.value;
+            optionSelect.innerHTML = '<option value="">Sélectionnez une option</option>';
+            options.filter((item) => !sectionId || item.sectionId === sectionId).forEach((item) => {
+              const option = document.createElement('option');
+              option.value = item.value;
+              option.textContent = item.label;
+              optionSelect.appendChild(option);
+            });
+            if (options.some((item) => item.value === currentValue && (!sectionId || item.sectionId === sectionId))) {
+              optionSelect.value = currentValue;
+            }
+          }
+
+          function refreshClasses() {
+            const sectionId = sectionSelect.value;
+            const optionId = optionSelect.value;
+            const currentValue = classSelect.value;
+            classSelect.innerHTML = '<option value="">Sélectionnez une classe</option>';
+            classes.filter((item) => {
+              if (!sectionId) return true;
+              if (!optionId) return item.sectionId === sectionId;
+              return item.sectionId === sectionId && item.optionId === optionId;
+            }).forEach((item) => {
+              const option = document.createElement('option');
+              option.value = item.value;
+              option.textContent = item.label;
+              classSelect.appendChild(option);
+            });
+            if (classes.some((item) => item.value === currentValue)) classSelect.value = currentValue;
+          }
+
+          sectionSelect.addEventListener('change', function () { refreshOptions(); refreshClasses(); });
+          optionSelect.addEventListener('change', refreshClasses);
+          refreshOptions();
+          refreshClasses();
+        });
+      </script>
       <script>
         document.addEventListener('DOMContentLoaded', function () {
           const registrationForm = document.getElementById('registration-form');
