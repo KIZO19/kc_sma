@@ -15,6 +15,20 @@ class Section
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public static function getAllForSchool(int $ecoleId): array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            'SELECT DISTINCT s.id, s.nom_section
+             FROM sections s
+             INNER JOIN classes c ON c.section_id = s.id
+             WHERE c.ecole_id = :ecole_id
+             ORDER BY s.nom_section ASC'
+        );
+        $stmt->execute([':ecole_id' => $ecoleId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public static function findById(int $id): ?array
     {
         $db = Database::getConnection();

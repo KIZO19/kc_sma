@@ -119,10 +119,18 @@ class FraisScolaire
             . 'LEFT JOIN classes c ON c.id = f.classe_id '
             . 'LEFT JOIN annees_scolaires s ON s.id = f.annee_scolaire_id '
             . 'WHERE f.id = :id AND ('
-            . 'c.ecole_id = :ecole_id OR f.ecole_id = :ecole_id OR f.scope IN (\'option\', \'section\', \'school\')) '
+            . 'f.ecole_id = :fee_school OR c.ecole_id = :class_school OR '
+            . 'EXISTS (SELECT 1 FROM classes sc WHERE sc.ecole_id = :option_school AND sc.option_id = f.scope_id AND f.scope = \'option\') OR '
+            . 'EXISTS (SELECT 1 FROM classes ss WHERE ss.ecole_id = :section_school AND ss.section_id = f.scope_id AND f.scope = \'section\')) '
             . 'LIMIT 1'
         );
-        $stmt->execute([':id' => $id, ':ecole_id' => $ecoleId]);
+        $stmt->execute([
+            ':id' => $id,
+            ':fee_school' => $ecoleId,
+            ':class_school' => $ecoleId,
+            ':option_school' => $ecoleId,
+            ':section_school' => $ecoleId,
+        ]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
     }

@@ -14,7 +14,7 @@
               <div class="row mb-2">
                 <div class="col-sm-6">
                   <h1>Nouveau frais</h1>
-                  <p class="text-muted">Créez un nouveau frais scolaire pour une classe et une année.</p>
+                  <p class="text-muted">Définissez le montant, l’année scolaire et les élèves concernés.</p>
                 </div>
                 <div class="col-sm-6">
                   <ol class="breadcrumb float-sm-end">
@@ -77,7 +77,7 @@
                             <option value="class" <?= (($oldInput['scope'] ?? 'class') === 'class') ? 'selected' : '' ?>>Classe</option>
                             <option value="option" <?= (($oldInput['scope'] ?? '') === 'option') ? 'selected' : '' ?>>Option</option>
                             <option value="section" <?= (($oldInput['scope'] ?? '') === 'section') ? 'selected' : '' ?>>Section</option>
-                            <option value="school" <?= (($oldInput['scope'] ?? '') === 'school') ? 'selected' : '' ?>>Toutes les options</option>
+                            <option value="school" <?= (($oldInput['scope'] ?? '') === 'school') ? 'selected' : '' ?>>École entière</option>
                           </select>
                         </div>
 

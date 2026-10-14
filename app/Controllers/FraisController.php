@@ -59,8 +59,8 @@ class FraisController extends Controller
         $school = $ecoleId > 0 ? \App\Models\Ecole::findById($ecoleId) : null;
         $schoolCurrency = $school['devise_principale'] ?? 'USD';
         $currencyOptions = $this->getCurrencyOptions();
-        $options = $ecoleId > 0 ? Option::getAll() : [];
-        $sections = $ecoleId > 0 ? Section::getAll() : [];
+        $options = $ecoleId > 0 ? Option::getAllForSchool($ecoleId) : [];
+        $sections = $ecoleId > 0 ? Section::getAllForSchool($ecoleId) : [];
         $oldInput = $_SESSION['frais_old'] ?? [];
         unset($_SESSION['frais_old']);
 
@@ -351,6 +351,7 @@ class FraisController extends Controller
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
 
         $id = (int) ($_GET['id'] ?? 0);
         if ($id <= 0) {
@@ -358,7 +359,7 @@ class FraisController extends Controller
             return;
         }
 
-        $fee = FraisScolaire::findById($id);
+        $fee = FraisScolaire::findByIdAndSchool($id, $ecoleId);
         if (!$fee) {
             $this->redirect('/error/notFound');
             return;
@@ -390,7 +391,7 @@ class FraisController extends Controller
             return;
         }
 
-        $fee = FraisScolaire::findById($id);
+        $fee = FraisScolaire::findByIdAndSchool($id, $ecoleId);
         if (!$fee) {
             $this->redirect('/error/notFound');
             return;
@@ -398,8 +399,8 @@ class FraisController extends Controller
 
         $classes = $ecoleId > 0 ? Classe::getAllBySchool($ecoleId) : [];
         $years = $ecoleId > 0 ? AnneeScolaire::getAllBySchool($ecoleId) : [];
-        $options = $ecoleId > 0 ? Option::getAll() : [];
-        $sections = $ecoleId > 0 ? Section::getAll() : [];
+        $options = $ecoleId > 0 ? Option::getAllForSchool($ecoleId) : [];
+        $sections = $ecoleId > 0 ? Section::getAllForSchool($ecoleId) : [];
 
         $this->view('frais/edit', [
             'title' => APP_NAME . ' - Modifier frais',
