@@ -276,6 +276,13 @@ class DashboardController extends Controller
             if (!empty($sectionChart['datasets'])) {
                 return $sectionChart;
             }
+
+            return [
+                'title' => 'Flux financier par section',
+                'label' => 'Paiements',
+                'labels' => $sectionChart['labels'] ?? [],
+                'datasets' => [],
+            ];
         }
 
         $series = match ($role) {
@@ -315,10 +322,28 @@ class DashboardController extends Controller
         for ($i = 5; $i >= 0; $i--) {
             $months[] = date('Y-m-01 00:00:00', strtotime('-' . $i . ' months'));
         }
+        $monthNames = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+        $labels = [];
+        foreach ($months as $monthStart) {
+            $labels[] = $monthNames[(int) date('n', strtotime($monthStart)) - 1] . ' ' . date('y', strtotime($monthStart));
+        }
 
-        $sections = \App\Models\Section::getAll();
+        if ($schoolId > 0) {
+            $sectionStmt = Database::getConnection()->prepare(
+                'SELECT DISTINCT s.id, s.nom_section
+                 FROM sections s
+                 INNER JOIN classes c ON c.section_id = s.id
+                 WHERE c.ecole_id = :ecole
+                 ORDER BY s.id ASC'
+            );
+            $sectionStmt->bindValue(':ecole', $schoolId, PDO::PARAM_INT);
+            $sectionStmt->execute();
+            $sections = $sectionStmt->fetchAll(PDO::FETCH_ASSOC);
+        } else {
+            $sections = \App\Models\Section::getAll();
+        }
         if (empty($sections)) {
-            return ['title' => 'Flux financier', 'label' => 'Paiements par section', 'labels' => ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jui'], 'datasets' => []];
+            return ['title' => 'Flux financier', 'label' => 'Paiements par section', 'labels' => $labels, 'datasets' => []];
         }
 
         $palette = ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6f42c1', '#20c997', '#fd7e14'];
@@ -343,11 +368,6 @@ class DashboardController extends Controller
             ];
         }
 
-        $labels = [];
-        foreach ($months as $monthStart) {
-            $labels[] = date('M', strtotime($monthStart));
-        }
-
         return [
             'title' => 'Flux financier par section',
             'label' => 'Paiements',
@@ -370,7 +390,7 @@ class DashboardController extends Controller
                 WHERE ece.type_mouvement = :type
                   AND c.section_id = :section_id
                   AND ece.date_operation BETWEEN :from AND :to
-                  AND (el.ecole_id = :ecole OR c.ecole_id = :ecole)
+                  AND (el.ecole_id = :ecole_eleve OR c.ecole_id = :ecole_classe)
             ) AS m';
 
             $stmt = $db->prepare($sql);
@@ -378,12 +398,14 @@ class DashboardController extends Controller
             $stmt->bindValue(':section_id', $sectionId, PDO::PARAM_INT);
             $stmt->bindValue(':from', $from, PDO::PARAM_STR);
             $stmt->bindValue(':to', $to, PDO::PARAM_STR);
-            $stmt->bindValue(':ecole', $schoolId, PDO::PARAM_INT);
+            $stmt->bindValue(':ecole_eleve', $schoolId, PDO::PARAM_INT);
+            $stmt->bindValue(':ecole_classe', $schoolId, PDO::PARAM_INT);
             $stmt->execute();
 
             return (float) ($stmt->fetchColumn() ?: 0);
         } catch (\Throwable $e) {
-            return 0.0;
+            error_log('DashboardController::sumPaymentsBySectionAndPeriod failed: ' . $e->getMessage());
+            throw $e;
         }
     }
 
