@@ -428,3 +428,20 @@ if (!empty($schoolContext['logo_url'])) {
     </aside>
 
     <div class="content-wrapper">
+      <?php if (!empty($planExpiryNotice)): ?>
+        <div class="container-fluid pt-3">
+          <div class="alert alert-warning alert-dismissible fade show mb-0" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2" aria-hidden="true"></i>
+            <strong>Votre abonnement arrive à expiration.</strong>
+            Le plan « <?= htmlspecialchars($planExpiryNotice['plan_name']) ?> »
+            <?php if ((int) $planExpiryNotice['days_remaining'] === 0): ?>
+              expire aujourd’hui
+            <?php else: ?>
+              expire dans <?= (int) $planExpiryNotice['days_remaining'] ?> jour(s)
+            <?php endif; ?>
+            (le <?= htmlspecialchars(formatDate($planExpiryNotice['date_fin'])) ?>).
+            Veuillez contacter le super-administrateur pour le renouveler.
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
+          </div>
+        </div>
+      <?php endif; ?>

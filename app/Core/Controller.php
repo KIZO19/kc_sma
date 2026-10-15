@@ -7,6 +7,26 @@ class Controller
     protected function view(string $view, array $data = []): void
     {
         $user = $data['user'] ?? null;
+        $expiryNoticeRoles = [
+            'ecole_admin',
+            'promoteur_école',
+            'DE_école',
+            'DD_école',
+            'DP_école',
+            'DA_école',
+            'sec_école',
+        ];
+        if (
+            $user !== null
+            && in_array($user['role'] ?? '', $expiryNoticeRoles, true)
+            && (int) ($user['ecole_id'] ?? 0) > 0
+        ) {
+            $data['planExpiryNotice'] = \App\Models\Ecole::getSubscriptionExpiryNotice(
+                (int) $user['ecole_id'],
+                15
+            );
+        }
+
         if (isset($data['title']) && is_string($data['title'])) {
             $data['title'] = $this->resolvePageTitle($data['title'], $user);
         } elseif (!isset($data['title'])) {

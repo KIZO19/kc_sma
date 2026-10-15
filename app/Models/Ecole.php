@@ -85,6 +85,39 @@ class Ecole
         }
     }
 
+    public static function getSubscriptionExpiryNotice(int $ecoleId, int $daysAhead = 15): ?array
+    {
+        $subscription = self::getLatestSubscription($ecoleId);
+        if (!$subscription || ($subscription['statut_abonnement'] ?? '') !== 'Actif') {
+            return null;
+        }
+
+        $dateDebutValue = (string) ($subscription['date_debut'] ?? '');
+        $dateFinValue = (string) ($subscription['date_fin'] ?? '');
+        $dateDebut = \DateTimeImmutable::createFromFormat('!Y-m-d', substr($dateDebutValue, 0, 10));
+        $dateFin = \DateTimeImmutable::createFromFormat('!Y-m-d', substr($dateFinValue, 0, 10));
+        if (!$dateDebut || !$dateFin) {
+            error_log('Ecole::getSubscriptionExpiryNotice received an invalid subscription date.');
+            return null;
+        }
+
+        $today = new \DateTimeImmutable('today');
+        if ($dateDebut > $today || $dateFin < $today) {
+            return null;
+        }
+
+        $daysRemaining = (int) $today->diff($dateFin)->format('%r%a');
+        if ($daysRemaining > max(0, $daysAhead)) {
+            return null;
+        }
+
+        return [
+            'plan_name' => $subscription['nom_plan'] ?? 'Abonnement',
+            'date_fin' => $dateFin->format('Y-m-d'),
+            'days_remaining' => $daysRemaining,
+        ];
+    }
+
     public static function getPendingSchools(int $limit = 5): array
     {
         try {
