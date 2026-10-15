@@ -94,11 +94,17 @@ $fees = $fees ?? [];
                               <td><?= htmlspecialchars($fee['devise'] ?? ($schoolCurrency ?? 'USD')) ?></td>
                               <td><?= htmlspecialchars($fee['scope_label'] ?? '-') ?></td>
                               <td>
-                                <a href="<?= BASE_URL ?>/frais/show?id=<?= (int) $fee['id'] ?>" class="btn btn-sm btn-outline-primary me-1">Détail</a>
-                                <a href="<?= BASE_URL ?>/frais/edit?id=<?= (int) $fee['id'] ?>" class="btn btn-sm btn-outline-secondary">Modifier</a>
+                                <a href="<?= BASE_URL ?>/frais/show?id=<?= (int) $fee['id'] ?>" class="btn btn-sm btn-outline-primary me-1" title="Détail" aria-label="Détail">
+                                  <i class="bi bi-eye" aria-hidden="true"></i>
+                                </a>
+                                <a href="<?= BASE_URL ?>/frais/edit?id=<?= (int) $fee['id'] ?>" class="btn btn-sm btn-outline-secondary me-1" title="Modifier" aria-label="Modifier">
+                                  <i class="bi bi-pencil" aria-hidden="true"></i>
+                                </a>
                                 <form action="<?= BASE_URL ?>/frais/destroy" method="post" class="d-inline" onsubmit="return confirm('Confirmer la suppression de ce frais ?');">
                                   <input type="hidden" name="id" value="<?= (int) $fee['id'] ?>">
-                                  <button type="submit" class="btn btn-sm btn-outline-danger">Supprimer</button>
+                                  <button type="submit" class="btn btn-sm btn-outline-danger" title="Supprimer" aria-label="Supprimer">
+                                    <i class="bi bi-trash" aria-hidden="true"></i>
+                                  </button>
                                 </form>
                               </td>
                             </tr>
