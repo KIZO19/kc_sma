@@ -164,6 +164,8 @@
                       <th scope="col" data-sort-type="string">Section</th>
                       <th scope="col" data-sort-type="string">Option</th>
                       <th scope="col" data-sort-type="string">Classe</th>
+                      <th scope="col" data-sort-type="string">Année scolaire</th>
+                      <th scope="col" data-sort-type="date">Inscrit le</th>
                       <th scope="col" data-sort-type="string">Parent / responsable</th>
                       <th scope="col" data-sort-type="string">Téléphone parent</th>
                       <th scope="col" data-sort-type="string">Statut</th>
@@ -198,6 +200,8 @@
                         <td data-sort-value="<?= $e($student['nom_section'] ?? '') ?>"><?= $e($student['nom_section'] ?? '—') ?></td>
                         <td data-sort-value="<?= $e($student['nom_option'] ?? '') ?>"><?= $e($student['nom_option'] ?? '—') ?></td>
                         <td data-sort-value="<?= $e($student['nom_classe'] ?? '') ?>"><?= $e($student['nom_classe'] ?? '—') ?></td>
+                        <td data-sort-value="<?= $e($student['annee_scolaire'] ?? '') ?>"><?= $e($student['annee_scolaire'] ?? '—') ?></td>
+                        <td data-sort-value="<?= $e($student['date_inscription'] ?? '') ?>"><?= $e(formatDate($student['date_inscription'] ?? null)) ?></td>
                         <td>
                           <?php if (!empty($student['parent_id']) && !empty($student['parent_nom_responsable'])): ?>
                             <a href="<?= BASE_URL ?>/parents/show?id=<?= (int) $student['parent_id'] ?>"><?= $e($student['parent_nom_responsable']) ?></a>
@@ -273,7 +277,7 @@
           const row = document.createElement('tr');
           row.className = 'no-data-row';
           const cell = document.createElement('td');
-          cell.colSpan = 12;
+          cell.colSpan = 14;
           cell.className = 'text-center py-4';
           cell.textContent = 'Aucun élève trouvé pour ces critères.';
           row.appendChild(cell);

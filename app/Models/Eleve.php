@@ -165,7 +165,7 @@ class Eleve
             'SELECT e.*, p.nom_responsable AS parent_nom_responsable, '
             . 'p.telephone AS parent_telephone, c.id AS classe_id, c.nom_classe, '
             . 'c.section_id, s.nom_section, c.option_id, o.nom_option, '
-            . 'i.annee_scolaire_id, i.date_inscription '
+            . 'i.annee_scolaire_id, a.annee AS annee_scolaire, i.date_inscription '
             . 'FROM eleves e '
             . 'LEFT JOIN parents p ON e.parent_id = p.id '
             . 'LEFT JOIN inscriptions i ON i.id = ('
@@ -174,6 +174,7 @@ class Eleve
             . 'LEFT JOIN classes c ON c.id = i.classe_id '
             . 'LEFT JOIN sections s ON s.id = c.section_id '
             . 'LEFT JOIN options o ON o.id = c.option_id '
+            . 'LEFT JOIN annees_scolaires a ON a.id = i.annee_scolaire_id '
             . 'ORDER BY e.nom ASC, e.postnom ASC, e.prenom ASC'
         );
         $stmt->execute();
@@ -187,7 +188,7 @@ class Eleve
             'SELECT DISTINCT e.*, p.nom_responsable AS parent_nom_responsable, '
             . 'p.telephone AS parent_telephone, c.id AS classe_id, c.nom_classe, '
             . 'c.section_id, s.nom_section, c.option_id, o.nom_option, '
-            . 'i.annee_scolaire_id, i.date_inscription '
+            . 'i.annee_scolaire_id, a.annee AS annee_scolaire, i.date_inscription '
             . 'FROM eleves e '
             . 'LEFT JOIN parents p ON e.parent_id = p.id '
             . 'LEFT JOIN inscriptions i ON i.id = ('
@@ -197,6 +198,7 @@ class Eleve
             . 'LEFT JOIN classes c ON c.id = i.classe_id '
             . 'LEFT JOIN sections s ON s.id = c.section_id '
             . 'LEFT JOIN options o ON o.id = c.option_id '
+            . 'LEFT JOIN annees_scolaires a ON a.id = i.annee_scolaire_id '
             . 'WHERE (e.ecole_id = :ecole_id OR p.ecole_id = :ecole_id OR EXISTS ('
             . 'SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id '
             . 'WHERE i.eleve_id = e.id AND c.ecole_id = :ecole_id))';
