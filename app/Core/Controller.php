@@ -56,7 +56,7 @@ class Controller
 
     protected function getModulesForRole(string $role): array
     {
-        return match ($role) {
+        $modules = match ($role) {
             'super_admin' => [
                 ['name' => 'Écoles', 'path' => '/ecoles', 'icon' => 'bi-building'],
                 ['name' => 'Utilisateurs', 'path' => '/utilisateurs', 'icon' => 'bi-person-check'],
@@ -177,5 +177,28 @@ class Controller
                 ['name' => 'Accueil', 'path' => '/dashboard', 'icon' => 'bi-house'],
             ],
         };
+
+        $user = Auth::user();
+        if (!$user || ($user['role'] ?? '') !== $role) {
+            return $modules;
+        }
+
+        return array_values(array_filter($modules, static function (array $module) use ($user): bool {
+            $permissionModule = match ($module['path'] ?? '') {
+                '/inscriptions' => 'inscriptions',
+                '/notes' => 'notes',
+                default => null,
+            };
+
+            return $permissionModule === null
+                || \App\Models\AdministrationAutorisation::canAccessModule($user, $permissionModule);
+        }));
+    }
+
+    protected function requireAdministrationModuleAccess(array $user, string $module): void
+    {
+        if (!\App\Models\AdministrationAutorisation::canAccessModule($user, $module)) {
+            $this->redirect('/error/accessDenied');
+        }
     }
 }

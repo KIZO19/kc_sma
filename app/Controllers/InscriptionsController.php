@@ -35,6 +35,7 @@ class InscriptionsController extends Controller
         Auth::requireRoles(['super_admin', 'ecole_admin', 'agent_ecole', 'comptable_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école']);
 
         $user = Auth::refresh() ?: Auth::user();
+        $this->requireAdministrationModuleAccess($user, 'inscriptions');
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
@@ -65,6 +66,7 @@ class InscriptionsController extends Controller
         Auth::requireRoles(self::SUBMISSION_ROLES);
 
         $user = Auth::refresh() ?: Auth::user();
+        $this->requireAdministrationModuleAccess($user, 'inscriptions');
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
@@ -117,6 +119,7 @@ class InscriptionsController extends Controller
         Auth::requireRoles(self::SUBMISSION_ROLES);
 
         $user = Auth::refresh() ?: Auth::user();
+        $this->requireAdministrationModuleAccess($user, 'inscriptions');
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -459,6 +462,7 @@ class InscriptionsController extends Controller
 
         header('Content-Type: application/json');
         $user = Auth::refresh() ?: Auth::user();
+        $this->requireAdministrationModuleAccess($user, 'inscriptions');
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
         $nom = trim($_GET['nom'] ?? '');
         $postnom = trim($_GET['postnom'] ?? '');
@@ -496,6 +500,7 @@ class InscriptionsController extends Controller
         }
 
         $user = Auth::refresh() ?: Auth::user();
+        $this->requireAdministrationModuleAccess($user, 'inscriptions');
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
         $student = Eleve::findByIdAndSchool($eleveId, $ecoleId);
         if (!$student) {
@@ -543,6 +548,8 @@ class InscriptionsController extends Controller
     {
         Auth::requireAuth();
         Auth::requireRoles(self::IDENTITY_EDIT_ROLES);
+        $user = Auth::refresh() ?: Auth::user();
+        $this->requireAdministrationModuleAccess($user, 'inscriptions');
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $eleveId = (int) ($_POST['eleve_id'] ?? 0);
@@ -695,6 +702,7 @@ class InscriptionsController extends Controller
     public function provinces(): void
     {
         Auth::requireAuth();
+        $this->requireAdministrationModuleAccess(Auth::refresh() ?: Auth::user(), 'inscriptions');
         header('Content-Type: application/json');
         $provinces = [
             'Bas-Uele', 'Équateur', 'Haut-Katanga', 'Haut-Lomami', 'Haut-Uele',
@@ -710,6 +718,7 @@ class InscriptionsController extends Controller
     public function territoires(): void
     {
         Auth::requireAuth();
+        $this->requireAdministrationModuleAccess(Auth::refresh() ?: Auth::user(), 'inscriptions');
         header('Content-Type: application/json');
         $province = trim($_GET['province'] ?? '');
         $map = [
@@ -748,6 +757,7 @@ class InscriptionsController extends Controller
     public function secteurs(): void
     {
         Auth::requireAuth();
+        $this->requireAdministrationModuleAccess(Auth::refresh() ?: Auth::user(), 'inscriptions');
         header('Content-Type: application/json');
         $territoire = trim($_GET['territoire'] ?? '');
         $map = [
@@ -763,6 +773,7 @@ class InscriptionsController extends Controller
     public function groupements(): void
     {
         Auth::requireAuth();
+        $this->requireAdministrationModuleAccess(Auth::refresh() ?: Auth::user(), 'inscriptions');
         header('Content-Type: application/json');
         $secteur = trim($_GET['secteur'] ?? '');
         $map = [
@@ -777,6 +788,7 @@ class InscriptionsController extends Controller
     public function villages(): void
     {
         Auth::requireAuth();
+        $this->requireAdministrationModuleAccess(Auth::refresh() ?: Auth::user(), 'inscriptions');
         header('Content-Type: application/json');
         $groupement = trim($_GET['groupement'] ?? '');
         $map = [
@@ -792,9 +804,10 @@ class InscriptionsController extends Controller
     {
         Auth::requireAuth();
         Auth::requireRoles(['super_admin', 'sec_école', 'préfet_école', 'DP_école', 'comptable_école']);
+        $user = Auth::refresh() ?: Auth::user();
+        $this->requireAdministrationModuleAccess($user, 'inscriptions');
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $user = Auth::refresh() ?: Auth::user();
             $role = $user['role'] ?? 'default';
             $ecoleId = (int) ($user['ecole_id'] ?? 0);
             $eleveId = (int) ($_POST['eleve_id'] ?? 0);

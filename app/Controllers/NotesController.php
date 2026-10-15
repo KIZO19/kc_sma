@@ -14,6 +14,7 @@ class NotesController extends Controller
         Auth::requireRoles(['super_admin', 'ecole_admin', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'eleve_ecole', 'parent_ecole']);
 
         $user = Auth::refresh() ?: Auth::user();
+        $this->requireAdministrationModuleAccess($user, 'notes');
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
 
