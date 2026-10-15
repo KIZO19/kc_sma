@@ -80,6 +80,67 @@ $pageStyles = <<<'CSS'
   [data-theme="dark"] .accounting-dashboard .accounting-action { border-color: rgba(255,255,255,.14); }
   [data-theme="dark"] .accounting-dashboard .accounting-action i { color: #b8e3f4; background: rgba(49,130,170,.2); }
   [data-theme="dark"] .accounting-dashboard .table thead th { color: #cbd5e1; background: rgba(255,255,255,.04); }
+  .school-admin-dashboard .school-admin-intro {
+    border: 0;
+    border-radius: 1rem;
+    color: #fff;
+    background: linear-gradient(120deg, #172554 0%, #1d4ed8 58%, #0891b2 100%);
+    box-shadow: 0 1rem 2rem rgba(30, 64, 175, .16);
+  }
+  .school-admin-dashboard .school-admin-intro p { color: rgba(255,255,255,.78); }
+  .school-admin-dashboard .school-kpi,
+  .school-admin-dashboard .school-panel {
+    border: 1px solid rgba(20, 45, 70, .08);
+    border-radius: .9rem;
+    box-shadow: 0 .35rem 1.2rem rgba(20, 45, 70, .05);
+  }
+  .school-admin-dashboard .school-kpi-icon {
+    display: grid;
+    width: 2.8rem;
+    height: 2.8rem;
+    place-items: center;
+    border-radius: .85rem;
+    font-size: 1.2rem;
+  }
+  .school-admin-dashboard .school-action {
+    display: flex;
+    align-items: center;
+    gap: .8rem;
+    padding: .85rem;
+    color: inherit;
+    text-decoration: none;
+    border: 1px solid rgba(20, 45, 70, .1);
+    border-radius: .75rem;
+    transition: border-color .15s ease, transform .15s ease;
+  }
+  .school-admin-dashboard .school-action:hover {
+    border-color: #2876a5;
+    transform: translateY(-1px);
+  }
+  .school-admin-dashboard .school-action i {
+    display: grid;
+    width: 2.5rem;
+    height: 2.5rem;
+    place-items: center;
+    color: #17618a;
+    background: #eaf4f8;
+    border-radius: .7rem;
+    font-size: 1.15rem;
+  }
+  .school-admin-dashboard .school-panel .table thead th {
+    color: #64748b;
+    background: #f8fafc;
+    font-size: .75rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  [data-theme="dark"] .school-admin-dashboard .school-kpi,
+  [data-theme="dark"] .school-admin-dashboard .school-panel { border-color: rgba(255,255,255,.1); }
+  [data-theme="dark"] .school-admin-dashboard .school-action { border-color: rgba(255,255,255,.14); }
+  [data-theme="dark"] .school-admin-dashboard .school-action i { color: #b8e3f4; background: rgba(49,130,170,.2); }
+  [data-theme="dark"] .school-admin-dashboard .school-panel .table thead th { color: #cbd5e1; background: rgba(255,255,255,.04); }
 </style>
 CSS;
 require __DIR__ . '/../partials/app_header.php';
@@ -88,12 +149,12 @@ require __DIR__ . '/../partials/app_header.php';
         <div class="container-fluid">
           <div class="row mb-2">
             <div class="col-sm-6">
-              <h1><?= ($role ?? '') === 'comptable_école' ? 'Espace comptable' : 'Dashboard' ?></h1>
+              <h1><?= ($role ?? '') === 'comptable_école' ? 'Espace comptable' : ((($role ?? '') === 'super_admin') ? 'Pilotage des écoles' : 'Dashboard') ?></h1>
             </div>
             <div class="col-sm-6">
               <ol class="breadcrumb float-sm-end">
                 <li class="breadcrumb-item"><a href="<?= BASE_URL ?>/dashboard">Accueil</a></li>
-                <li class="breadcrumb-item active"><?= ($role ?? '') === 'comptable_école' ? 'Espace comptable' : 'Dashboard' ?></li>
+                <li class="breadcrumb-item active"><?= ($role ?? '') === 'comptable_école' ? 'Espace comptable' : ((($role ?? '') === 'super_admin') ? 'Pilotage des écoles' : 'Dashboard') ?></li>
               </ol>
             </div>
           </div>
@@ -107,7 +168,129 @@ require __DIR__ . '/../partials/app_header.php';
               <strong>Compte en attente :</strong> votre compte agent est bien créé mais n’a pas encore été affecté à une école. L’administrateur de l’école doit le valider pour l’activer. Il sera automatiquement supprimé après 6 jours s’il n’est pas approuvé.
             </div>
           <?php endif; ?>
-          <?php if (($role ?? '') !== 'comptable_école'): ?>
+          <?php if (($role ?? '') === 'super_admin'): ?>
+          <div class="school-admin-dashboard">
+            <div class="card school-admin-intro mb-4">
+              <div class="card-body p-4 p-lg-5 d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-4">
+                <div>
+                  <span class="badge rounded-pill text-bg-light mb-3">ADMINISTRATION DE LA PLATEFORME</span>
+                  <h2 class="h3 fw-bold mb-2">Vue d’ensemble du réseau scolaire</h2>
+                  <p class="mb-0">Gérez les établissements, traitez les demandes d’inscription et suivez leur statut depuis un espace centralisé.</p>
+                </div>
+                <a href="<?= BASE_URL ?>/ecoles/create" class="btn btn-light fw-semibold px-4 py-2 flex-shrink-0">
+                  <i class="bi bi-plus-lg me-2"></i>Ajouter une école
+                </a>
+              </div>
+            </div>
+
+            <div class="row g-3 mb-4">
+              <?php foreach ($dashboardData['schoolManagement']['stats'] ?? [] as $stat): ?>
+                <div class="col-12 col-sm-6 col-xl-3">
+                  <div class="card school-kpi h-100 mb-0">
+                    <div class="card-body p-3 p-lg-4">
+                      <div class="d-flex justify-content-between align-items-center">
+                        <span class="small text-muted fw-semibold"><?= htmlspecialchars($stat['title']) ?></span>
+                        <span class="school-kpi-icon text-<?= htmlspecialchars($stat['tone']) ?> bg-<?= htmlspecialchars($stat['tone']) ?>-subtle">
+                          <i class="bi <?= htmlspecialchars($stat['icon']) ?>" aria-hidden="true"></i>
+                        </span>
+                      </div>
+                      <div class="h2 fw-bold my-3"><?= htmlspecialchars((string) $stat['value']) ?></div>
+                      <div class="small text-muted"><?= htmlspecialchars($stat['hint']) ?></div>
+                    </div>
+                  </div>
+                </div>
+              <?php endforeach; ?>
+            </div>
+
+            <div class="row g-3 mb-4">
+              <div class="col-xl-8">
+                <div class="card school-panel h-100 mb-0">
+                  <div class="card-header d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2">
+                    <div>
+                      <h2 class="h6 fw-bold mb-1">Écoles récemment enregistrées</h2>
+                      <span class="small text-muted">Suivez les derniers établissements ajoutés à la plateforme.</span>
+                    </div>
+                    <a href="<?= BASE_URL ?>/ecoles" class="btn btn-sm btn-outline-primary">
+                      Toutes les écoles <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i>
+                    </a>
+                  </div>
+                  <div class="card-body p-0">
+                    <div class="table-responsive">
+                      <table class="table table-hover align-middle mb-0">
+                        <thead>
+                          <tr>
+                            <th class="ps-3">Établissement</th>
+                            <th>Matricule</th>
+                            <th>Statut</th>
+                            <th>Inscription</th>
+                            <th class="text-end pe-3">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <?php foreach ($dashboardData['schoolManagement']['recentSchools'] ?? [] as $school): ?>
+                            <?php
+                              $schoolStatus = (string) ($school['statut_systeme'] ?? '');
+                              $statusClass = match ($schoolStatus) {
+                                  'Actif' => 'success',
+                                  'Suspendu' => 'danger',
+                                  default => 'warning',
+                              };
+                              $statusLabel = $schoolStatus === 'En_Attente' ? 'En attente' : ($schoolStatus !== '' ? $schoolStatus : 'Inconnu');
+                            ?>
+                            <tr>
+                              <td class="ps-3">
+                                <div class="fw-semibold"><?= htmlspecialchars($school['nom_etablissement'] ?? 'École sans nom') ?></div>
+                                <small class="text-muted"><?= htmlspecialchars($school['email_officiel'] ?? 'Aucun email renseigné') ?></small>
+                              </td>
+                              <td><?= htmlspecialchars($school['matricule'] ?? '—') ?></td>
+                              <td><span class="badge text-bg-<?= $statusClass ?>"><?= htmlspecialchars($statusLabel) ?></span></td>
+                              <td><?= htmlspecialchars(formatDate($school['date_creation_compte'] ?? null)) ?></td>
+                              <td class="text-end pe-3">
+                                <a href="<?= BASE_URL ?>/ecoles/edit?id=<?= (int) ($school['id'] ?? 0) ?>" class="btn btn-sm btn-outline-secondary" aria-label="Modifier <?= htmlspecialchars($school['nom_etablissement'] ?? 'cette école') ?>" title="Modifier">
+                                  <i class="bi bi-pencil" aria-hidden="true"></i>
+                                </a>
+                              </td>
+                            </tr>
+                          <?php endforeach; ?>
+                          <?php if (empty($dashboardData['schoolManagement']['recentSchools'])): ?>
+                            <tr>
+                              <td colspan="5" class="text-center text-muted py-5">
+                                <i class="bi bi-buildings fs-2 d-block mb-2" aria-hidden="true"></i>
+                                Aucune école enregistrée pour le moment.
+                              </td>
+                            </tr>
+                          <?php endif; ?>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-xl-4">
+                <div class="card school-panel h-100 mb-0">
+                  <div class="card-header">
+                    <h2 class="h6 fw-bold mb-1">Gestion des établissements</h2>
+                    <span class="small text-muted">Accès direct aux opérations principales</span>
+                  </div>
+                  <div class="card-body d-grid gap-2">
+                    <a class="school-action" href="<?= BASE_URL ?>/ecoles">
+                      <i class="bi bi-buildings" aria-hidden="true"></i>
+                      <span><strong class="d-block">Gérer les écoles</strong><small class="text-muted">Consulter les statuts et abonnements</small></span>
+                    </a>
+                    <a class="school-action" href="<?= BASE_URL ?>/ecoles/requests">
+                      <i class="bi bi-inbox" aria-hidden="true"></i>
+                      <span><strong class="d-block">Demandes d’inscription</strong><small class="text-muted">Examiner les demandes reçues</small></span>
+                    </a>
+                    <a class="school-action" href="<?= BASE_URL ?>/ecoles/create">
+                      <i class="bi bi-plus-circle" aria-hidden="true"></i>
+                      <span><strong class="d-block">Créer une école</strong><small class="text-muted">Enregistrer un établissement</small></span>
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <?php elseif (($role ?? '') !== 'comptable_école'): ?>
           <div class="row">
             <?php foreach ($dashboardData['stats'] ?? [] as $stat): ?>
               <div class="col-lg-3 col-md-6 col-sm-6 mb-4">
@@ -491,7 +674,7 @@ require __DIR__ . '/../partials/app_header.php';
           </div>
           <?php endif; ?>
 
-          <?php if (($role ?? '') !== 'comptable_école'): ?>
+          <?php if (($role ?? '') !== 'comptable_école' && ($role ?? '') !== 'super_admin'): ?>
           <div class="row">
             <?php foreach ($modules as $module): ?>
               <div class="col-lg-3 col-md-4 col-sm-6 mb-4">

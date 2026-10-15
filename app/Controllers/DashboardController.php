@@ -71,6 +71,10 @@ class DashboardController extends Controller
 
     private function buildDashboardData(array $user, string $role): array
     {
+        if ($role === 'super_admin') {
+            return ['schoolManagement' => $this->getSchoolManagementData()];
+        }
+
         $stats = $this->getStatsForRole($role, $user);
         $chart = $this->getChartSeries($role, $user);
         $table = $this->getTableDataForRole($role);
@@ -90,6 +94,33 @@ class DashboardController extends Controller
         }
 
         return $data;
+    }
+
+    private function getSchoolManagementData(): array
+    {
+        $schools = Ecole::getAll();
+        $statusCounts = [
+            'Actif' => 0,
+            'En_Attente' => 0,
+            'Suspendu' => 0,
+        ];
+
+        foreach ($schools as $school) {
+            $status = (string) ($school['statut_systeme'] ?? '');
+            if (array_key_exists($status, $statusCounts)) {
+                $statusCounts[$status]++;
+            }
+        }
+
+        return [
+            'stats' => [
+                ['title' => 'Écoles enregistrées', 'value' => count($schools), 'icon' => 'bi-buildings', 'tone' => 'primary', 'hint' => 'Ensemble des établissements'],
+                ['title' => 'Écoles actives', 'value' => $statusCounts['Actif'], 'icon' => 'bi-check-circle', 'tone' => 'success', 'hint' => 'Accès opérationnels'],
+                ['title' => 'Demandes en attente', 'value' => $statusCounts['En_Attente'], 'icon' => 'bi-hourglass-split', 'tone' => 'warning', 'hint' => 'À examiner'],
+                ['title' => 'Écoles suspendues', 'value' => $statusCounts['Suspendu'], 'icon' => 'bi-pause-circle', 'tone' => 'danger', 'hint' => 'Accès suspendus'],
+            ],
+            'recentSchools' => array_slice($schools, 0, 8),
+        ];
     }
 
     private function getAccountingData(array $user): array

@@ -60,12 +60,8 @@ class Controller
             'super_admin' => [
                 ['name' => 'Écoles', 'path' => '/ecoles', 'icon' => 'bi-building'],
                 ['name' => 'Utilisateurs', 'path' => '/utilisateurs', 'icon' => 'bi-person-check'],
-                ['name' => 'Agents', 'path' => '/agents', 'icon' => 'bi-people-fill'],
-                ['name' => 'Parents', 'path' => '/parents', 'icon' => 'bi-people'],
                 ['name' => 'Élèves', 'path' => '/eleves', 'icon' => 'bi-person-badge'],
-                ['name' => 'Inscriptions', 'path' => '/inscriptions', 'icon' => 'bi-person-plus'],
                 ['name' => 'Options', 'path' => '/options', 'icon' => 'bi-grid-1x2'],
-                ['name' => 'Paiements', 'path' => '/paiements', 'icon' => 'bi-currency-dollar'],
                 ['name' => 'Générer mot de passe', 'path' => '/ecoles/generatePassword', 'icon' => 'bi-key'],
                 ['name' => 'Notes', 'path' => '/notes', 'icon' => 'bi-pencil-square'],
                 ['name' => 'Bulletins', 'path' => '/bulletins', 'icon' => 'bi-file-earmark-text'],
