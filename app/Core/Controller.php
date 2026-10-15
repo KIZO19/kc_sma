@@ -81,6 +81,7 @@ class Controller
                 ['name' => 'Toutes les écoles', 'path' => '/ecoles', 'icon' => 'bi-buildings'],
                 ['name' => 'Créer une école', 'path' => '/ecoles/create', 'icon' => 'bi-building-add'],
                 ['name' => 'Demandes des écoles', 'path' => '/ecoles/requests', 'icon' => 'bi-inbox'],
+                ['name' => 'Gestion des abonnements', 'path' => '/ecoles/subscriptions', 'icon' => 'bi-card-checklist'],
                 ['name' => 'Tarifs des abonnements', 'path' => '/ecoles/plans', 'icon' => 'bi-tags'],
                 ['name' => 'Attribuer un abonnement', 'path' => '/ecoles/addSubscription', 'icon' => 'bi-credit-card'],
                 ['name' => 'Validation des comptes', 'path' => '/utilisateurs', 'icon' => 'bi-person-check'],

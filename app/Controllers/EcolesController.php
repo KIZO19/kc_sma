@@ -625,4 +625,92 @@ class EcolesController extends Controller
             'selectedSchoolId' => $selectedSchoolId,
         ]);
     }
+
+    public function subscriptions(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin']);
+
+        $user = Auth::refresh() ?: Auth::user();
+        $role = $user['role'] ?? 'default';
+        $selectedSchoolId = max(0, (int) ($_GET['ecole_id'] ?? 0));
+        if ($selectedSchoolId > 0 && !Ecole::findById($selectedSchoolId)) {
+            $selectedSchoolId = 0;
+        }
+        $this->view('ecoles/subscriptions', [
+            'title' => APP_NAME . ' - Gestion des abonnements',
+            'user' => $user,
+            'role' => $role,
+            'roleLabel' => User::getRoleLabel($role),
+            'modules' => $this->getModulesForRole($role),
+            'subscriptions' => Ecole::getSubscriptions($selectedSchoolId > 0 ? $selectedSchoolId : null),
+            'schools' => Ecole::getAll(),
+            'plans' => Ecole::getPlans(),
+            'selectedSchoolId' => $selectedSchoolId,
+        ]);
+    }
+
+    public function updateSubscription(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin']);
+
+        $subscriptionId = (int) ($_POST['subscription_id'] ?? 0);
+        $planInput = trim((string) ($_POST['plan_id'] ?? ''));
+        $planId = $planInput === '' ? null : filter_var($planInput, FILTER_VALIDATE_INT);
+        $dateDebut = trim((string) ($_POST['date_debut'] ?? ''));
+        $dateFin = trim((string) ($_POST['date_fin'] ?? ''));
+        $status = (string) ($_POST['statut_abonnement'] ?? '');
+        $errors = [];
+
+        $subscriptionIds = array_map(
+            static fn (array $subscription): int => (int) ($subscription['id'] ?? 0),
+            Ecole::getSubscriptions()
+        );
+        if ($subscriptionId <= 0 || !in_array($subscriptionId, $subscriptionIds, true)) {
+            $errors[] = 'L’abonnement sélectionné est introuvable.';
+        }
+
+        if ($planId !== null) {
+            $planIds = array_map(
+                static fn (array $plan): int => (int) ($plan['id'] ?? 0),
+                Ecole::getPlans()
+            );
+            if ($planId === false || !in_array($planId, $planIds, true)) {
+                $errors[] = 'Sélectionnez un plan valide ou l’essai gratuit.';
+            }
+        }
+
+        $startDate = \DateTimeImmutable::createFromFormat('!Y-m-d', $dateDebut);
+        $endDate = \DateTimeImmutable::createFromFormat('!Y-m-d', $dateFin);
+        if (!$startDate || $startDate->format('Y-m-d') !== $dateDebut) {
+            $errors[] = 'La date de début est invalide.';
+        }
+        if (!$endDate || $endDate->format('Y-m-d') !== $dateFin) {
+            $errors[] = 'La date de fin est invalide.';
+        }
+        if ($startDate && $endDate && $endDate < $startDate) {
+            $errors[] = 'La date de fin doit être égale ou postérieure à la date de début.';
+        }
+        if (!in_array($status, ['Actif', 'Expire', 'Resilie'], true)) {
+            $errors[] = 'Le statut d’abonnement sélectionné est invalide.';
+        }
+
+        if (empty($errors) && Ecole::updateSubscription(
+            $subscriptionId,
+            $planId,
+            $dateDebut,
+            $dateFin,
+            $status
+        )) {
+            $_SESSION['ecoles_subscription_success'] = 'Abonnement mis à jour. Le montant déjà enregistré comme payé a été conservé.';
+        } else {
+            if (empty($errors)) {
+                $errors[] = 'Impossible de mettre à jour cet abonnement. Réessayez.';
+            }
+            $_SESSION['ecoles_subscription_errors'] = $errors;
+        }
+
+        $this->redirect('/ecoles/subscriptions');
+    }
 }

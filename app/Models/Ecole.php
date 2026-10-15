@@ -85,6 +85,62 @@ class Ecole
         }
     }
 
+    public static function getSubscriptions(?int $ecoleId = null): array
+    {
+        try {
+            $sql = "SELECT a.*, e.nom_etablissement,
+                           CASE
+                               WHEN a.plan_id IS NULL THEN 'Essai gratuit'
+                               ELSE p.nom_plan
+                           END AS nom_plan
+                    FROM abonnements_ecoles a
+                    INNER JOIN ecoles e ON e.id = a.ecole_id
+                    LEFT JOIN plans_abonnement p ON p.id = a.plan_id";
+            if ($ecoleId !== null) {
+                $sql .= ' WHERE a.ecole_id = :ecole_id';
+            }
+            $sql .= ' ORDER BY a.date_debut DESC, a.id DESC';
+
+            $stmt = Database::getConnection()->prepare($sql);
+            if ($ecoleId !== null) {
+                $stmt->bindValue(':ecole_id', $ecoleId, PDO::PARAM_INT);
+            }
+            $stmt->execute();
+
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {
+            error_log('Ecole::getSubscriptions failed: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    public static function updateSubscription(
+        int $subscriptionId,
+        ?int $planId,
+        string $dateDebut,
+        string $dateFin,
+        string $status
+    ): bool {
+        try {
+            $stmt = Database::getConnection()->prepare(
+                'UPDATE abonnements_ecoles
+                 SET plan_id = :plan_id, date_debut = :date_debut, date_fin = :date_fin,
+                     statut_abonnement = :statut_abonnement
+                 WHERE id = :id'
+            );
+            $stmt->bindValue(':plan_id', $planId, $planId === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+            $stmt->bindValue(':date_debut', $dateDebut, PDO::PARAM_STR);
+            $stmt->bindValue(':date_fin', $dateFin, PDO::PARAM_STR);
+            $stmt->bindValue(':statut_abonnement', $status, PDO::PARAM_STR);
+            $stmt->bindValue(':id', $subscriptionId, PDO::PARAM_INT);
+
+            return $stmt->execute() && $stmt->rowCount() >= 0;
+        } catch (\Throwable $e) {
+            error_log('Ecole::updateSubscription failed: ' . $e->getMessage());
+            return false;
+        }
+    }
+
     public static function getSubscriptionExpiryNotice(int $ecoleId, int $daysAhead = 15): ?array
     {
         $subscription = self::getLatestSubscription($ecoleId);

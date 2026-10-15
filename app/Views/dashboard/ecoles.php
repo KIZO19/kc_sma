@@ -52,6 +52,7 @@ require __DIR__ . '/../partials/app_header.php'; ?>
               <p class="text-muted">Super-admin : validez les comptes écoles et gérez les abonnements.</p>
               <?php if (($role ?? '') === 'super_admin'): ?>
               <div class="d-flex flex-wrap gap-2">
+                <a href="<?= BASE_URL ?>/ecoles/subscriptions" class="btn btn-outline-secondary"><i class="bi bi-card-checklist me-1" aria-hidden="true"></i>Gérer les abonnements</a>
                 <a href="<?= BASE_URL ?>/ecoles/plans" class="btn btn-outline-primary"><i class="bi bi-tags me-1" aria-hidden="true"></i>Tarifs des abonnements</a>
                 <a href="<?= BASE_URL ?>/ecoles/addSubscription" class="btn btn-primary"><i class="bi bi-credit-card me-1" aria-hidden="true"></i>Attribuer un abonnement</a>
               </div>
@@ -158,7 +159,10 @@ require __DIR__ . '/../partials/app_header.php'; ?>
                       <td><?= htmlspecialchars(formatDate($school['date_fin'] ?? null)) ?></td>
                       <td>
                         <?php if (($role ?? '') === 'super_admin'): ?>
-                          <a href="<?= BASE_URL ?>/ecoles/edit?id=<?= (int) $school['id'] ?>" class="btn btn-sm btn-outline-secondary me-2">Modifier</a>
+                          <a href="<?= BASE_URL ?>/ecoles/edit?id=<?= (int) $school['id'] ?>" class="btn btn-sm btn-outline-secondary me-1" aria-label="Modifier l’école">Modifier</a>
+                          <a href="<?= BASE_URL ?>/ecoles/subscriptions?ecole_id=<?= (int) $school['id'] ?>" class="btn btn-sm btn-outline-primary me-1" aria-label="Gérer les abonnements de l’école" title="Gérer les abonnements">
+                            <i class="bi bi-card-checklist" aria-hidden="true"></i>
+                          </a>
                         <?php endif; ?>
                         <?php if (($role ?? '') === 'super_admin'): ?>
                           <form method="post" action="<?= BASE_URL ?>/ecoles/updateStatus" class="d-inline">
