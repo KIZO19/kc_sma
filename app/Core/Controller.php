@@ -78,38 +78,15 @@ class Controller
     {
         if ($role === 'super_admin') {
             $modules = [
-                ['name' => 'Gestion des écoles', 'path' => '/ecoles', 'icon' => 'bi-buildings'],
+                ['name' => 'Toutes les écoles', 'path' => '/ecoles', 'icon' => 'bi-buildings'],
+                ['name' => 'Créer une école', 'path' => '/ecoles/create', 'icon' => 'bi-building-add'],
+                ['name' => 'Demandes des écoles', 'path' => '/ecoles/requests', 'icon' => 'bi-inbox'],
                 ['name' => 'Tarifs des abonnements', 'path' => '/ecoles/plans', 'icon' => 'bi-tags'],
                 ['name' => 'Attribuer un abonnement', 'path' => '/ecoles/addSubscription', 'icon' => 'bi-credit-card'],
                 ['name' => 'Validation des comptes', 'path' => '/utilisateurs', 'icon' => 'bi-person-check'],
                 ['name' => 'Activités', 'path' => '/activities', 'icon' => 'bi-activity'],
             ];
-            $roles = [
-                'ecole_admin',
-                'promoteur_école',
-                'préfet_école',
-                'DE_école',
-                'DD_école',
-                'DP_école',
-                'DA_école',
-                'comptable_école',
-                'sec_école',
-                'agent_ecole',
-                'enseignant_école',
-                'eleve_ecole',
-                'parent_ecole',
-            ];
-
-            foreach ($roles as $menuRole) {
-                $modules = array_merge($modules, $this->getModulesForRole($menuRole));
-            }
-
-            $uniqueModules = [];
-            foreach ($modules as $module) {
-                $uniqueModules[$module['path']] ??= $module;
-            }
-
-            return array_values($uniqueModules);
+            return $modules;
         }
 
         $modules = match ($role) {

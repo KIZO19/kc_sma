@@ -393,17 +393,8 @@ if (!empty($schoolContext['logo_url'])) {
               </a>
             </li>
 
-            <?php if (($role ?? '') === 'super_admin'): ?>
-              <li class="nav-item">
-                <a href="<?= BASE_URL ?>/utilisateurs" class="nav-link <?= $currentPath === BASE_URL . '/utilisateurs' ? 'active' : '' ?>">
-                  <i class="nav-icon bi bi-person-check"></i>
-                  <p>Validation des comptes</p>
-                </a>
-              </li>
-            <?php endif; ?>
-
             <?php if (!empty($modules) && is_array($modules)): ?>
-              <li class="nav-header">MODULES</li>
+              <li class="nav-header"><?= ($role ?? '') === 'super_admin' ? 'GESTION DE LA PLATEFORME' : 'MODULES' ?></li>
               <li class="nav-item has-treeview <?= $moduleMenuOpen ? 'menu-open' : '' ?>">
                 <a href="#" class="nav-link <?= $moduleMenuOpen ? 'active' : '' ?>" data-lte-toggle="treeview">
                   <i class="nav-icon bi bi-grid-1x2"></i>
