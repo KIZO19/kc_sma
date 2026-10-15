@@ -76,10 +76,43 @@ class Controller
 
     protected function getModulesForRole(string $role): array
     {
-        $modules = match ($role) {
-            'super_admin' => [
+        if ($role === 'super_admin') {
+            $modules = [
                 ['name' => 'Gestion des écoles', 'path' => '/ecoles', 'icon' => 'bi-buildings'],
-            ],
+                ['name' => 'Tarifs des abonnements', 'path' => '/ecoles/plans', 'icon' => 'bi-tags'],
+                ['name' => 'Attribuer un abonnement', 'path' => '/ecoles/addSubscription', 'icon' => 'bi-credit-card'],
+                ['name' => 'Validation des comptes', 'path' => '/utilisateurs', 'icon' => 'bi-person-check'],
+                ['name' => 'Activités', 'path' => '/activities', 'icon' => 'bi-activity'],
+            ];
+            $roles = [
+                'ecole_admin',
+                'promoteur_école',
+                'préfet_école',
+                'DE_école',
+                'DD_école',
+                'DP_école',
+                'DA_école',
+                'comptable_école',
+                'sec_école',
+                'agent_ecole',
+                'enseignant_école',
+                'eleve_ecole',
+                'parent_ecole',
+            ];
+
+            foreach ($roles as $menuRole) {
+                $modules = array_merge($modules, $this->getModulesForRole($menuRole));
+            }
+
+            $uniqueModules = [];
+            foreach ($modules as $module) {
+                $uniqueModules[$module['path']] ??= $module;
+            }
+
+            return array_values($uniqueModules);
+        }
+
+        $modules = match ($role) {
             'ecole_admin' => [
                 ['name' => 'École', 'path' => '/ecoles', 'icon' => 'bi-building'],
                 ['name' => 'Paramètres école', 'path' => '/ecoles', 'icon' => 'bi-gear'],
@@ -192,6 +225,10 @@ class Controller
 
     protected function requireAdministrationModuleAccess(array $user, string $module): void
     {
+        if (($user['role'] ?? '') === 'super_admin') {
+            return;
+        }
+
         if (!\App\Models\AdministrationAutorisation::canAccessModule($user, $module)) {
             $this->redirect('/error/accessDenied');
         }

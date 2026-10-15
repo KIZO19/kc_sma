@@ -74,6 +74,10 @@ class AdministrationAutorisation
     public static function canAccessModule(array $user, string $module): bool
     {
         $role = (string) ($user['role'] ?? '');
+        if ($role === 'super_admin') {
+            return true;
+        }
+
         $roleModules = self::ROLE_MODULES[$role] ?? [];
 
         if (!in_array($module, $roleModules, true)) {
