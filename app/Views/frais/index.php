@@ -96,7 +96,10 @@ $fees = $fees ?? [];
                               <td>
                                 <a href="<?= BASE_URL ?>/frais/show?id=<?= (int) $fee['id'] ?>" class="btn btn-sm btn-outline-primary me-1">Détail</a>
                                 <a href="<?= BASE_URL ?>/frais/edit?id=<?= (int) $fee['id'] ?>" class="btn btn-sm btn-outline-secondary">Modifier</a>
-                                <a href="<?= BASE_URL ?>/frais/edit?id=<?= (int) $fee['id'] ?>" class="btn btn-sm btn-outline-secondary">Supprimer</a>
+                                <form action="<?= BASE_URL ?>/frais/destroy" method="post" class="d-inline" onsubmit="return confirm('Confirmer la suppression de ce frais ?');">
+                                  <input type="hidden" name="id" value="<?= (int) $fee['id'] ?>">
+                                  <button type="submit" class="btn btn-sm btn-outline-danger">Supprimer</button>
+                                </form>
                               </td>
                             </tr>
                           <?php endforeach; ?>

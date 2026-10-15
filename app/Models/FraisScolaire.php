@@ -219,4 +219,26 @@ class FraisScolaire
 
         return (bool) $stmt->execute($params);
     }
+
+    public static function deleteByIdAndSchool(int $id, int $ecoleId): bool
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            'DELETE FROM frais_scolaires '
+            . 'WHERE id = :id AND ('
+            . 'ecole_id = :fee_school OR '
+            . 'EXISTS (SELECT 1 FROM classes c WHERE c.id = frais_scolaires.classe_id AND c.ecole_id = :class_school) OR '
+            . 'EXISTS (SELECT 1 FROM classes sc WHERE sc.option_id = frais_scolaires.scope_id AND sc.ecole_id = :option_school AND frais_scolaires.scope = \'option\') OR '
+            . 'EXISTS (SELECT 1 FROM classes ss WHERE ss.section_id = frais_scolaires.scope_id AND ss.ecole_id = :section_school AND frais_scolaires.scope = \'section\'))'
+        );
+        $stmt->execute([
+            ':id' => $id,
+            ':fee_school' => $ecoleId,
+            ':class_school' => $ecoleId,
+            ':option_school' => $ecoleId,
+            ':section_school' => $ecoleId,
+        ]);
+
+        return $stmt->rowCount() === 1;
+    }
 }

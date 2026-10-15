@@ -720,4 +720,48 @@ class FraisController extends Controller
 
         $this->redirect('/frais');
     }
+
+    public function destroy(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(self::MANAGEMENT_ROLES);
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->redirect('/frais');
+            return;
+        }
+
+        $user = Auth::refresh() ?: Auth::user();
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        $id = (int) ($_POST['id'] ?? 0);
+        if ($id <= 0 || $ecoleId <= 0) {
+            $_SESSION['frais_errors'] = ['Frais invalide ou école introuvable.'];
+            $this->redirect('/frais');
+            return;
+        }
+
+        if (!FraisScolaire::findByIdAndSchool($id, $ecoleId)) {
+            $_SESSION['frais_errors'] = ['Frais introuvable pour cette école.'];
+            $this->redirect('/frais');
+            return;
+        }
+
+        try {
+            if (!FraisScolaire::deleteByIdAndSchool($id, $ecoleId)) {
+                $_SESSION['frais_errors'] = ['Le frais n’a pas pu être supprimé.'];
+                $this->redirect('/frais');
+                return;
+            }
+            $_SESSION['frais_success'] = 'Frais supprimé avec succès.';
+        } catch (\PDOException $e) {
+            error_log('FraisController::destroy failed: ' . $e->getMessage());
+            if ($e->getCode() === '23000') {
+                $_SESSION['frais_errors'] = ['Ce frais ne peut pas être supprimé, car il est lié à des paiements ou à des écritures comptables.'];
+            } else {
+                $_SESSION['frais_errors'] = ['Une erreur est survenue lors de la suppression du frais. Veuillez réessayer.'];
+            }
+        }
+
+        $this->redirect('/frais');
+    }
 }
