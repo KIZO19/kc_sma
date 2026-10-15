@@ -35,16 +35,24 @@ class FraisScolaire
                  LEFT JOIN options ao ON (f.scope = 'option' AND ao.id = f.scope_id)
                  LEFT JOIN sections ss ON (f.scope = 'section' AND ss.id = f.scope_id)
                  LEFT JOIN annees_scolaires s ON s.id = f.annee_scolaire_id
-                                 WHERE (
-                                     f.ecole_id = :ecole_id
-                                     OR c.ecole_id = :ecole_id
-                                     OR (f.scope = 'option' AND ao.ecole_id = :ecole_id)
-                                     OR (f.scope = 'section' AND ss.ecole_id = :ecole_id)
-                                     OR (f.scope = 'school' AND f.ecole_id = :ecole_id)
-                                 )
+                 WHERE (
+                     f.ecole_id = :fee_school
+                     OR c.ecole_id = :class_school
+                     OR (f.scope = 'option' AND EXISTS (
+                         SELECT 1 FROM classes sc WHERE sc.option_id = f.scope_id AND sc.ecole_id = :option_school
+                     ))
+                     OR (f.scope = 'section' AND EXISTS (
+                         SELECT 1 FROM classes ss2 WHERE ss2.section_id = f.scope_id AND ss2.ecole_id = :section_school
+                     ))
+                 )
                  ORDER BY s.annee DESC, c.nom_classe ASC, f.type_frais ASC"
             );
-            $stmt->execute([':ecole_id' => $ecoleId]);
+            $stmt->execute([
+                ':fee_school' => $ecoleId,
+                ':class_school' => $ecoleId,
+                ':option_school' => $ecoleId,
+                ':section_school' => $ecoleId,
+            ]);
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (\PDOException $e) {
             // Fallback for older schema without 'scope' column: return basic fees for school's classes
@@ -54,10 +62,10 @@ class FraisScolaire
                  FROM frais_scolaires f
                  LEFT JOIN classes c ON c.id = f.classe_id
                  LEFT JOIN annees_scolaires s ON s.id = f.annee_scolaire_id
-                 WHERE c.ecole_id = :ecole_id OR f.classe_id IS NULL OR f.ecole_id = :ecole_id
+                 WHERE c.ecole_id = :class_school OR f.ecole_id = :fee_school
                  ORDER BY s.annee DESC, c.nom_classe ASC, f.type_frais ASC"
             );
-            $stmt->execute([':ecole_id' => $ecoleId]);
+            $stmt->execute([':class_school' => $ecoleId, ':fee_school' => $ecoleId]);
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
     }
@@ -114,9 +122,19 @@ class FraisScolaire
     {
         $db = Database::getConnection();
         $stmt = $db->prepare(
-            'SELECT f.*, c.nom_classe, s.annee AS annee_scolaire '
+            "SELECT f.*, c.nom_classe, o.nom_option AS option_scope_name,
+                    sec.nom_section AS section_scope_name, s.annee AS annee_scolaire,
+                    CASE
+                      WHEN f.scope = 'class' THEN COALESCE(c.nom_classe, 'N/A')
+                      WHEN f.scope = 'option' THEN COALESCE(o.nom_option, 'N/A')
+                      WHEN f.scope = 'section' THEN COALESCE(sec.nom_section, 'N/A')
+                      WHEN f.scope = 'school' THEN 'École entière'
+                      ELSE 'N/A'
+                    END AS scope_label "
             . 'FROM frais_scolaires f '
             . 'LEFT JOIN classes c ON c.id = f.classe_id '
+            . 'LEFT JOIN options o ON f.scope = \'option\' AND o.id = f.scope_id '
+            . 'LEFT JOIN sections sec ON f.scope = \'section\' AND sec.id = f.scope_id '
             . 'LEFT JOIN annees_scolaires s ON s.id = f.annee_scolaire_id '
             . 'WHERE f.id = :id AND ('
             . 'f.ecole_id = :fee_school OR c.ecole_id = :class_school OR '
@@ -142,11 +160,16 @@ class FraisScolaire
         // or some tables/columns are missing, fall back to a simpler check to avoid blocking inserts.
         $params = [':encodage' => $encodage, ':ecole_id' => $ecoleId];
         try {
-            $sql = 'SELECT f.id FROM frais_scolaires f LEFT JOIN classes c ON c.id = f.classe_id LEFT JOIN options ao ON (f.scope = \'option\' AND ao.id = f.scope_id) LEFT JOIN sections ss ON (f.scope = \'section\' AND ss.id = f.scope_id) WHERE f.encodage = :encodage AND (f.ecole_id = :ecole_id OR c.ecole_id = :ecole_id OR (f.scope = \'option\' AND ao.ecole_id = :ecole_id) OR (f.scope = \'section\' AND ss.ecole_id = :ecole_id))';
+            $sql = 'SELECT f.id FROM frais_scolaires f LEFT JOIN classes c ON c.id = f.classe_id WHERE f.encodage = :encodage AND (f.ecole_id = :fee_school OR c.ecole_id = :class_school OR EXISTS (SELECT 1 FROM classes sc WHERE sc.option_id = f.scope_id AND sc.ecole_id = :option_school AND f.scope = \'option\') OR EXISTS (SELECT 1 FROM classes ss WHERE ss.section_id = f.scope_id AND ss.ecole_id = :section_school AND f.scope = \'section\'))';
             if ($excludeId !== null) {
                 $sql .= ' AND f.id != :excludeId';
                 $params[':excludeId'] = $excludeId;
             }
+            unset($params[':ecole_id']);
+            $params[':fee_school'] = $ecoleId;
+            $params[':class_school'] = $ecoleId;
+            $params[':option_school'] = $ecoleId;
+            $params[':section_school'] = $ecoleId;
             $stmt = $db->prepare($sql);
             $stmt->execute($params);
             $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -154,7 +177,7 @@ class FraisScolaire
         } catch (\Throwable $e) {
             // log and fall back to simpler check (by encodage and ecole_id)
             error_log('FraisScolaire::existsEncodage fallback due to error: ' . $e->getMessage());
-            $fallbackSql = 'SELECT id FROM frais_scolaires WHERE encodage = :encodage AND (ecole_id = :ecole_id OR ecole_id IS NULL)';
+            $fallbackSql = 'SELECT f.id FROM frais_scolaires f LEFT JOIN classes c ON c.id = f.classe_id WHERE f.encodage = :encodage AND (f.ecole_id = :ecole_id OR c.ecole_id = :ecole_id)';
             if ($excludeId !== null) {
                 $fallbackSql .= ' AND id != :excludeId';
                 $params[':excludeId'] = $excludeId;
@@ -170,7 +193,11 @@ class FraisScolaire
     {
         $db = Database::getConnection();
         $stmt = $db->prepare(
-            'UPDATE frais_scolaires SET classe_id = :classe_id, type_frais = :type_frais, montant_total = :montant_total, annee_scolaire_id = :annee_scolaire_id, devise = :devise, scope = :scope, scope_id = :scope_id, ecole_id = :ecole_id, encodage = :encodage WHERE id = :id'
+            'UPDATE frais_scolaires SET classe_id = :classe_id, type_frais = :type_frais, montant_total = :montant_total, annee_scolaire_id = :annee_scolaire_id, devise = :devise, scope = :scope, scope_id = :scope_id, ecole_id = :ecole_id, encodage = :encodage '
+            . 'WHERE id = :id AND (ecole_id = :owner_school OR '
+            . 'EXISTS (SELECT 1 FROM classes c WHERE c.id = frais_scolaires.classe_id AND c.ecole_id = :class_school) OR '
+            . 'EXISTS (SELECT 1 FROM classes sc WHERE sc.option_id = frais_scolaires.scope_id AND sc.ecole_id = :option_school AND frais_scolaires.scope = \'option\') OR '
+            . 'EXISTS (SELECT 1 FROM classes ss WHERE ss.section_id = frais_scolaires.scope_id AND ss.ecole_id = :section_school AND frais_scolaires.scope = \'section\'))'
         );
 
         $params = [
@@ -184,6 +211,10 @@ class FraisScolaire
             ':ecole_id' => $data['ecole_id'] ?? null,
             ':encodage' => $data['encodage'] ?? null,
             ':id' => $id,
+            ':owner_school' => (int) ($data['ecole_id'] ?? 0),
+            ':class_school' => (int) ($data['ecole_id'] ?? 0),
+            ':option_school' => (int) ($data['ecole_id'] ?? 0),
+            ':section_school' => (int) ($data['ecole_id'] ?? 0),
         ];
 
         return (bool) $stmt->execute($params);

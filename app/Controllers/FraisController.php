@@ -4,13 +4,14 @@ namespace App\Controllers;
 
 use App\Core\Auth;
 use App\Core\Controller;
+use App\Core\Database;
 use App\Models\AnneeScolaire;
 use App\Models\Classe;
-use App\Models\DetteEleve;
 use App\Models\FraisScolaire;
 use App\Models\Option;
 use App\Models\Section;
 use App\Models\User;
+use PDO;
 
 class FraisController extends Controller
 {
@@ -110,6 +111,254 @@ class FraisController extends Controller
         return $base . uniqid();
     }
 
+    private function isScopeValidForSchool(int $ecoleId, string $scope, int $scopeId): bool
+    {
+        if ($ecoleId <= 0) {
+            return false;
+        }
+        if ($scope === 'school') {
+            return true;
+        }
+        if (!in_array($scope, ['class', 'option', 'section'], true) || $scopeId <= 0) {
+            return false;
+        }
+
+        $column = [
+            'class' => 'id',
+            'option' => 'option_id',
+            'section' => 'section_id',
+        ][$scope];
+        $stmt = Database::getConnection()->prepare(
+            'SELECT 1 FROM classes WHERE ecole_id = :ecole_id AND ' . $column . ' = :scope_id LIMIT 1'
+        );
+        $stmt->execute([':ecole_id' => $ecoleId, ':scope_id' => $scopeId]);
+        return (bool) $stmt->fetchColumn();
+    }
+
+    private function getStudentsForScope(PDO $db, int $ecoleId, int $yearId, string $scope, int $scopeId): array
+    {
+        $scopeCondition = [
+            'class' => 'AND c.id = :scope_id',
+            'option' => 'AND c.option_id = :scope_id',
+            'section' => 'AND c.section_id = :scope_id',
+            'school' => '',
+        ][$scope];
+        $sql = 'SELECT DISTINCT i.eleve_id
+                FROM inscriptions i
+                INNER JOIN classes c ON c.id = i.classe_id
+                WHERE c.ecole_id = :ecole_id
+                  AND i.annee_scolaire_id = :annee_scolaire_id ' . $scopeCondition;
+        $stmt = $db->prepare($sql);
+        $stmt->bindValue(':ecole_id', $ecoleId, PDO::PARAM_INT);
+        $stmt->bindValue(':annee_scolaire_id', $yearId, PDO::PARAM_INT);
+        if ($scope !== 'school') {
+            $stmt->bindValue(':scope_id', $scopeId, PDO::PARAM_INT);
+        }
+        $stmt->execute();
+        return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    private function resolveAgentId(PDO $db, array $user, int $ecoleId): int
+    {
+        $referenceId = (int) ($user['reference_id'] ?? 0);
+        if ($referenceId > 0) {
+            $stmt = $db->prepare('SELECT id FROM agents WHERE id = :id AND ecole_id = :ecole_id LIMIT 1');
+            $stmt->execute([':id' => $referenceId, ':ecole_id' => $ecoleId]);
+            $agentId = (int) ($stmt->fetchColumn() ?: 0);
+            if ($agentId > 0) {
+                return $agentId;
+            }
+        }
+
+        $stmt = $db->prepare('SELECT id FROM agents WHERE ecole_id = :ecole_id ORDER BY id ASC LIMIT 1');
+        $stmt->execute([':ecole_id' => $ecoleId]);
+        $agentId = (int) ($stmt->fetchColumn() ?: 0);
+        if ($agentId <= 0) {
+            throw new \RuntimeException('Aucun agent n’est associé à cette école pour enregistrer les écritures.');
+        }
+        return $agentId;
+    }
+
+    private function getOrCreateStudentAccount(PDO $db, int $eleveId, int $yearId): int
+    {
+        $stmt = $db->prepare(
+            'SELECT id FROM comptes_eleves WHERE eleve_id = :eleve_id AND annee_scolaire_id = :annee_id LIMIT 1'
+        );
+        $stmt->execute([':eleve_id' => $eleveId, ':annee_id' => $yearId]);
+        $accountId = (int) ($stmt->fetchColumn() ?: 0);
+        if ($accountId > 0) {
+            return $accountId;
+        }
+
+        $stmt = $db->prepare(
+            'INSERT INTO comptes_eleves (eleve_id, annee_scolaire_id, solde_debiteur) VALUES (:eleve_id, :annee_id, 0.00)'
+        );
+        $stmt->execute([':eleve_id' => $eleveId, ':annee_id' => $yearId]);
+        return (int) $db->lastInsertId();
+    }
+
+    private function synchronizeFeeAssignments(
+        PDO $db,
+        int $feeId,
+        int $ecoleId,
+        int $yearId,
+        string $scope,
+        int $scopeId,
+        float $amount,
+        string $currency,
+        array $user
+    ): void {
+        $targetStudents = $this->getStudentsForScope($db, $ecoleId, $yearId, $scope, $scopeId);
+        $targetSet = array_fill_keys($targetStudents, true);
+
+        $stmt = $db->prepare(
+            'SELECT eleve_id FROM dettes_eleves WHERE frais_id = :fee_id
+             UNION
+             SELECT ce.eleve_id FROM ecritures_comptables_eleves ece
+             INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
+             WHERE ece.frais_id = :ledger_fee_id'
+        );
+        $stmt->execute([':fee_id' => $feeId, ':ledger_fee_id' => $feeId]);
+        $students = array_fill_keys(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN)), true);
+        foreach ($targetStudents as $studentId) {
+            $students[$studentId] = true;
+        }
+        if (!$students) {
+            return;
+        }
+
+        $stmt = $db->prepare(
+            'SELECT ce.eleve_id, ce.id AS compte_id, ce.annee_scolaire_id,
+                    SUM(CASE WHEN ece.type_mouvement = \'DEBIT\' THEN ece.montant ELSE 0 END) AS total_debit,
+                    SUM(CASE WHEN ece.type_mouvement = \'CREDIT\' THEN ece.montant ELSE 0 END) AS total_credit,
+                    SUM(CASE WHEN ece.type_mouvement = \'CREDIT\'
+                                  AND COALESCE(ece.reference_recu, \'\') NOT LIKE \'REG-FRAIS-%\'
+                             THEN ece.montant ELSE 0 END) AS total_paiements
+             FROM ecritures_comptables_eleves ece
+             INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
+             WHERE ece.frais_id = :fee_id
+             GROUP BY ce.eleve_id, ce.id, ce.annee_scolaire_id'
+        );
+        $stmt->execute([':fee_id' => $feeId]);
+        $ledgerByStudent = [];
+        $students = array_fill_keys(array_map('intval', array_keys($students)), true);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $entry) {
+            $studentId = (int) $entry['eleve_id'];
+            $accountId = (int) $entry['compte_id'];
+            $net = (float) $entry['total_debit'] - (float) $entry['total_credit'];
+            $ledgerByStudent[$studentId]['accounts'][$accountId] = [
+                'year_id' => (int) $entry['annee_scolaire_id'],
+                'net' => $net,
+            ];
+            $ledgerByStudent[$studentId]['credits'] =
+                ($ledgerByStudent[$studentId]['credits'] ?? 0.0) + (float) $entry['total_paiements'];
+        }
+
+        $legacyPaidByStudent = [];
+        $stmt = $db->prepare(
+            'SELECT eleve_id, COALESCE(SUM(montant_paye), 0) AS total_paye
+             FROM paiements_eleves WHERE frais_id = :fee_id GROUP BY eleve_id'
+        );
+        $stmt->execute([':fee_id' => $feeId]);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $payment) {
+            $legacyPaidByStudent[(int) $payment['eleve_id']] = (float) $payment['total_paye'];
+        }
+
+        $agentId = $this->resolveAgentId($db, $user, $ecoleId);
+        $insertEntry = $db->prepare(
+            'INSERT INTO ecritures_comptables_eleves
+                (compte_eleve_id, frais_id, caisse_banque_id, type_mouvement, montant, reference_recu, libelle, agent_saisie_id)
+             VALUES (:compte_id, :fee_id, NULL, :type, :montant, :reference_recu, :libelle, :agent_id)'
+        );
+        $updateAccount = $db->prepare(
+            'UPDATE comptes_eleves SET solde_debiteur = solde_debiteur + :delta WHERE id = :account_id'
+        );
+
+        foreach (array_keys($students) as $studentId) {
+            $studentId = (int) $studentId;
+            $isTargeted = isset($targetSet[$studentId]);
+            $ledger = $ledgerByStudent[$studentId] ?? ['accounts' => [], 'credits' => 0.0];
+            $paid = max(
+                (float) $ledger['credits'],
+                (float) ($legacyPaidByStudent[$studentId] ?? 0.0)
+            );
+            $targetDue = $isTargeted ? max(0.0, $amount - $paid) : 0.0;
+            $targetAccounts = [];
+
+            foreach ($ledger['accounts'] as $accountId => $account) {
+                $targetAccounts[$accountId] = $account['net'] < 0 ? $account['net'] : 0.0;
+            }
+
+            if ($isTargeted) {
+                $accountId = $this->getOrCreateStudentAccount($db, $studentId, $yearId);
+                $targetAccounts[$accountId] = $targetDue;
+            }
+
+            foreach ($targetAccounts as $accountId => $targetNet) {
+                $currentNet = (float) ($ledger['accounts'][$accountId]['net'] ?? 0.0);
+                if ($targetNet <= 0 && $currentNet < 0) {
+                    $targetNet = $currentNet;
+                }
+                $delta = round($targetNet - $currentNet, 2);
+                if (abs($delta) < 0.005) {
+                    continue;
+                }
+
+                $type = $delta > 0 ? 'DEBIT' : 'CREDIT';
+                $insertEntry->execute([
+                    ':compte_id' => $accountId,
+                    ':fee_id' => $feeId,
+                    ':type' => $type,
+                    ':montant' => abs($delta),
+                    ':reference_recu' => 'REG-FRAIS-' . $feeId . '-' . bin2hex(random_bytes(5)),
+                    ':libelle' => 'Régularisation de portée : ' . ($scope === 'school' ? 'école entière' : $scope),
+                    ':agent_id' => $agentId,
+                ]);
+                $updateAccount->execute([':delta' => $delta, ':account_id' => $accountId]);
+            }
+
+            $debtStmt = $db->prepare(
+                'SELECT id FROM dettes_eleves WHERE eleve_id = :eleve_id AND frais_id = :fee_id ORDER BY id ASC'
+            );
+            $debtStmt->execute([':eleve_id' => $studentId, ':fee_id' => $feeId]);
+            $debtIds = array_map('intval', $debtStmt->fetchAll(PDO::FETCH_COLUMN));
+            $db->prepare(
+                'UPDATE dettes_eleves SET montant_initial = 0, montant_restant = 0
+                 WHERE eleve_id = :eleve_id AND frais_id = :fee_id'
+            )->execute([':eleve_id' => $studentId, ':fee_id' => $feeId]);
+
+            if ($debtIds) {
+                $debtUpdate = $db->prepare(
+                    'UPDATE dettes_eleves
+                     SET annee_scolaire_id = :year_id, montant_initial = :amount,
+                         montant_restant = :remaining, devise = :currency
+                     WHERE id = :id'
+                );
+                $debtUpdate->execute([
+                    ':year_id' => $yearId,
+                    ':amount' => $isTargeted ? $amount : 0,
+                    ':remaining' => $isTargeted ? $targetDue : 0,
+                    ':currency' => $currency,
+                    ':id' => $debtIds[0],
+                ]);
+            } elseif ($isTargeted) {
+                $debtInsert = $db->prepare(
+                    'INSERT INTO dettes_eleves
+                        (eleve_id, frais_id, annee_scolaire_id, montant_initial, montant_restant, devise)
+                     VALUES (:eleve_id, :fee_id, :year_id, :amount, :remaining, :currency)'
+                );
+                $debtInsert->execute([
+                    ':eleve_id' => $studentId,
+                    ':fee_id' => $feeId,
+                    ':year_id' => $yearId,
+                    ':amount' => $amount,
+                    ':remaining' => $targetDue,
+                    ':currency' => $currency,
+                ]);
+            }
+        }
+    }
+
     public function submit(): void
     {
         Auth::requireAuth();
@@ -126,19 +375,12 @@ class FraisController extends Controller
             $scope = trim($_POST['scope'] ?? 'class');
             $scopeId = (int) ($_POST['scope_id'] ?? 0);
             $devise = trim($_POST['devise'] ?? '');
-
-            // Debug logging: record submitted values to PHP error log (temporary)
-            error_log('FraisController::submit - POST received: ' . json_encode([
-                'type_frais' => $typeFrais,
-                'montant_total' => $montantTotal,
-                'encodage' => $encodage,
-                'classe_id' => $classeId,
-                'annee_scolaire_id' => $anneeScolaireId,
-                'scope' => $scope,
-                'scope_id' => $scopeId,
-                'devise' => $devise,
-                'ecole_id' => $ecoleId,
-            ]));
+            if ($scope === 'class') {
+                $scopeId = $classeId > 0 ? $classeId : $scopeId;
+                $classeId = $scopeId;
+            } else {
+                $classeId = 0;
+            }
 
             $errors = [];
             if ($ecoleId <= 0) {
@@ -156,21 +398,8 @@ class FraisController extends Controller
                 $errors[] = 'Portée de frais invalide.';
             }
 
-            if ($scope === 'class') {
-                if ($classeId <= 0) {
-                    $errors[] = 'La classe associée est requise pour cette portée.';
-                }
-            } elseif ($scope === 'option') {
-                if ($scopeId <= 0) {
-                    $errors[] = 'L’option doit être sélectionnée pour cette portée.';
-                }
-            } elseif ($scope === 'section') {
-                if ($scopeId <= 0) {
-                    $errors[] = 'La section doit être sélectionnée pour cette portée.';
-                }
-            } else {
-                // school-wide: clear class selection
-                $classeId = 0;
+            if (in_array($scope, $allowedScopes, true) && !$this->isScopeValidForSchool($ecoleId, $scope, $scopeId)) {
+                $errors[] = 'La portée sélectionnée ne fait pas partie de votre école.';
             }
 
             // If provided year is missing or invalid, attempt to use the school's active year
@@ -184,12 +413,7 @@ class FraisController extends Controller
             } else {
                 $yearRec = AnneeScolaire::findById($anneeScolaireId);
                 if (!$yearRec || ((int) ($yearRec['ecole_id'] ?? 0) !== $ecoleId)) {
-                    $active = AnneeScolaire::getActiveBySchool($ecoleId);
-                    if ($active) {
-                        $anneeScolaireId = (int) $active['id'];
-                    } else {
-                        $errors[] = 'L’année scolaire fournie est invalide.';
-                    }
+                    $errors[] = 'L’année scolaire fournie n’appartient pas à votre école.';
                 }
             }
             if ($devise === '') {
@@ -224,105 +448,45 @@ class FraisController extends Controller
             }
 
             if (empty($errors)) {
+                $db = Database::getConnection();
                 try {
+                    $db->beginTransaction();
                     $insertId = FraisScolaire::create([
-                    'classe_id' => $scope === 'class' ? $classeId : null,
-                    'type_frais' => $typeFrais,
-                    'montant_total' => (float) $montantTotal,
-                    'annee_scolaire_id' => $anneeScolaireId,
-                    'devise' => $devise,
-                    'scope' => $scope,
-                    'scope_id' => $scope === 'class' ? $classeId : ($scope === 'option' || $scope === 'section' ? $scopeId : null),
-                    'encodage' => $encodage,
-                    'ecole_id' => $ecoleId,
+                        'classe_id' => $scope === 'class' ? $classeId : null,
+                        'type_frais' => $typeFrais,
+                        'montant_total' => (float) $montantTotal,
+                        'annee_scolaire_id' => $anneeScolaireId,
+                        'devise' => $devise,
+                        'scope' => $scope,
+                        'scope_id' => in_array($scope, ['class', 'option', 'section'], true) ? $scopeId : null,
+                        'encodage' => $encodage,
+                        'ecole_id' => $ecoleId,
                     ]);
-                    error_log('FraisController::submit - create returned id: ' . var_export($insertId, true));
-                } catch (\PDOException $e) {
-                    $errors[] = 'Erreur base de données : colonne manquante ou migration non appliquée. Exécutez les migrations SQL depuis app/Config et réessayez.';
-                    // log exception in error log for debugging
-                    error_log('FraisController::submit DB error: ' . $e->getMessage());
-                    $insertId = false;
-                }
-
-                if ($insertId !== false && $insertId > 0) {
-                    // assign debts to students according to scope
-                    $db = \App\Core\Database::getConnection();
-                    // build student list SQL based on scope
-                    if ($scope === 'class') {
-                        $stmt = $db->prepare('SELECT eleve_id FROM inscriptions WHERE classe_id = :classe AND annee_scolaire_id = :annee');
-                        $stmt->execute([':classe' => $classeId, ':annee' => $anneeScolaireId]);
-                    } elseif ($scope === 'option') {
-                        $stmt = $db->prepare('SELECT i.eleve_id FROM inscriptions i JOIN classes c ON c.id = i.classe_id WHERE c.option_id = :opt AND i.annee_scolaire_id = :annee');
-                        $stmt->execute([':opt' => $scopeId, ':annee' => $anneeScolaireId]);
-                    } elseif ($scope === 'section') {
-                        $stmt = $db->prepare('SELECT i.eleve_id FROM inscriptions i JOIN classes c ON c.id = i.classe_id WHERE c.section_id = :sec AND i.annee_scolaire_id = :annee');
-                        $stmt->execute([':sec' => $scopeId, ':annee' => $anneeScolaireId]);
-                    } else { // school-wide
-                        $stmt = $db->prepare('SELECT i.eleve_id FROM inscriptions i JOIN classes c ON c.id = i.classe_id WHERE c.ecole_id = :ecole AND i.annee_scolaire_id = :annee');
-                        $stmt->execute([':ecole' => $ecoleId, ':annee' => $anneeScolaireId]);
+                    if (!$insertId) {
+                        throw new \RuntimeException('La création du frais a échoué.');
                     }
-
-                    $eleves = $stmt->fetchAll(\PDO::FETCH_COLUMN, 0);
-                    // Determine a valid agent id for agent_saisie_id (agents.id required by FK)
-                    $agentId = $user['reference_id'] ?? null;
-                    if (empty($agentId)) {
-                        // try to pick any agent from the same school
-                        $agstmt = $db->prepare('SELECT id FROM agents WHERE ecole_id = :ecole LIMIT 1');
-                        $agstmt->execute([':ecole' => $ecoleId]);
-                        $found = $agstmt->fetch(\PDO::FETCH_ASSOC);
-                        $agentId = $found['id'] ?? null;
-                    }
-                    // final fallback: use agent id 1 if exists (legacy/system)
-                    if (empty($agentId)) {
-                        $agentId = 1;
-                    }
-
-                    foreach ($eleves as $eleveId) {
-                        // ensure compte_eleve exists
-                        $cstmt = $db->prepare('SELECT id, solde_debiteur FROM comptes_eleves WHERE eleve_id = :eleve AND annee_scolaire_id = :annee LIMIT 1');
-                        $cstmt->execute([':eleve' => $eleveId, ':annee' => $anneeScolaireId]);
-                        $compte = $cstmt->fetch(\PDO::FETCH_ASSOC);
-                        if (!$compte) {
-                            $ist = $db->prepare('INSERT INTO comptes_eleves (eleve_id, annee_scolaire_id, solde_debiteur) VALUES (:eleve, :annee, 0.00)');
-                            $ist->execute([':eleve' => $eleveId, ':annee' => $anneeScolaireId]);
-                            $compteId = (int) $db->lastInsertId();
-                            $currentBalance = 0.00;
-                        } else {
-                            $compteId = (int) $compte['id'];
-                            $currentBalance = (float) $compte['solde_debiteur'];
-                        }
-
-                        // insert debit ecriture
-                        $libelle = 'Facturation: ' . $typeFrais;
-                        $est = $db->prepare('INSERT INTO ecritures_comptables_eleves (compte_eleve_id, frais_id, caisse_banque_id, type_mouvement, montant, reference_recu, libelle, agent_saisie_id) VALUES (:compte, :frais, NULL, :type, :montant, NULL, :libelle, :agent)');
-                        $est->execute([
-                            ':compte' => $compteId,
-                            ':frais' => $insertId,
-                            ':type' => 'DEBIT',
-                            ':montant' => (float) $montantTotal,
-                            ':libelle' => $libelle,
-                            ':agent' => $agentId,
-                        ]);
-
-                        // insert student debt for this frais
-                        try {
-                            DetteEleve::create((int) $eleveId, $insertId, $anneeScolaireId, (float) $montantTotal, $devise);
-                        } catch (\Throwable $e) {
-                            error_log('FraisController::submit dette create failed: ' . $e->getMessage());
-                        }
-
-                        // update compte_eleve solde_debiteur
-                        $newBalance = $currentBalance + (float) $montantTotal;
-                        $ust = $db->prepare('UPDATE comptes_eleves SET solde_debiteur = :solde WHERE id = :id');
-                        $ust->execute([':solde' => $newBalance, ':id' => $compteId]);
-                    }
-
-                    $_SESSION['frais_success'] = 'Frais créé et assigné aux élèves concernés.';
+                    $this->synchronizeFeeAssignments(
+                        $db,
+                        $insertId,
+                        $ecoleId,
+                        $anneeScolaireId,
+                        $scope,
+                        $scopeId,
+                        (float) $montantTotal,
+                        $devise,
+                        $user
+                    );
+                    $db->commit();
+                    $_SESSION['frais_success'] = 'Frais créé et attribué aux élèves inscrits concernés.';
                     $this->redirect('/frais');
                     return;
+                } catch (\Throwable $e) {
+                    if ($db->inTransaction()) {
+                        $db->rollBack();
+                    }
+                    error_log('FraisController::submit failed: ' . $e->getMessage());
+                    $errors[] = 'Le frais n’a pas pu être créé. Vérifiez les données et réessayez.';
                 }
-
-                $errors[] = 'Impossible de créer le frais. Veuillez réessayer.';
             }
 
             $_SESSION['frais_errors'] = $errors;
@@ -439,6 +603,19 @@ class FraisController extends Controller
         $scope = trim($_POST['scope'] ?? 'class');
         $scopeId = (int) ($_POST['scope_id'] ?? 0);
         $devise = trim($_POST['devise'] ?? '');
+        $fee = $id > 0 ? FraisScolaire::findByIdAndSchool($id, $ecoleId) : null;
+        if (!$fee) {
+            $_SESSION['frais_errors'] = ['Frais introuvable pour cette école.'];
+            $this->redirect('/frais');
+            return;
+        }
+
+        if ($scope === 'class') {
+            $scopeId = $classeId > 0 ? $classeId : $scopeId;
+            $classeId = $scopeId;
+        } else {
+            $classeId = 0;
+        }
 
         $errors = [];
         if ($id <= 0) $errors[] = 'Frais invalide.';
@@ -447,9 +624,9 @@ class FraisController extends Controller
 
         $allowedScopes = ['class', 'option', 'section', 'school'];
         if (!in_array($scope, $allowedScopes, true)) $errors[] = 'Portée de frais invalide.';
-
-        if ($scope === 'class' && $classeId <= 0) $errors[] = 'La classe est requise pour cette portée.';
-        if ($scope !== 'class') $classeId = 0;
+        if (in_array($scope, $allowedScopes, true) && !$this->isScopeValidForSchool($ecoleId, $scope, $scopeId)) {
+            $errors[] = 'La portée sélectionnée ne fait pas partie de votre école.';
+        }
 
         if ($anneeScolaireId <= 0) {
             $active = AnneeScolaire::getActiveBySchool($ecoleId);
@@ -457,7 +634,16 @@ class FraisController extends Controller
             else $errors[] = 'L\'année scolaire est requise.';
         }
 
-        if ($devise === '') $errors[] = 'La devise est requise.';
+        if ($anneeScolaireId > 0) {
+            $yearRec = AnneeScolaire::findById($anneeScolaireId);
+            if (!$yearRec || (int) ($yearRec['ecole_id'] ?? 0) !== $ecoleId) {
+                $errors[] = 'L’année scolaire fournie n’appartient pas à votre école.';
+            }
+        }
+
+        if ($devise === '' || !array_key_exists($devise, $this->getCurrencyOptions())) {
+            $errors[] = 'La devise sélectionnée est invalide.';
+        }
 
         if (!empty($errors)) {
             $_SESSION['frais_errors'] = $errors;
@@ -494,20 +680,41 @@ class FraisController extends Controller
             return;
         }
 
-        $ok = FraisScolaire::update($id, [
-            'classe_id' => $classeId ?: null,
-            'type_frais' => $typeFrais,
-            'montant_total' => (float) $montantTotal,
-            'annee_scolaire_id' => $anneeScolaireId,
-            'devise' => $devise,
-            'scope' => $scope,
-            'scope_id' => $scope === 'class' ? $classeId : ($scope === 'option' || $scope === 'section' ? $scopeId : null),
-            'ecole_id' => $ecoleId,
-        ]);
-
-        if ($ok) {
+        $db = Database::getConnection();
+        try {
+            $db->beginTransaction();
+            $ok = FraisScolaire::update($id, [
+                'classe_id' => $scope === 'class' ? $classeId : null,
+                'type_frais' => $typeFrais,
+                'montant_total' => (float) $montantTotal,
+                'annee_scolaire_id' => $anneeScolaireId,
+                'devise' => $devise,
+                'scope' => $scope,
+                'scope_id' => in_array($scope, ['class', 'option', 'section'], true) ? $scopeId : null,
+                'ecole_id' => $ecoleId,
+                'encodage' => $encodage,
+            ]);
+            if (!$ok) {
+                throw new \RuntimeException('La mise à jour du frais a échoué.');
+            }
+            $this->synchronizeFeeAssignments(
+                $db,
+                $id,
+                $ecoleId,
+                $anneeScolaireId,
+                $scope,
+                $scopeId,
+                (float) $montantTotal,
+                $devise,
+                $user
+            );
+            $db->commit();
             $_SESSION['frais_success'] = 'Frais mis à jour avec succès.';
-        } else {
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            error_log('FraisController::update failed: ' . $e->getMessage());
             $_SESSION['frais_errors'] = ['Impossible de mettre à jour le frais.'];
         }
 
