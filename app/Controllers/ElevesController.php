@@ -27,7 +27,7 @@ class ElevesController extends Controller
             $selectedClasseId = 0;
         }
         $students = $ecoleId > 0
-            ? Eleve::getAllBySchool($ecoleId, $selectedClasseId > 0 ? $selectedClasseId : null)
+            ? Eleve::getAllBySchool($ecoleId)
             : Eleve::getAll();
 
         $this->view('eleves/index', [

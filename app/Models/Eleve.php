@@ -162,9 +162,18 @@ class Eleve
     {
         $db = Database::getConnection();
         $stmt = $db->prepare(
-            'SELECT e.*, p.nom_responsable AS parent_nom_responsable '
+            'SELECT e.*, p.nom_responsable AS parent_nom_responsable, '
+            . 'p.telephone AS parent_telephone, c.id AS classe_id, c.nom_classe, '
+            . 'c.section_id, s.nom_section, c.option_id, o.nom_option, '
+            . 'i.annee_scolaire_id, i.date_inscription '
             . 'FROM eleves e '
             . 'LEFT JOIN parents p ON e.parent_id = p.id '
+            . 'LEFT JOIN inscriptions i ON i.id = ('
+            . 'SELECT i2.id FROM inscriptions i2 WHERE i2.eleve_id = e.id '
+            . 'ORDER BY i2.date_inscription DESC, i2.id DESC LIMIT 1) '
+            . 'LEFT JOIN classes c ON c.id = i.classe_id '
+            . 'LEFT JOIN sections s ON s.id = c.section_id '
+            . 'LEFT JOIN options o ON o.id = c.option_id '
             . 'ORDER BY e.nom ASC, e.postnom ASC, e.prenom ASC'
         );
         $stmt->execute();
@@ -175,15 +184,23 @@ class Eleve
     {
         $db = Database::getConnection();
         $sql =
-            'SELECT DISTINCT e.*, p.nom_responsable AS parent_nom_responsable '
-            . ', (SELECT c2.nom_classe FROM inscriptions i2 INNER JOIN classes c2 ON i2.classe_id = c2.id '
-            . 'WHERE i2.eleve_id = e.id ORDER BY i2.date_inscription DESC, i2.id DESC LIMIT 1) AS nom_classe '
+            'SELECT DISTINCT e.*, p.nom_responsable AS parent_nom_responsable, '
+            . 'p.telephone AS parent_telephone, c.id AS classe_id, c.nom_classe, '
+            . 'c.section_id, s.nom_section, c.option_id, o.nom_option, '
+            . 'i.annee_scolaire_id, i.date_inscription '
             . 'FROM eleves e '
             . 'LEFT JOIN parents p ON e.parent_id = p.id '
+            . 'LEFT JOIN inscriptions i ON i.id = ('
+            . 'SELECT i2.id FROM inscriptions i2 WHERE i2.eleve_id = e.id '
+            . 'AND i2.classe_id IN (SELECT c2.id FROM classes c2 WHERE c2.ecole_id = :inscription_school) '
+            . 'ORDER BY i2.date_inscription DESC, i2.id DESC LIMIT 1) '
+            . 'LEFT JOIN classes c ON c.id = i.classe_id '
+            . 'LEFT JOIN sections s ON s.id = c.section_id '
+            . 'LEFT JOIN options o ON o.id = c.option_id '
             . 'WHERE (e.ecole_id = :ecole_id OR p.ecole_id = :ecole_id OR EXISTS ('
             . 'SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id '
             . 'WHERE i.eleve_id = e.id AND c.ecole_id = :ecole_id))';
-        $params = [':ecole_id' => $ecoleId];
+        $params = [':ecole_id' => $ecoleId, ':inscription_school' => $ecoleId];
 
         if ($classeId !== null && $classeId > 0) {
             $sql .= ' AND EXISTS (SELECT 1 FROM inscriptions ic INNER JOIN classes cc ON ic.classe_id = cc.id '
