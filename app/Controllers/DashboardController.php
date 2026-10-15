@@ -104,20 +104,44 @@ class DashboardController extends Controller
             'En_Attente' => 0,
             'Suspendu' => 0,
         ];
+        $openAccess = 0;
+        $renewalSoon = 0;
+        $today = new \DateTimeImmutable('today');
+        $renewalLimit = $today->modify('+30 days');
 
         foreach ($schools as $school) {
             $status = (string) ($school['statut_systeme'] ?? '');
             if (array_key_exists($status, $statusCounts)) {
                 $statusCounts[$status]++;
             }
+
+            $subscriptionStart = !empty($school['date_debut'])
+                ? strtotime((string) $school['date_debut'])
+                : false;
+            $subscriptionEnd = !empty($school['date_fin'])
+                ? strtotime((string) $school['date_fin'])
+                : false;
+            $hasCurrentSubscription = ($school['statut_abonnement'] ?? '') === 'Actif'
+                && $subscriptionStart !== false
+                && $subscriptionStart <= time()
+                && $subscriptionEnd !== false
+                && date('Y-m-d', $subscriptionEnd) >= $today->format('Y-m-d');
+
+            if ($status === 'Actif' && $hasCurrentSubscription) {
+                $openAccess++;
+                if (date('Y-m-d', $subscriptionEnd) <= $renewalLimit->format('Y-m-d')) {
+                    $renewalSoon++;
+                }
+            }
         }
 
         return [
             'stats' => [
                 ['title' => 'Écoles enregistrées', 'value' => count($schools), 'icon' => 'bi-buildings', 'tone' => 'primary', 'hint' => 'Ensemble des établissements'],
-                ['title' => 'Écoles actives', 'value' => $statusCounts['Actif'], 'icon' => 'bi-check-circle', 'tone' => 'success', 'hint' => 'Accès opérationnels'],
+                ['title' => 'Accès ouverts', 'value' => $openAccess, 'icon' => 'bi-check-circle', 'tone' => 'success', 'hint' => 'Abonnement valide et école active'],
+                ['title' => 'Renouvellements proches', 'value' => $renewalSoon, 'icon' => 'bi-hourglass-split', 'tone' => 'warning', 'hint' => 'Échéance dans les 30 jours'],
+                ['title' => 'Accès fermés', 'value' => max(0, count($schools) - $openAccess), 'icon' => 'bi-lock', 'tone' => 'danger', 'hint' => 'Abonnement ou statut à vérifier'],
                 ['title' => 'Demandes en attente', 'value' => $statusCounts['En_Attente'], 'icon' => 'bi-hourglass-split', 'tone' => 'warning', 'hint' => 'À examiner'],
-                ['title' => 'Écoles suspendues', 'value' => $statusCounts['Suspendu'], 'icon' => 'bi-pause-circle', 'tone' => 'danger', 'hint' => 'Accès suspendus'],
             ],
             'recentSchools' => array_slice($schools, 0, 8),
         ];

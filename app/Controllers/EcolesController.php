@@ -442,6 +442,29 @@ class EcolesController extends Controller
         ]);
     }
 
+    public function subscriptionRequired(): void
+    {
+        Auth::requireAuth();
+        $user = Auth::refresh() ?: Auth::user();
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        $school = $ecoleId > 0 ? Ecole::findById($ecoleId) : null;
+
+        if (($user['role'] ?? '') === 'super_admin' || ($ecoleId > 0 && Ecole::hasPlatformAccess($ecoleId))) {
+            $this->redirect('/dashboard');
+            return;
+        }
+
+        $this->view('ecoles/subscription_required', [
+            'title' => APP_NAME . ' - Accès école suspendu',
+            'user' => $user,
+            'role' => $user['role'] ?? 'default',
+            'roleLabel' => User::getRoleLabel($user['role'] ?? 'default'),
+            'modules' => $this->getModulesForRole($user['role'] ?? 'default'),
+            'school' => $school,
+            'subscription' => $ecoleId > 0 ? Ecole::getLatestSubscription($ecoleId) : null,
+        ]);
+    }
+
     public function addSubscription(): void
     {
         Auth::requireAuth();
@@ -451,25 +474,40 @@ class EcolesController extends Controller
             $errors = [];
             $ecoleId = (int) ($_POST['ecole_id'] ?? 0);
             $planId = (int) ($_POST['plan_id'] ?? 0);
-            $montant = (float) ($_POST['montant_paye'] ?? 0);
+            $montantInput = trim((string) ($_POST['montant_paye'] ?? ''));
             $dateDebut = trim($_POST['date_debut'] ?? '');
             $dateFin = trim($_POST['date_fin'] ?? '');
 
-            if ($ecoleId <= 0) {
+            if ($ecoleId <= 0 || !Ecole::findById($ecoleId)) {
                 $errors[] = 'Sélectionnez une école valide.';
             }
-            if ($planId <= 0) {
+            $plans = Ecole::getPlans();
+            $validPlanIds = array_map(static fn (array $plan): int => (int) $plan['id'], $plans);
+            if ($planId <= 0 || !in_array($planId, $validPlanIds, true)) {
                 $errors[] = 'Sélectionnez un plan valide.';
             }
-            if ($dateDebut === '' || $dateFin === '') {
-                $errors[] = 'Date de début et date de fin sont requises.';
+            if ($montantInput === '' || !is_numeric($montantInput) || (float) $montantInput < 0) {
+                $errors[] = 'Le montant payé doit être un nombre positif ou nul.';
+            }
+            $startDate = \DateTimeImmutable::createFromFormat('!Y-m-d', $dateDebut);
+            $endDate = \DateTimeImmutable::createFromFormat('!Y-m-d', $dateFin);
+            if (
+                !$startDate
+                || !$endDate
+                || $startDate->format('Y-m-d') !== $dateDebut
+                || $endDate->format('Y-m-d') !== $dateFin
+                || $endDate < $startDate
+            ) {
+                $errors[] = 'La période de l’abonnement est invalide.';
             }
 
             if (empty($errors)) {
-                Ecole::addSubscription($ecoleId, $planId, $dateDebut, $dateFin, $montant);
-                $_SESSION['ecoles_subscription_success'] = 'Abonnement ajouté avec succès.';
-                $this->redirect('/ecoles');
-                return;
+                if (Ecole::addSubscription($ecoleId, $planId, $dateDebut, $dateFin, (float) $montantInput)) {
+                    $_SESSION['ecoles_subscription_success'] = 'Abonnement ajouté avec succès.';
+                    $this->redirect('/ecoles');
+                    return;
+                }
+                $errors[] = 'Impossible d’enregistrer l’abonnement. Vérifiez les données et réessayez.';
             }
 
             $_SESSION['ecoles_subscription_errors'] = $errors;

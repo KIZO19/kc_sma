@@ -17,7 +17,7 @@ class Ecole
                  LEFT JOIN abonnements_ecoles a ON a.id = (
                     SELECT id FROM abonnements_ecoles
                     WHERE ecole_id = e.id
-                    ORDER BY date_fin DESC
+                    ORDER BY date_debut DESC, id DESC
                     LIMIT 1
                  )
                  LEFT JOIN plans_abonnement p ON p.id = a.plan_id
@@ -28,6 +28,55 @@ class Ecole
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (\Throwable $e) {
             return [];
+        }
+    }
+
+    public static function hasPlatformAccess(int $ecoleId): bool
+    {
+        try {
+            $db = Database::getConnection();
+            $stmt = $db->prepare(
+                "SELECT 1
+                 FROM ecoles e
+                 WHERE e.id = :ecole_id
+                   AND e.statut_systeme = 'Actif'
+                   AND EXISTS (
+                       SELECT 1
+                       FROM abonnements_ecoles a
+                       WHERE a.ecole_id = e.id
+                         AND a.statut_abonnement = 'Actif'
+                         AND a.date_debut <= NOW()
+                         AND a.date_fin >= CURRENT_DATE
+                   )
+                 LIMIT 1"
+            );
+            $stmt->execute([':ecole_id' => $ecoleId]);
+
+            return (bool) $stmt->fetchColumn();
+        } catch (\Throwable $e) {
+            error_log('Ecole::hasPlatformAccess failed: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    public static function getLatestSubscription(int $ecoleId): ?array
+    {
+        try {
+            $db = Database::getConnection();
+            $stmt = $db->prepare(
+                'SELECT a.*, p.nom_plan
+                 FROM abonnements_ecoles a
+                 LEFT JOIN plans_abonnement p ON p.id = a.plan_id
+                 WHERE a.ecole_id = :ecole_id
+                 ORDER BY a.date_debut DESC, a.id DESC
+                 LIMIT 1'
+            );
+            $stmt->execute([':ecole_id' => $ecoleId]);
+
+            return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        } catch (\Throwable $e) {
+            error_log('Ecole::getLatestSubscription failed: ' . $e->getMessage());
+            return null;
         }
     }
 

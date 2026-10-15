@@ -94,6 +94,31 @@ class Auth
             header('Location: ' . BASE_URL . '/Ecole/landing');
             exit;
         }
+
+        $user = self::user();
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        if (
+            ($user['role'] ?? '') === 'super_admin'
+            || $ecoleId <= 0
+            || self::isSubscriptionAccessRoute()
+            || \App\Models\Ecole::hasPlatformAccess($ecoleId)
+        ) {
+            return;
+        }
+
+        header('Location: ' . BASE_URL . '/ecoles/subscriptionRequired');
+        exit;
+    }
+
+    private static function isSubscriptionAccessRoute(): bool
+    {
+        $uriPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
+        $basePath = parse_url(BASE_URL, PHP_URL_PATH) ?: '';
+        if ($basePath !== '' && strpos($uriPath, $basePath) === 0) {
+            $uriPath = substr($uriPath, strlen($basePath));
+        }
+
+        return in_array($uriPath, ['/logout', '/profile', '/ecoles/subscriptionRequired'], true);
     }
 
     public static function requireRoles(array $roles): void
