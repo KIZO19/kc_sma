@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Core\Auth;
 use App\Core\Controller;
 use App\Core\Database;
+use App\Models\AdministrationAutorisation;
 use App\Models\Ecole;
 use App\Models\User;
 use PDO;
@@ -20,8 +21,39 @@ class DashboardController extends Controller
         $user = Auth::refresh() ?: $user;
 
         $role = $user['role'] ?? 'default';
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            if ($role !== 'ecole_admin') {
+                $this->redirect('/error/accessDenied');
+            }
+
+            $moduleRole = (string) ($_POST['role'] ?? '');
+            $module = (string) ($_POST['module'] ?? '');
+            $enabled = isset($_POST['enabled']) && (string) $_POST['enabled'] === '1';
+            if (
+                ($_POST['admin_permission'] ?? '') !== 'module'
+                || !AdministrationAutorisation::setModuleAccess(
+                    (int) ($user['ecole_id'] ?? 0),
+                    $moduleRole,
+                    $module,
+                    $enabled,
+                    (int) ($user['id'] ?? 0)
+                )
+            ) {
+                $_SESSION['dashboard_error'] = 'L’autorisation sélectionnée est invalide.';
+            } else {
+                $_SESSION['dashboard_success'] = 'Autorisation administrative mise à jour.';
+            }
+            $this->redirect('/dashboard');
+        }
+
         $modules = $this->getModulesForRole($role);
         $dashboardData = $this->buildDashboardData($user, $role);
+        $adminRoleList = $role === 'ecole_admin' ? AdministrationAutorisation::allRoles() : [];
+        $adminModules = $role === 'ecole_admin' ? AdministrationAutorisation::allModules() : [];
+        $adminRoleModules = $role === 'ecole_admin' ? AdministrationAutorisation::getRoleModules() : [];
+        $adminMatrix = $role === 'ecole_admin'
+            ? AdministrationAutorisation::getAccessMatrix((int) ($user['ecole_id'] ?? 0))
+            : [];
 
         $this->view('dashboard/index', [
             'title' => APP_NAME,
@@ -30,6 +62,10 @@ class DashboardController extends Controller
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $modules,
             'dashboardData' => $dashboardData,
+            'adminRoleList' => $adminRoleList,
+            'adminModules' => $adminModules,
+            'adminRoleModules' => $adminRoleModules,
+            'adminMatrix' => $adminMatrix,
         ]);
     }
 

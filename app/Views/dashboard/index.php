@@ -277,11 +277,75 @@ require __DIR__ . '/../partials/app_header.php';
                     <div class="col-md-6">
                       <a href="<?= BASE_URL ?>/paiements/gestionAutorisations" class="btn btn-outline-success w-100 h-100 p-3">
                         <i class="bi bi-shield-check fs-3 d-block mb-2"></i>
-                        <strong>Accès paiements</strong>
+                        <strong>Autorisations de paiement</strong>
                       </a>
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <?php if (!empty($_SESSION['dashboard_success'])): ?>
+            <div class="alert alert-success alert-dismissible">
+              <?= htmlspecialchars($_SESSION['dashboard_success']) ?>
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
+            </div>
+            <?php unset($_SESSION['dashboard_success']); ?>
+          <?php endif; ?>
+          <?php if (!empty($_SESSION['dashboard_error'])): ?>
+            <div class="alert alert-danger alert-dismissible">
+              <?= htmlspecialchars($_SESSION['dashboard_error']) ?>
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
+            </div>
+            <?php unset($_SESSION['dashboard_error']); ?>
+          <?php endif; ?>
+
+          <div class="card card-outline card-primary mt-3">
+            <div class="card-header">
+              <h5 class="card-title mb-1">Actions de l’administration</h5>
+              <p class="text-muted small mb-0">Définissez les rôles autorisés à accéder aux modules d’inscription et de notes.</p>
+            </div>
+            <div class="card-body">
+              <div class="table-responsive">
+                <table class="table table-bordered table-striped align-middle mb-0">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Rôle</th>
+                      <?php foreach (($adminModules ?? []) as $moduleLabel): ?>
+                        <th class="text-center"><?= htmlspecialchars($moduleLabel) ?></th>
+                      <?php endforeach; ?>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <?php foreach (($adminRoleList ?? []) as $roleKey => $roleLabel): ?>
+                      <tr>
+                        <th scope="row"><?= htmlspecialchars($roleLabel) ?></th>
+                        <?php foreach (($adminModules ?? []) as $moduleKey => $moduleLabel): ?>
+                          <?php $roleCanUseModule = in_array($moduleKey, $adminRoleModules[$roleKey] ?? [], true); ?>
+                          <td class="text-center">
+                            <?php if ($roleCanUseModule): ?>
+                              <?php $allowed = $adminMatrix[$roleKey][$moduleKey] ?? true; ?>
+                              <form method="post" action="<?= BASE_URL ?>/dashboard">
+                                <input type="hidden" name="admin_permission" value="module">
+                                <input type="hidden" name="role" value="<?= htmlspecialchars($roleKey) ?>">
+                                <input type="hidden" name="module" value="<?= htmlspecialchars($moduleKey) ?>">
+                                <input type="hidden" name="enabled" value="0">
+                                <div class="form-check form-switch d-inline-block">
+                                  <input class="form-check-input" type="checkbox" name="enabled" value="1" role="switch"
+                                    aria-label="<?= htmlspecialchars($moduleLabel . ' pour ' . $roleLabel) ?>"
+                                    <?= $allowed ? 'checked' : '' ?> onchange="this.form.submit()">
+                                </div>
+                              </form>
+                            <?php else: ?>
+                              <span class="text-muted" title="Ce rôle n’a pas accès à ce module">—</span>
+                            <?php endif; ?>
+                          </td>
+                        <?php endforeach; ?>
+                      </tr>
+                    <?php endforeach; ?>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>

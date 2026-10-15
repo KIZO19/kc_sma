@@ -12,7 +12,6 @@ use App\Models\Classe;
 use App\Models\User;
 use App\Models\Eleve as EleveModel;
 use App\Models\PaiementAutorisation;
-use App\Models\AdministrationAutorisation;
 use App\Services\PaymentParentNotifier;
 
 class PaiementsController extends Controller
@@ -919,13 +918,6 @@ class PaiementsController extends Controller
 
             if ($ecoleId <= 0) {
                 $_SESSION['paiements_error'] = 'Sélectionnez une école avant de modifier les autorisations.';
-            } elseif ($permissionType === 'module') {
-                $module = (string) ($_POST['module'] ?? '');
-                if (!AdministrationAutorisation::setModuleAccess($ecoleId, $role, $module, $enabled, $grantedBy)) {
-                    $_SESSION['paiements_error'] = 'Le rôle ou le module sélectionné est invalide.';
-                } else {
-                    $_SESSION['paiements_success'] = 'Autorisation du module mise à jour.';
-                }
             } elseif ($permissionType === 'fee') {
                 $fraisId = (int) ($_POST['frais_id'] ?? 0);
                 if (
@@ -946,10 +938,6 @@ class PaiementsController extends Controller
         $fees = $ecoleId > 0 ? FraisScolaire::getAllBySchool($ecoleId) : [];
         $matrix = $ecoleId > 0 ? PaiementAutorisation::getRoleAccessMatrix($ecoleId) : [];
         $roleList = PaiementAutorisation::allRoles();
-        $adminRoleList = AdministrationAutorisation::allRoles();
-        $adminModules = AdministrationAutorisation::allModules();
-        $adminRoleModules = AdministrationAutorisation::getRoleModules();
-        $adminMatrix = $ecoleId > 0 ? AdministrationAutorisation::getAccessMatrix($ecoleId) : [];
         $this->view('paiements/gestion_autorisations', [
             'title' => APP_NAME . ' - Autorisations paiements',
             'user' => $user,
@@ -959,10 +947,7 @@ class PaiementsController extends Controller
             'fees' => $fees,
             'roleList' => $roleList,
             'matrix' => $matrix,
-            'adminRoleList' => $adminRoleList,
-            'adminModules' => $adminModules,
-            'adminRoleModules' => $adminRoleModules,
-            'adminMatrix' => $adminMatrix,
+            'authorizationSchoolId' => $ecoleId,
         ]);
     }
 

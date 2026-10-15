@@ -7,6 +7,8 @@ use PDO;
 
 class AdministrationAutorisation
 {
+    private static bool $tableEnsured = false;
+
     private const MODULES = [
         'inscriptions' => 'Inscriptions',
         'notes' => 'Notes des élèves',
@@ -25,6 +27,10 @@ class AdministrationAutorisation
 
     public static function ensureTable(): void
     {
+        if (self::$tableEnsured) {
+            return;
+        }
+
         Database::getConnection()->exec(
             'CREATE TABLE IF NOT EXISTS administration_autorisations (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -38,6 +44,7 @@ class AdministrationAutorisation
                 KEY idx_administration_autorisations_ecole_role (ecole_id, role)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
         );
+        self::$tableEnsured = true;
     }
 
     public static function allModules(): array
