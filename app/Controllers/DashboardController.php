@@ -99,11 +99,6 @@ class DashboardController extends Controller
     private function getSchoolManagementData(): array
     {
         $schools = Ecole::getAll();
-        $statusCounts = [
-            'Actif' => 0,
-            'En_Attente' => 0,
-            'Suspendu' => 0,
-        ];
         $openAccess = 0;
         $renewalSoon = 0;
         $today = new \DateTimeImmutable('today');
@@ -111,10 +106,6 @@ class DashboardController extends Controller
 
         foreach ($schools as $school) {
             $status = (string) ($school['statut_systeme'] ?? '');
-            if (array_key_exists($status, $statusCounts)) {
-                $statusCounts[$status]++;
-            }
-
             $subscriptionStart = !empty($school['date_debut'])
                 ? strtotime((string) $school['date_debut'])
                 : false;
@@ -141,7 +132,6 @@ class DashboardController extends Controller
                 ['title' => 'Accès ouverts', 'value' => $openAccess, 'icon' => 'bi-check-circle', 'tone' => 'success', 'hint' => 'Abonnement valide et école active'],
                 ['title' => 'Renouvellements proches', 'value' => $renewalSoon, 'icon' => 'bi-hourglass-split', 'tone' => 'warning', 'hint' => 'Échéance dans les 30 jours'],
                 ['title' => 'Accès fermés', 'value' => max(0, count($schools) - $openAccess), 'icon' => 'bi-lock', 'tone' => 'danger', 'hint' => 'Abonnement ou statut à vérifier'],
-                ['title' => 'Demandes en attente', 'value' => $statusCounts['En_Attente'], 'icon' => 'bi-hourglass-split', 'tone' => 'warning', 'hint' => 'À examiner'],
             ],
             'recentSchools' => array_slice($schools, 0, 8),
         ];

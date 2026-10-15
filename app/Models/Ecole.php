@@ -12,7 +12,12 @@ class Ecole
         try {
             $db = Database::getConnection();
             $stmt = $db->prepare(
-                'SELECT e.*, a.plan_id, p.nom_plan AS plan_name, p.prix AS plan_prix, a.date_debut, a.date_fin, a.statut_abonnement
+                "SELECT e.*, a.plan_id, CASE
+                         WHEN a.id IS NULL THEN NULL
+                         WHEN a.plan_id IS NULL THEN 'Essai gratuit'
+                         ELSE p.nom_plan
+                     END AS plan_name,
+                     p.prix AS plan_prix, a.date_debut, a.date_fin, a.statut_abonnement
                  FROM ecoles e
                  LEFT JOIN abonnements_ecoles a ON a.id = (
                     SELECT id FROM abonnements_ecoles
@@ -21,7 +26,7 @@ class Ecole
                     LIMIT 1
                  )
                  LEFT JOIN plans_abonnement p ON p.id = a.plan_id
-                 ORDER BY e.date_creation_compte DESC'
+                 ORDER BY e.date_creation_compte DESC"
             );
             $stmt->execute();
 
@@ -64,12 +69,12 @@ class Ecole
         try {
             $db = Database::getConnection();
             $stmt = $db->prepare(
-                'SELECT a.*, p.nom_plan
+                "SELECT a.*, COALESCE(p.nom_plan, 'Essai gratuit') AS nom_plan
                  FROM abonnements_ecoles a
                  LEFT JOIN plans_abonnement p ON p.id = a.plan_id
                  WHERE a.ecole_id = :ecole_id
                  ORDER BY a.date_debut DESC, a.id DESC
-                 LIMIT 1'
+                 LIMIT 1"
             );
             $stmt->execute([':ecole_id' => $ecoleId]);
 
@@ -195,6 +200,36 @@ class Ecole
         }
     }
 
+    public static function savePlan(array $data, ?int $planId = null): bool
+    {
+        try {
+            $db = Database::getConnection();
+            if ($planId !== null) {
+                $stmt = $db->prepare(
+                    'UPDATE plans_abonnement
+                     SET nom_plan = :nom_plan, duree_mois = :duree_mois, prix = :prix, description = :description
+                     WHERE id = :id'
+                );
+                $stmt->bindValue(':id', $planId, PDO::PARAM_INT);
+            } else {
+                $stmt = $db->prepare(
+                    'INSERT INTO plans_abonnement (nom_plan, duree_mois, prix, description)
+                     VALUES (:nom_plan, :duree_mois, :prix, :description)'
+                );
+            }
+            $stmt->bindValue(':nom_plan', $data['nom_plan'], PDO::PARAM_STR);
+            $stmt->bindValue(':duree_mois', (int) $data['duree_mois'], PDO::PARAM_INT);
+            $stmt->bindValue(':prix', (float) $data['prix']);
+            $description = $data['description'] ?? null;
+            $stmt->bindValue(':description', $description, $description === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+
+            return $stmt->execute();
+        } catch (\Throwable $e) {
+            error_log('Ecole::savePlan failed: ' . $e->getMessage());
+            return false;
+        }
+    }
+
     public static function getSchoolPopulationCounts(): array
     {
         try {
@@ -266,7 +301,7 @@ class Ecole
         }
     }
 
-    public static function addSubscription(int $ecoleId, int $planId, string $dateDebut, string $dateFin, float $montant): bool
+    public static function addSubscription(int $ecoleId, ?int $planId, string $dateDebut, string $dateFin, float $montant): bool
     {
         try {
             $db = Database::getConnection();
@@ -275,15 +310,16 @@ class Ecole
                  VALUES (:ecole_id, :plan_id, :date_debut, :date_fin, :statut_abonnement, :montant_paye)'
             );
 
-            return $stmt->execute([
-                ':ecole_id' => $ecoleId,
-                ':plan_id' => $planId,
-                ':date_debut' => $dateDebut,
-                ':date_fin' => $dateFin,
-                ':statut_abonnement' => 'Actif',
-                ':montant_paye' => $montant,
-            ]);
+            $stmt->bindValue(':ecole_id', $ecoleId, PDO::PARAM_INT);
+            $stmt->bindValue(':plan_id', $planId, $planId === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+            $stmt->bindValue(':date_debut', $dateDebut, PDO::PARAM_STR);
+            $stmt->bindValue(':date_fin', $dateFin, PDO::PARAM_STR);
+            $stmt->bindValue(':statut_abonnement', 'Actif', PDO::PARAM_STR);
+            $stmt->bindValue(':montant_paye', $montant);
+
+            return $stmt->execute();
         } catch (\Throwable $e) {
+            error_log('Ecole::addSubscription failed: ' . $e->getMessage());
             return false;
         }
     }

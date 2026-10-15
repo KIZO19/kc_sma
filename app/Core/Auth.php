@@ -96,12 +96,20 @@ class Auth
         }
 
         $user = self::user();
+        if (($user['role'] ?? '') === 'super_admin' && !self::isSuperAdminRoute()) {
+            header('Location: ' . BASE_URL . '/error/accessDenied');
+            exit;
+        }
+
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        $isPendingUnassignedAgent = ($user['role'] ?? '') === 'agent_ecole'
+            && ($user['statut'] ?? '') === 'Inactif'
+            && $ecoleId <= 0;
         if (
             ($user['role'] ?? '') === 'super_admin'
-            || $ecoleId <= 0
+            || $isPendingUnassignedAgent
             || self::isSubscriptionAccessRoute()
-            || \App\Models\Ecole::hasPlatformAccess($ecoleId)
+            || ($ecoleId > 0 && \App\Models\Ecole::hasPlatformAccess($ecoleId))
         ) {
             return;
         }
@@ -112,13 +120,37 @@ class Auth
 
     private static function isSubscriptionAccessRoute(): bool
     {
+        return in_array(self::currentRoutePath(), ['/logout', '/profile', '/ecoles/subscriptionRequired'], true);
+    }
+
+    private static function isSuperAdminRoute(): bool
+    {
+        return in_array(self::currentRoutePath(), [
+            '/dashboard',
+            '/ecoles',
+            '/ecoles/create',
+            '/ecoles/edit',
+            '/ecoles/requests',
+            '/ecoles/delete',
+            '/ecoles/confirm',
+            '/ecoles/updateStatus',
+            '/ecoles/plans',
+            '/ecoles/addSubscription',
+            '/error/accessDenied',
+            '/logout',
+            '/profile',
+        ], true);
+    }
+
+    private static function currentRoutePath(): string
+    {
         $uriPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
         $basePath = parse_url(BASE_URL, PHP_URL_PATH) ?: '';
         if ($basePath !== '' && strpos($uriPath, $basePath) === 0) {
             $uriPath = substr($uriPath, strlen($basePath));
         }
 
-        return in_array($uriPath, ['/logout', '/profile', '/ecoles/subscriptionRequired'], true);
+        return rtrim($uriPath, '/') ?: '/';
     }
 
     public static function requireRoles(array $roles): void
@@ -130,6 +162,10 @@ class Auth
         }
 
         if (($user['role'] ?? '') === 'super_admin') {
+            if (!self::isSuperAdminRoute()) {
+                header('Location: ' . BASE_URL . '/error/accessDenied');
+                exit;
+            }
             return;
         }
 

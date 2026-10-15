@@ -220,7 +220,7 @@ require __DIR__ . '/../partials/app_header.php';
                         <thead>
                           <tr>
                             <th class="ps-3">Établissement</th>
-                            <th>Matricule</th>
+                            <th>Abonnement</th>
                             <th>Statut</th>
                             <th>Inscription</th>
                             <th class="text-end pe-3">Action</th>
@@ -230,24 +230,55 @@ require __DIR__ . '/../partials/app_header.php';
                           <?php foreach ($dashboardData['schoolManagement']['recentSchools'] ?? [] as $school): ?>
                             <?php
                               $schoolStatus = (string) ($school['statut_systeme'] ?? '');
+                              $subscriptionStatus = (string) ($school['statut_abonnement'] ?? '');
+                              $subscriptionStart = !empty($school['date_debut']) ? strtotime((string) $school['date_debut']) : false;
+                              $subscriptionEnd = !empty($school['date_fin']) ? strtotime((string) $school['date_fin']) : false;
+                              if (
+                                  $subscriptionStatus === 'Actif'
+                                  && $subscriptionStart !== false
+                                  && $subscriptionStart > time()
+                              ) {
+                                  $subscriptionStatus = 'À venir';
+                              } elseif (
+                                  $subscriptionStatus === 'Actif'
+                                  && $subscriptionEnd !== false
+                                  && date('Y-m-d', $subscriptionEnd) < date('Y-m-d')
+                              ) {
+                                  $subscriptionStatus = 'Expiré';
+                              }
                               $statusClass = match ($schoolStatus) {
                                   'Actif' => 'success',
                                   'Suspendu' => 'danger',
                                   default => 'warning',
                               };
                               $statusLabel = $schoolStatus === 'En_Attente' ? 'En attente' : ($schoolStatus !== '' ? $schoolStatus : 'Inconnu');
+                              $subscriptionClass = match ($subscriptionStatus) {
+                                  'Actif' => 'success',
+                                  'Expiré', 'Expire', 'À venir' => 'warning',
+                                  'Resilie' => 'danger',
+                                  default => 'secondary',
+                              };
                             ?>
                             <tr>
                               <td class="ps-3">
                                 <div class="fw-semibold"><?= htmlspecialchars($school['nom_etablissement'] ?? 'École sans nom') ?></div>
                                 <small class="text-muted"><?= htmlspecialchars($school['email_officiel'] ?? 'Aucun email renseigné') ?></small>
                               </td>
-                              <td><?= htmlspecialchars($school['matricule'] ?? '—') ?></td>
+                              <td>
+                                <span class="badge text-bg-<?= $subscriptionClass ?>"><?= htmlspecialchars($subscriptionStatus !== '' ? $subscriptionStatus : 'Aucun') ?></span>
+                                <div class="small text-muted mt-1"><?= htmlspecialchars($school['plan_name'] ?? 'Aucun plan') ?></div>
+                                <?php if (!empty($school['date_fin'])): ?>
+                                  <div class="small text-muted">Fin : <?= htmlspecialchars(formatDate($school['date_fin'])) ?></div>
+                                <?php endif; ?>
+                              </td>
                               <td><span class="badge text-bg-<?= $statusClass ?>"><?= htmlspecialchars($statusLabel) ?></span></td>
                               <td><?= htmlspecialchars(formatDate($school['date_creation_compte'] ?? null)) ?></td>
                               <td class="text-end pe-3">
                                 <a href="<?= BASE_URL ?>/ecoles/edit?id=<?= (int) ($school['id'] ?? 0) ?>" class="btn btn-sm btn-outline-secondary" aria-label="Modifier <?= htmlspecialchars($school['nom_etablissement'] ?? 'cette école') ?>" title="Modifier">
                                   <i class="bi bi-pencil" aria-hidden="true"></i>
+                                </a>
+                                <a href="<?= BASE_URL ?>/ecoles/addSubscription?ecole_id=<?= (int) ($school['id'] ?? 0) ?>" class="btn btn-sm btn-outline-primary" aria-label="Gérer l’abonnement de <?= htmlspecialchars($school['nom_etablissement'] ?? 'cette école') ?>" title="Gérer l’abonnement">
+                                  <i class="bi bi-credit-card" aria-hidden="true"></i>
                                 </a>
                               </td>
                             </tr>
@@ -276,6 +307,14 @@ require __DIR__ . '/../partials/app_header.php';
                     <a class="school-action" href="<?= BASE_URL ?>/ecoles">
                       <i class="bi bi-buildings" aria-hidden="true"></i>
                       <span><strong class="d-block">Gérer les écoles</strong><small class="text-muted">Consulter les statuts et abonnements</small></span>
+                    </a>
+                    <a class="school-action" href="<?= BASE_URL ?>/ecoles/addSubscription">
+                      <i class="bi bi-credit-card" aria-hidden="true"></i>
+                      <span><strong class="d-block">Gérer les abonnements</strong><small class="text-muted">Accorder ou renouveler un accès</small></span>
+                    </a>
+                    <a class="school-action" href="<?= BASE_URL ?>/ecoles/plans">
+                      <i class="bi bi-tags" aria-hidden="true"></i>
+                      <span><strong class="d-block">Définir les tarifs</strong><small class="text-muted">Gérer les prix et la durée des plans</small></span>
                     </a>
                     <a class="school-action" href="<?= BASE_URL ?>/ecoles/requests">
                       <i class="bi bi-inbox" aria-hidden="true"></i>

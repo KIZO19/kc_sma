@@ -27,6 +27,10 @@ require __DIR__ . '/../partials/app_header.php'; ?>
             <div class="alert alert-success"><?= htmlspecialchars($_SESSION['ecoles_success']) ?></div>
             <?php unset($_SESSION['ecoles_success']); ?>
           <?php endif; ?>
+          <?php if (!empty($_SESSION['ecoles_subscription_success'])): ?>
+            <div class="alert alert-success"><?= htmlspecialchars($_SESSION['ecoles_subscription_success']) ?></div>
+            <?php unset($_SESSION['ecoles_subscription_success']); ?>
+          <?php endif; ?>
           <div class="row mb-2">
             <div class="col-sm-6">
               <h1 class="mb-0">Gestion des écoles</h1>
@@ -46,9 +50,16 @@ require __DIR__ . '/../partials/app_header.php'; ?>
           <div class="row mb-4">
             <div class="col-12">
               <p class="text-muted">Super-admin : validez les comptes écoles et gérez les abonnements.</p>
+              <?php if (($role ?? '') === 'super_admin'): ?>
+              <div class="d-flex flex-wrap gap-2">
+                <a href="<?= BASE_URL ?>/ecoles/plans" class="btn btn-outline-primary"><i class="bi bi-tags me-1" aria-hidden="true"></i>Tarifs des abonnements</a>
+                <a href="<?= BASE_URL ?>/ecoles/addSubscription" class="btn btn-primary"><i class="bi bi-credit-card me-1" aria-hidden="true"></i>Attribuer un abonnement</a>
+              </div>
+              <?php endif; ?>
             </div>
           </div>
 
+          <?php if (($role ?? '') === 'super_admin'): ?>
           <div class="row gy-4">
             <div class="col-12">
               <div class="card mb-4">
@@ -76,15 +87,14 @@ require __DIR__ . '/../partials/app_header.php'; ?>
                   <?php endif; ?>
                 </div>
               </div>
-              <?php if (($role ?? '') === 'super_admin'): ?>
-                <div class="card mb-4">
-                  <div class="card-body">
-                    <p class="text-muted mb-0">Utilisez les pages dédiées de la sidebar pour créer une école ou ajouter un abonnement.</p>
-                  </div>
+              <div class="card mb-4">
+                <div class="card-body">
+                  <p class="text-muted mb-0">Utilisez les pages dédiées pour créer une école, définir ses tarifs ou lui attribuer un abonnement.</p>
                 </div>
-              <?php endif; ?>
+              </div>
             </div>
           </div>
+          <?php endif; ?>
         </div>
       </section>
 
@@ -127,22 +137,40 @@ require __DIR__ . '/../partials/app_header.php'; ?>
                           <?= htmlspecialchars($school['statut_systeme']) ?>
                         </span>
                       </td>
-                      <td><?= htmlspecialchars($school['statut_abonnement'] ?? 'Aucun') ?></td>
+                      <?php
+                        $subscriptionStatus = (string) ($school['statut_abonnement'] ?? '');
+                        $subscriptionStart = !empty($school['date_debut']) ? strtotime((string) $school['date_debut']) : false;
+                        $subscriptionEnd = !empty($school['date_fin']) ? strtotime((string) $school['date_fin']) : false;
+                        if ($subscriptionStatus === 'Actif' && $subscriptionStart !== false && $subscriptionStart > time()) {
+                            $subscriptionStatus = 'À venir';
+                        } elseif ($subscriptionStatus === 'Actif' && $subscriptionEnd !== false && date('Y-m-d', $subscriptionEnd) < date('Y-m-d')) {
+                            $subscriptionStatus = 'Expiré';
+                        }
+                        $subscriptionBadge = match ($subscriptionStatus) {
+                            'Actif' => 'success',
+                            'À venir', 'Expire', 'Expiré' => 'warning',
+                            'Resilie' => 'danger',
+                            default => 'secondary',
+                        };
+                      ?>
+                      <td><span class="badge bg-<?= $subscriptionBadge ?>"><?= htmlspecialchars($subscriptionStatus !== '' ? $subscriptionStatus : 'Aucun') ?></span></td>
                       <td><?= htmlspecialchars($school['plan_name'] ?? '-') ?></td>
                       <td><?= htmlspecialchars(formatDate($school['date_fin'] ?? null)) ?></td>
                       <td>
                         <?php if (($role ?? '') === 'super_admin'): ?>
                           <a href="<?= BASE_URL ?>/ecoles/edit?id=<?= (int) $school['id'] ?>" class="btn btn-sm btn-outline-secondary me-2">Modifier</a>
                         <?php endif; ?>
-                        <form method="post" action="<?= BASE_URL ?>/ecoles/updateStatus" class="d-inline">
-                          <input type="hidden" name="ecole_id" value="<?= (int) $school['id'] ?>">
-                          <select name="statut_systeme" class="form-select form-select-sm d-inline w-auto me-2">
-                            <option value="Actif" <?= $school['statut_systeme'] === 'Actif' ? 'selected' : '' ?>>Actif</option>
-                            <option value="En_Attente" <?= $school['statut_systeme'] === 'En_Attente' ? 'selected' : '' ?>>En attente</option>
-                            <option value="Suspendu" <?= $school['statut_systeme'] === 'Suspendu' ? 'selected' : '' ?>>Suspendu</option>
-                          </select>
-                          <button type="submit" class="btn btn-sm btn-outline-primary">Valider</button>
-                        </form>
+                        <?php if (($role ?? '') === 'super_admin'): ?>
+                          <form method="post" action="<?= BASE_URL ?>/ecoles/updateStatus" class="d-inline">
+                            <input type="hidden" name="ecole_id" value="<?= (int) $school['id'] ?>">
+                            <select name="statut_systeme" class="form-select form-select-sm d-inline w-auto me-2">
+                              <option value="Actif" <?= $school['statut_systeme'] === 'Actif' ? 'selected' : '' ?>>Actif</option>
+                              <option value="En_Attente" <?= $school['statut_systeme'] === 'En_Attente' ? 'selected' : '' ?>>En attente</option>
+                              <option value="Suspendu" <?= $school['statut_systeme'] === 'Suspendu' ? 'selected' : '' ?>>Suspendu</option>
+                            </select>
+                            <button type="submit" class="btn btn-sm btn-outline-primary">Valider</button>
+                          </form>
+                        <?php endif; ?>
                       </td>
                     </tr>
                   <?php endforeach; ?>

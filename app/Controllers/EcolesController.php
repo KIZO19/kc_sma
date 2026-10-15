@@ -28,9 +28,9 @@ class EcolesController extends Controller
         } else {
             $schools = Ecole::getAll();
         }
-        $pending = Ecole::getPendingSchools(6);
-        $plans = Ecole::getPlans();
-        $availableAdmins = \App\Models\User::getAvailableEcoleAdmins();
+        $pending = $role === 'super_admin' ? Ecole::getPendingSchools(6) : [];
+        $plans = $role === 'super_admin' ? Ecole::getPlans() : [];
+        $availableAdmins = $role === 'super_admin' ? User::getAvailableEcoleAdmins() : [];
 
         $this->view('dashboard/ecoles', [
             'title' => APP_NAME,
@@ -465,6 +465,69 @@ class EcolesController extends Controller
         ]);
     }
 
+    public function plans(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin']);
+
+        $user = Auth::refresh() ?: Auth::user();
+        $role = $user['role'] ?? 'default';
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $planId = (int) ($_POST['plan_id'] ?? 0);
+            $name = trim((string) ($_POST['nom_plan'] ?? ''));
+            $durationInput = trim((string) ($_POST['duree_mois'] ?? ''));
+            $duration = filter_var($durationInput, FILTER_VALIDATE_INT);
+            $priceInput = trim((string) ($_POST['prix'] ?? ''));
+            $description = trim((string) ($_POST['description'] ?? ''));
+            $errors = [];
+
+            if ($name === '' || mb_strlen($name, 'UTF-8') > 50) {
+                $errors[] = 'Le nom du tarif est requis et ne peut pas dépasser 50 caractères.';
+            }
+            if ($duration === false || $duration <= 0 || $duration > 1200) {
+                $errors[] = 'La durée doit être comprise entre 1 et 1 200 mois.';
+            }
+            if ($priceInput === '' || !is_numeric($priceInput) || (float) $priceInput < 0) {
+                $errors[] = 'Le tarif doit être un montant positif ou nul.';
+            }
+
+            $existingPlanIds = array_map(static fn (array $plan): int => (int) ($plan['id'] ?? 0), Ecole::getPlans());
+            if ($planId > 0 && !in_array($planId, $existingPlanIds, true)) {
+                $errors[] = 'Le tarif à modifier est introuvable.';
+            }
+
+            if (empty($errors)) {
+                $saved = Ecole::savePlan([
+                    'nom_plan' => $name,
+                    'duree_mois' => $duration,
+                    'prix' => (float) $priceInput,
+                    'description' => $description !== '' ? $description : null,
+                ], $planId > 0 ? $planId : null);
+                if ($saved) {
+                    $_SESSION['ecoles_plans_success'] = $planId > 0
+                        ? 'Tarif mis à jour. Les abonnements existants conservent leur montant payé.'
+                        : 'Nouveau tarif créé.';
+                } else {
+                    $_SESSION['ecoles_plans_errors'] = ['Impossible d’enregistrer ce tarif. Vérifiez les données et réessayez.'];
+                }
+            } else {
+                $_SESSION['ecoles_plans_errors'] = $errors;
+            }
+
+            $this->redirect('/ecoles/plans');
+            return;
+        }
+
+        $this->view('ecoles/plans', [
+            'title' => APP_NAME . ' - Tarifs des abonnements',
+            'user' => $user,
+            'role' => $role,
+            'roleLabel' => User::getRoleLabel($role),
+            'modules' => $this->getModulesForRole($role),
+            'plans' => Ecole::getPlans(),
+        ]);
+    }
+
     public function addSubscription(): void
     {
         Auth::requireAuth();
@@ -473,37 +536,66 @@ class EcolesController extends Controller
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors = [];
             $ecoleId = (int) ($_POST['ecole_id'] ?? 0);
-            $planId = (int) ($_POST['plan_id'] ?? 0);
-            $montantInput = trim((string) ($_POST['montant_paye'] ?? ''));
+            $subscriptionType = (string) ($_POST['type_abonnement'] ?? 'plan');
+            $isTrial = $subscriptionType === 'trial';
+            $planId = $isTrial ? null : (int) ($_POST['plan_id'] ?? 0);
             $dateDebut = trim($_POST['date_debut'] ?? '');
-            $dateFin = trim($_POST['date_fin'] ?? '');
+            $dateFin = '';
+            $amount = 0.0;
+            $durationDays = filter_var(trim((string) ($_POST['duree_essai_jours'] ?? '')), FILTER_VALIDATE_INT);
 
             if ($ecoleId <= 0 || !Ecole::findById($ecoleId)) {
                 $errors[] = 'Sélectionnez une école valide.';
             }
-            $plans = Ecole::getPlans();
-            $validPlanIds = array_map(static fn (array $plan): int => (int) $plan['id'], $plans);
-            if ($planId <= 0 || !in_array($planId, $validPlanIds, true)) {
-                $errors[] = 'Sélectionnez un plan valide.';
+            $selectedPlan = null;
+            if ($isTrial) {
+                if ($durationDays === false || $durationDays <= 0 || $durationDays > 3650) {
+                    $errors[] = 'La durée de l’essai doit être comprise entre 1 et 3 650 jours.';
+                }
+            } elseif ($subscriptionType === 'plan') {
+                foreach (Ecole::getPlans() as $plan) {
+                    if ((int) ($plan['id'] ?? 0) === $planId) {
+                        $selectedPlan = $plan;
+                        break;
+                    }
+                }
+                if ($planId <= 0 || $selectedPlan === null) {
+                    $errors[] = 'Sélectionnez un plan valide.';
+                } else {
+                    $amount = (float) $selectedPlan['prix'];
+                }
+            } else {
+                $errors[] = 'Sélectionnez un type d’abonnement valide.';
             }
-            if ($montantInput === '' || !is_numeric($montantInput) || (float) $montantInput < 0) {
-                $errors[] = 'Le montant payé doit être un nombre positif ou nul.';
-            }
+
             $startDate = \DateTimeImmutable::createFromFormat('!Y-m-d', $dateDebut);
-            $endDate = \DateTimeImmutable::createFromFormat('!Y-m-d', $dateFin);
-            if (
-                !$startDate
-                || !$endDate
-                || $startDate->format('Y-m-d') !== $dateDebut
-                || $endDate->format('Y-m-d') !== $dateFin
-                || $endDate < $startDate
-            ) {
-                $errors[] = 'La période de l’abonnement est invalide.';
+            if (!$startDate || $startDate->format('Y-m-d') !== $dateDebut) {
+                $errors[] = 'La date de début de l’abonnement est invalide.';
+            }
+            if ($startDate && $isTrial && $durationDays !== false && $durationDays > 0 && $durationDays <= 3650) {
+                $dateFin = $startDate->modify('+' . ($durationDays - 1) . ' days')->format('Y-m-d');
+            } elseif ($selectedPlan !== null && $startDate) {
+                $durationMonths = (int) ($selectedPlan['duree_mois'] ?? 0);
+                if ($durationMonths <= 0) {
+                    $errors[] = 'La durée du tarif sélectionné est invalide.';
+                } else {
+                    $endMonth = $startDate->modify('first day of this month')->modify('+' . $durationMonths . ' months');
+                    $endDay = min(
+                        (int) $startDate->format('d'),
+                        (int) $endMonth->format('t')
+                    );
+                    $endDate = $endMonth
+                        ->setDate((int) $endMonth->format('Y'), (int) $endMonth->format('m'), $endDay)
+                        ->modify('-1 day');
+                    $dateFin = $endDate->format('Y-m-d');
+                }
             }
 
             if (empty($errors)) {
-                if (Ecole::addSubscription($ecoleId, $planId, $dateDebut, $dateFin, (float) $montantInput)) {
-                    $_SESSION['ecoles_subscription_success'] = 'Abonnement ajouté avec succès.';
+                if (Ecole::addSubscription($ecoleId, $planId, $dateDebut, $dateFin, $amount)) {
+                    $_SESSION['ecoles_subscription_success'] = $isTrial
+                        ? 'Période d’essai gratuite ajoutée avec succès.'
+                        : 'Abonnement ajouté avec succès.';
                     $this->redirect('/ecoles');
                     return;
                 }
@@ -520,6 +612,7 @@ class EcolesController extends Controller
         $modules = $this->getModulesForRole($role);
         $schools = Ecole::getAll();
         $plans = Ecole::getPlans();
+        $selectedSchoolId = (int) ($_GET['ecole_id'] ?? 0);
 
         $this->view('ecoles/add_subscription', [
             'title' => APP_NAME . ' - Ajouter un abonnement',
@@ -529,6 +622,7 @@ class EcolesController extends Controller
             'modules' => $modules,
             'schools' => $schools,
             'plans' => $plans,
+            'selectedSchoolId' => $selectedSchoolId,
         ]);
     }
 }
