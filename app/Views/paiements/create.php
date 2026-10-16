@@ -4,39 +4,34 @@ $oldInput = $_SESSION['paiements_old'] ?? [];
 $errors = $_SESSION['paiements_errors'] ?? [];
 unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
 ?>
-<section class="content-header">
-  <div class="container-fluid">
-    <div class="row mb-2">
-      <div class="col-sm-6">
-        <h1>Enregistrer un paiement</h1>
-        <p class="text-muted"><?= htmlspecialchars(($eleve['nom'] ?? '') . ' ' . ($eleve['postnom'] ?? '') . ' ' . ($eleve['prenom'] ?? '')) ?></p>
+<div class="modal-backdrop fade show"></div>
+<div class="modal fade show d-block" id="paymentCreateModal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="paymentCreateModalLabel">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h1 class="modal-title fs-5" id="paymentCreateModalLabel">Enregistrer un paiement</h1>
+          <?php if (!empty($eleve)): ?>
+            <div class="text-muted small"><?= htmlspecialchars(trim(($eleve['nom'] ?? '') . ' ' . ($eleve['postnom'] ?? '') . ' ' . ($eleve['prenom'] ?? '')), ENT_QUOTES, 'UTF-8') ?></div>
+          <?php endif; ?>
+        </div>
+        <a href="<?= BASE_URL ?><?= !empty($eleve) ? '/eleves/show?id=' . (int) $eleve['id'] : '/paiements' ?>" class="btn-close" aria-label="Fermer"></a>
       </div>
-      <div class="col-sm-6">
-        <ol class="breadcrumb float-sm-end">
-          <li class="breadcrumb-item"><a href="<?= BASE_URL ?>/dashboard">Dashboard</a></li>
-          <li class="breadcrumb-item"><a href="<?= BASE_URL ?>/eleves">Élèves</a></li>
-          <li class="breadcrumb-item active">Enregistrer paiement</li>
-        </ol>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section class="content">
-  <div class="container-fluid">
-    <div class="row">
-      <div class="col-md-6">
+      <div class="modal-body">
+        <?php if (!empty($errors)): ?>
+          <div class="alert alert-danger alert-dismissible">
+            <ul class="mb-0">
+              <?php foreach ($errors as $error): ?>
+                <li><?= htmlspecialchars($error) ?></li>
+              <?php endforeach; ?>
+            </ul>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
+          </div>
+        <?php endif; ?>
+        <div class="container-fluid p-0">
+          <div class="row">
+            <div class="col-12">
             <div class="card card-outline card-primary">
-              <?php if (!empty($errors)): ?>
-                <div class="alert alert-danger alert-dismissible">
-                  <ul class="mb-0">
-                    <?php foreach ($errors as $error): ?>
-                      <li><?= htmlspecialchars($error) ?></li>
-                    <?php endforeach; ?>
-                  </ul>
-                  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
-                </div>
-              <?php endif; ?>
           <div class="card-header"><h3 class="card-title">Détails paiement</h3></div>
           <div class="card-body">
             <form method="post" action="<?= BASE_URL ?>/paiements/store">
@@ -51,15 +46,42 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
                     <?php foreach (($students ?? []) as $s): ?>
                       <?php $isSettled = !empty($s['is_settled']); ?>
                       <?php $fullName = trim((string) (($s['nom'] ?? '') . ' ' . ($s['postnom'] ?? '') . ' ' . ($s['prenom'] ?? ''))); ?>
-                      <?php $remaining = (float) ($s['remaining_debt'] ?? 0); ?>
+                      <?php
+                        $studentDebtLabel = [];
+                        foreach (($s['remaining_debt_by_currency'] ?? []) as $currency => $amount) {
+                            if ((float) $amount > 0) {
+                                $studentDebtLabel[] = number_format((float) $amount, 2, ',', ' ') . ' ' . $currency;
+                            }
+                        }
+                      ?>
                       <?php $selected = ((int) ($oldInput['eleve_id'] ?? 0) === (int) $s['id']) ? 'selected' : ''; ?>
-                      <option value="<?= (int) $s['id'] ?>" <?= $selected ?> data-settled="<?= $isSettled ? '1' : '0' ?>" data-remaining="<?= number_format($remaining, 2, '.', '') ?>" style="<?= $isSettled ? 'color:#6c757d;' : '' ?>">
-                        <?= htmlspecialchars($fullName, ENT_QUOTES, 'UTF-8') ?><?= $isSettled ? ' — Soldé' : ' — Reste: ' . number_format($remaining, 2) ?>
+                      <option value="<?= (int) $s['id'] ?>" <?= $selected ?> data-settled="<?= $isSettled ? '1' : '0' ?>" data-debt-by-currency="<?= htmlspecialchars(json_encode($s['remaining_debt_by_currency'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), ENT_QUOTES, 'UTF-8') ?>" style="<?= $isSettled ? 'color:#8a8f98;' : '' ?>">
+                        <?= htmlspecialchars($fullName, ENT_QUOTES, 'UTF-8') ?><?= $isSettled ? ' — Soldé' : ' — Reste: ' . htmlspecialchars(implode(' / ', $studentDebtLabel), ENT_QUOTES, 'UTF-8') ?>
                       </option>
                     <?php endforeach; ?>
                   </select>
+                  <div id="studentDebtStatus" class="form-text" aria-live="polite"></div>
                 </div>
               <?php endif; ?>
+
+              <div class="mb-3" id="studentDebtSummary" aria-live="polite" <?= empty($eleve) ? 'hidden' : '' ?>>
+                <div class="alert alert-light border py-2 mb-0">
+                  <strong>Dette restante par devise</strong>
+                  <ul id="studentDebtByCurrency" class="list-unstyled mb-0 mt-1">
+                    <?php if (!empty($eleve)): ?>
+                      <?php if (!empty($totalDebtByCurrency)): ?>
+                        <?php foreach ($totalDebtByCurrency as $currency => $amount): ?>
+                          <li><?= htmlspecialchars((string) $currency, ENT_QUOTES, 'UTF-8') ?> : <?= number_format((float) $amount, 2, ',', ' ') ?></li>
+                        <?php endforeach; ?>
+                      <?php else: ?>
+                        <li>Aucune dette restante.</li>
+                      <?php endif; ?>
+                    <?php else: ?>
+                      <li>Sélectionnez un élève pour afficher sa dette.</li>
+                    <?php endif; ?>
+                  </ul>
+                </div>
+              </div>
 
               <div class="mb-3">
                 <label class="form-label">Montant</label>
@@ -130,13 +152,17 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
         </div>
         <?php endif; ?>
 
+          </div>
+        </div>
       </div>
     </div>
   </div>
-</section>
+</div>
+</div>
 <?php require __DIR__ . '/../partials/app_footer.php'; ?>
 <script>
   document.addEventListener('DOMContentLoaded', function () {
+    document.body.classList.add('modal-open');
     const studentSelect = document.getElementById('studentSelect');
     if (!studentSelect) {
       return;
@@ -147,16 +173,44 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
       return;
     }
 
-    const selectedValue = studentSelect.value;
-    if (!selectedValue) {
-      studentSelect.value = '';
-      return;
+    const studentDebtStatus = document.getElementById('studentDebtStatus');
+    const studentDebtSummary = document.getElementById('studentDebtSummary');
+    const studentDebtByCurrency = document.getElementById('studentDebtByCurrency');
+    function updateStudentDebtAppearance() {
+      const selectedOption = studentSelect.selectedOptions[0];
+      const isSettled = selectedOption && selectedOption.dataset.settled === '1';
+      studentSelect.classList.toggle('text-muted', Boolean(isSettled));
+      if (studentDebtStatus) {
+        studentDebtStatus.textContent = isSettled ? 'Aucune dette restante pour cet élève.' : '';
+      }
+      if (studentDebtSummary && studentDebtByCurrency) {
+        if (!selectedOption || !selectedOption.value) {
+          studentDebtSummary.hidden = true;
+          return;
+        }
+        studentDebtSummary.hidden = false;
+        const balances = JSON.parse(selectedOption.dataset.debtByCurrency || '{}');
+        studentDebtByCurrency.replaceChildren();
+        const currencies = Object.entries(balances).filter(([, amount]) => Number(amount) > 0);
+        if (currencies.length === 0) {
+          const item = document.createElement('li');
+          item.textContent = 'Aucune dette restante.';
+          studentDebtByCurrency.appendChild(item);
+          return;
+        }
+        currencies.forEach(([currency, amount]) => {
+          const item = document.createElement('li');
+          const formattedAmount = new Intl.NumberFormat('fr-FR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          }).format(Number(amount));
+          item.textContent = `${currency} : ${formattedAmount}`;
+          studentDebtByCurrency.appendChild(item);
+        });
+      }
     }
-
-    const matchedOption = options.find((option) => String(option.value) === String(selectedValue));
-    if (matchedOption && matchedOption.dataset.settled === '1') {
-      matchedOption.style.color = '#6c757d';
-    }
+    studentSelect.addEventListener('change', updateStudentDebtAppearance);
+    updateStudentDebtAppearance();
 
     const fraisSelect = document.getElementById('fraisSelect');
     const libelleInput = document.getElementById('libelleInput');

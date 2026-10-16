@@ -89,10 +89,7 @@ class ElevesController extends Controller
         }
         $dettes = DetteEleve::getOutstandingByEleve($eleveId);
         $totalPaidByCurrency = $this->getPaidTotalsByCurrency($eleveId);
-        $totalDebtByCurrency = DetteEleve::getTotalOutstandingGroupedByDevise($eleveId);
-        if (empty($totalDebtByCurrency)) {
-            $totalDebtByCurrency = DetteEleve::computeOutstandingFromApplicableFees($eleveId);
-        }
+        $totalDebtByCurrency = DetteEleve::computeOutstandingFromApplicableFees($eleveId);
         $entryTotalsByCurrency = $this->getEntryTotalsByCurrency($eleveId);
         $notes = \App\Models\Eleve::getNotes($eleveId);
         $discipline = \App\Models\Eleve::getDiscipline($eleveId);

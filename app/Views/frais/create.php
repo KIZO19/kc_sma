@@ -79,6 +79,7 @@
                             <option value="section" <?= (($oldInput['scope'] ?? '') === 'section') ? 'selected' : '' ?>>Section</option>
                             <option value="school" <?= (($oldInput['scope'] ?? '') === 'school') ? 'selected' : '' ?>>École entière</option>
                           </select>
+                          <div class="form-text">Le frais sera attribué aux élèves dont la dernière inscription dans l’année scolaire choisie correspond à cette portée.</div>
                         </div>
 
                         <div class="mb-3" id="classWrapper">
@@ -98,7 +99,7 @@
                           <select id="optionSelect" name="option_select" class="form-select">
                             <option value="">Sélectionnez une option</option>
                             <?php foreach ($options as $opt): ?>
-                              <option value="<?= (int) $opt['id'] ?>" <?= ((int) ($oldInput['option_id'] ?? 0) === (int) $opt['id']) ? 'selected' : '' ?>>
+                            <option value="<?= (int) $opt['id'] ?>" <?= ((int) ($oldInput['option_select'] ?? 0) === (int) $opt['id']) ? 'selected' : '' ?>>
                                 <?= htmlspecialchars($opt['nom_option']) ?>
                               </option>
                             <?php endforeach; ?>
@@ -110,7 +111,7 @@
                           <select id="sectionSelect" name="section_select" class="form-select">
                             <option value="">Sélectionnez une section</option>
                             <?php foreach ($sections as $section): ?>
-                              <option value="<?= (int) $section['id'] ?>" <?= ((int) ($oldInput['section_id'] ?? 0) === (int) $section['id']) ? 'selected' : '' ?>>
+                            <option value="<?= (int) $section['id'] ?>" <?= ((int) ($oldInput['section_select'] ?? 0) === (int) $section['id']) ? 'selected' : '' ?>>
                                 <?= htmlspecialchars($section['nom_section']) ?>
                               </option>
                             <?php endforeach; ?>

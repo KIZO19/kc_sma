@@ -37,12 +37,8 @@ class PaiementsController extends Controller
         $fraisFilter = $fraisId ? FraisScolaire::findById($fraisId) : null;
         $totalPaid = $eleveId !== null ? $this->fetchTotalPaidForEleve($user, $eleveId) : null;
         $totalPaidByCurrency = $eleveId !== null ? $this->fetchTotalPaidByCurrency($user, $eleveId) : [];
-        $totalDebt = $eleveId !== null ? DetteEleve::getTotalOutstandingByEleve($eleveId) : null;
-        $totalDebtByCurrency = $eleveId !== null ? DetteEleve::getTotalOutstandingGroupedByDevise($eleveId) : [];
-        if ($eleveId !== null && empty($totalDebtByCurrency)) {
-            $totalDebtByCurrency = DetteEleve::computeOutstandingFromApplicableFees($eleveId);
-            $totalDebt = array_sum($totalDebtByCurrency);
-        }
+        $totalDebtByCurrency = $eleveId !== null ? DetteEleve::computeOutstandingFromApplicableFees($eleveId) : [];
+        $totalDebt = $eleveId !== null ? array_sum($totalDebtByCurrency) : null;
 
         $userSchool = (int) ($user['ecole_id'] ?? 0);
         // Show only enrolled (validated) students who still have outstanding debts for selection
@@ -176,12 +172,8 @@ class PaiementsController extends Controller
 
         $totalPaid = $eleveId !== null ? $this->fetchTotalPaidForEleve($user, $eleveId) : null;
         $totalPaidByCurrency = $eleveId !== null ? $this->fetchTotalPaidByCurrency($user, $eleveId) : [];
-        $totalDebt = $eleveId !== null ? DetteEleve::getTotalOutstandingByEleve($eleveId) : null;
-        $totalDebtByCurrency = $eleveId !== null ? DetteEleve::getTotalOutstandingGroupedByDevise($eleveId) : [];
-        if ($eleveId !== null && empty($totalDebtByCurrency)) {
-            $totalDebtByCurrency = DetteEleve::computeOutstandingFromApplicableFees($eleveId);
-            $totalDebt = array_sum($totalDebtByCurrency);
-        }
+        $totalDebtByCurrency = $eleveId !== null ? DetteEleve::computeOutstandingFromApplicableFees($eleveId) : [];
+        $totalDebt = $eleveId !== null ? array_sum($totalDebtByCurrency) : null;
 
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(['payments' => $payments, 'totalPaid' => $totalPaid, 'totalPaidByCurrency' => $totalPaidByCurrency, 'totalDebt' => $totalDebt, 'totalDebtByCurrency' => $totalDebtByCurrency], JSON_UNESCAPED_UNICODE);
@@ -601,16 +593,10 @@ class PaiementsController extends Controller
                 exit;
             }
             $compte = Eleve::getAccount($eleveId);
-            // Calculate precise total outstanding from dettes_eleves
+            // Include recorded balances and any applicable fee not yet materialized as a debt row.
             try {
-                $totalDebt = DetteEleve::getTotalOutstandingByEleve($eleveId);
-                $totalDebtByCurrency = DetteEleve::getTotalOutstandingGroupedByDevise($eleveId);
-                // If no dettes entries exist, compute from applicable fees (scope-based)
-                if (empty($totalDebtByCurrency)) {
-                    $totalDebtByCurrency = DetteEleve::computeOutstandingFromApplicableFees($eleveId);
-                    // also compute scalar total
-                    $totalDebt = array_sum($totalDebtByCurrency);
-                }
+                $totalDebtByCurrency = DetteEleve::computeOutstandingFromApplicableFees($eleveId);
+                $totalDebt = array_sum($totalDebtByCurrency);
             } catch (\Throwable $e) {
                 $totalDebt = null;
                 $totalDebtByCurrency = [];
@@ -627,18 +613,22 @@ class PaiementsController extends Controller
                 }
 
                 try {
-                    $remaining = (float) DetteEleve::getTotalOutstandingByEleve($studentId);
-                    if ($remaining <= 0.0) {
-                        $remaining = (float) array_sum(DetteEleve::computeOutstandingFromApplicableFees($studentId));
-                    }
+                    $debtByCurrency = DetteEleve::computeOutstandingFromApplicableFees($studentId);
+                    $remaining = (float) array_sum($debtByCurrency);
+                    $student['remaining_debt_by_currency'] = $debtByCurrency;
                     $student['remaining_debt'] = $remaining;
                     $student['is_settled'] = $remaining <= 0.0;
                     $students[] = $student;
                 } catch (\Throwable $e) {
                     $dette = DetteEleve::findByEleve($studentId);
-                    $remaining = is_array($dette) && !empty($dette)
-                        ? (float) array_sum(array_map(static fn ($row) => (float) ($row['montant_restant'] ?? 0), $dette))
-                        : 0.0;
+                    $debtByCurrency = [];
+                    foreach ($dette as $row) {
+                        $currency = strtoupper(trim((string) ($row['devise'] ?? 'USD'))) ?: 'USD';
+                        $debtByCurrency[$currency] = ($debtByCurrency[$currency] ?? 0.0)
+                            + max(0.0, (float) ($row['montant_restant'] ?? 0));
+                    }
+                    $remaining = (float) array_sum($debtByCurrency);
+                    $student['remaining_debt_by_currency'] = $debtByCurrency;
                     $student['remaining_debt'] = $remaining;
                     $student['is_settled'] = $remaining <= 0.0;
                     $students[] = $student;

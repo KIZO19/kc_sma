@@ -146,10 +146,19 @@ class FraisController extends Controller
         $sql = 'SELECT DISTINCT i.eleve_id
                 FROM inscriptions i
                 INNER JOIN classes c ON c.id = i.classe_id
-                WHERE c.ecole_id = :ecole_id
+                WHERE i.id = (
+                    SELECT latest.id
+                    FROM inscriptions latest
+                    WHERE latest.eleve_id = i.eleve_id
+                      AND latest.annee_scolaire_id = :latest_year_id
+                    ORDER BY latest.date_inscription DESC, latest.id DESC
+                    LIMIT 1
+                )
+                  AND c.ecole_id = :ecole_id
                   AND i.annee_scolaire_id = :annee_scolaire_id ' . $scopeCondition;
         $stmt = $db->prepare($sql);
         $stmt->bindValue(':ecole_id', $ecoleId, PDO::PARAM_INT);
+        $stmt->bindValue(':latest_year_id', $yearId, PDO::PARAM_INT);
         $stmt->bindValue(':annee_scolaire_id', $yearId, PDO::PARAM_INT);
         if ($scope !== 'school') {
             $stmt->bindValue(':scope_id', $scopeId, PDO::PARAM_INT);
@@ -373,10 +382,14 @@ class FraisController extends Controller
             $classeId = (int) ($_POST['classe_id'] ?? 0);
             $anneeScolaireId = (int) ($_POST['annee_scolaire_id'] ?? 0);
             $scope = trim($_POST['scope'] ?? 'class');
-            $scopeId = (int) ($_POST['scope_id'] ?? 0);
+            $scopeId = match ($scope) {
+                'class' => $classeId,
+                'option' => (int) ($_POST['option_select'] ?? 0),
+                'section' => (int) ($_POST['section_select'] ?? 0),
+                default => 0,
+            };
             $devise = trim($_POST['devise'] ?? '');
             if ($scope === 'class') {
-                $scopeId = $classeId > 0 ? $classeId : $scopeId;
                 $classeId = $scopeId;
             } else {
                 $classeId = 0;

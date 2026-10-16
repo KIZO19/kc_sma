@@ -145,36 +145,9 @@ class DetteEleve
     public static function computeOutstandingFromApplicableFees(int $eleveId): array
     {
         $db = Database::getConnection();
-
-        $stmt = $db->prepare(
-            'SELECT i.classe_id, i.annee_scolaire_id
-             FROM inscriptions i
-             WHERE i.eleve_id = :eleve
-             ORDER BY i.date_inscription DESC, i.id DESC
-             LIMIT 1'
-        );
-        $stmt->execute([':eleve' => $eleveId]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        $classeId = (int) ($row['classe_id'] ?? 0);
-        $yearId = (int) ($row['annee_scolaire_id'] ?? 0);
-
-        $ecoleId = 0;
-        $optionId = 0;
-        $sectionId = 0;
-        try {
-            if ($classeId > 0) {
-                $classRec = \App\Models\Classe::findById($classeId);
-                if ($classRec) {
-                    $optionId = (int) ($classRec['option_id'] ?? 0);
-                    $sectionId = (int) ($classRec['section_id'] ?? 0);
-                    $ecoleId = (int) ($classRec['ecole_id'] ?? 0);
-                }
-            }
-        } catch (\Throwable $e) {
-            // ignore
-        }
-
+        $enrollment = self::getLatestEnrollmentForEleve($eleveId);
+        $yearId = (int) ($enrollment['annee_scolaire_id'] ?? 0);
+        $ecoleId = (int) ($enrollment['ecole_id'] ?? 0);
         if ($ecoleId <= 0) {
             try {
                 $eleve = \App\Models\Eleve::findById($eleveId);
@@ -202,41 +175,37 @@ class DetteEleve
         }
 
         $result = [];
+        $debtsByFee = [];
+        $debtStmt = $db->prepare(
+            'SELECT frais_id, COALESCE(devise, \'USD\') AS devise, SUM(montant_restant) AS montant_restant
+             FROM dettes_eleves
+             WHERE eleve_id = :eleve
+             GROUP BY frais_id, COALESCE(devise, \'USD\')'
+        );
+        $debtStmt->execute([':eleve' => $eleveId]);
+        foreach ($debtStmt->fetchAll(PDO::FETCH_ASSOC) as $debt) {
+            $feeId = (int) $debt['frais_id'];
+            $devise = strtoupper(trim((string) ($debt['devise'] ?? 'USD'))) ?: 'USD';
+            $remaining = max(0.0, (float) ($debt['montant_restant'] ?? 0));
+            $debtsByFee[$feeId] = true;
+            if ($remaining > 0) {
+                $result[$devise] = ($result[$devise] ?? 0.0) + $remaining;
+            }
+        }
+
         foreach ($allFees as $f) {
             $feeYearId = isset($f['annee_scolaire_id']) ? (int) $f['annee_scolaire_id'] : 0;
             if ($yearId > 0 && $feeYearId > 0 && $feeYearId !== $yearId) {
                 continue;
             }
-
-            $scope = $f['scope'] ?? 'class';
-            $scopeId = (isset($f['scope_id']) && $f['scope_id'] !== null && $f['scope_id'] !== '') ? (int) $f['scope_id'] : null;
-            $feeClasseId = isset($f['classe_id']) ? (int) $f['classe_id'] : 0;
-            $apply = false;
-
-            if ($scope === 'school') {
-                $apply = true;
-            } elseif ($scope === 'class') {
-                if ($feeClasseId > 0 && $classeId > 0 && $feeClasseId === $classeId) {
-                    $apply = true;
-                }
-                if (!$apply && $scopeId !== null && $classeId > 0 && $scopeId === $classeId) {
-                    $apply = true;
-                }
-            } elseif ($scope === 'option') {
-                if ($scopeId !== null && $optionId > 0 && $scopeId === $optionId) {
-                    $apply = true;
-                }
-            } elseif ($scope === 'section') {
-                if ($scopeId !== null && $sectionId > 0 && $scopeId === $sectionId) {
-                    $apply = true;
-                }
-            }
-
-            if (!$apply) {
+            if (!self::isFeeApplicableToEnrollment($f, $enrollment)) {
                 continue;
             }
 
             $feeId = (int) ($f['id'] ?? 0);
+            if (isset($debtsByFee[$feeId])) {
+                continue;
+            }
             $feeAmount = (float) ($f['montant_total'] ?? 0);
             $devise = strtoupper(trim($f['devise'] ?? 'USD')) ?: 'USD';
 
