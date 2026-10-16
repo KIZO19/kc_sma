@@ -99,6 +99,17 @@ class ProfileController extends Controller
             $errors[] = 'L’identifiant est requis.';
         }
 
+        $nameLength = function_exists('mb_strlen') ? mb_strlen($nomComplet) : strlen($nomComplet);
+        $identifierLength = function_exists('mb_strlen') ? mb_strlen($identifiant) : strlen($identifiant);
+
+        if ($nameLength > 150) {
+            $errors[] = 'Le nom complet ne peut pas dépasser 150 caractères.';
+        }
+
+        if ($identifierLength > 100) {
+            $errors[] = 'L’identifiant ne peut pas dépasser 100 caractères.';
+        }
+
         if ($identifiant !== ($user['identifiant'] ?? '') && User::existsByIdentifiant($identifiant)) {
             $errors[] = 'Cet identifiant est déjà utilisé.';
         }
@@ -143,33 +154,55 @@ class ProfileController extends Controller
         if ($motDePasse !== '') {
             $updateData['mot_de_passe'] = password_hash($motDePasse, PASSWORD_DEFAULT);
         }
-        // Handle avatar upload (saved to public/uploads/avatars/{id}.{ext}) and persist URL
+        // Save the avatar in the public directory and persist its URL with the profile.
         if (!empty($_FILES['avatar']['name']) && empty($_FILES['avatar']['error'])) {
             $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png'];
             $tmp = $_FILES['avatar']['tmp_name'];
             $mime = mime_content_type($tmp);
             if (isset($allowed[$mime])) {
                 $ext = $allowed[$mime];
-                $projectRoot = dirname(__DIR__, 2); // app/Controllers -> app -> project root
+                $projectRoot = dirname(__DIR__, 2);
                 $targetDir = $projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'avatars';
-                if (!is_dir($targetDir)) {
-                    @mkdir($targetDir, 0755, true);
+                if (!is_dir($targetDir) && !mkdir($targetDir, 0755, true) && !is_dir($targetDir)) {
+                    $_SESSION['profile_errors'] = ['Le dossier de stockage de la photo n’a pas pu être créé.'];
+                    $this->redirect('/profile');
                 }
                 $targetPath = $targetDir . DIRECTORY_SEPARATOR . $id . '.' . $ext;
-                if (move_uploaded_file($tmp, $targetPath)) {
-                    // remove other extensions for this user
-                    foreach (['jpg','png'] as $e) {
-                        if ($e === $ext) continue;
-                        $other = $targetDir . DIRECTORY_SEPARATOR . $id . '.' . $e;
-                        if (file_exists($other)) @unlink($other);
-                    }
-                    $updateData['avatar'] = '/uploads/avatars/' . $id . '.' . $ext;
+                if (!move_uploaded_file($tmp, $targetPath)) {
+                    $_SESSION['profile_errors'] = ['La photo n’a pas pu être enregistrée. Vérifiez les droits du dossier de stockage.'];
+                    $this->redirect('/profile');
+                }
+
+                $updateData['avatar'] = '/uploads/avatars/' . $id . '.' . $ext;
+            }
+        }
+
+        if (!User::updateProfile($id, $updateData)) {
+            $_SESSION['profile_errors'] = ['La mise à jour du profil a échoué. Aucune confirmation de sauvegarde n’a été effectuée.'];
+            $this->redirect('/profile');
+        }
+
+        if (isset($updateData['avatar'])) {
+            $avatarExtension = pathinfo($updateData['avatar'], PATHINFO_EXTENSION);
+            foreach (['jpg', 'png'] as $otherExtension) {
+                if ($otherExtension === $avatarExtension) {
+                    continue;
+                }
+                $otherPath = $targetDir . DIRECTORY_SEPARATOR . $id . '.' . $otherExtension;
+                if (is_file($otherPath) && !unlink($otherPath)) {
+                    error_log('ProfileController::update could not remove old avatar: ' . $otherPath);
                 }
             }
         }
 
-        User::updateProfile($id, $updateData);
-        Auth::login(User::findById($id));
+        $updatedUser = User::findById($id);
+        if (!$updatedUser) {
+            error_log('ProfileController::update: updated account could not be reloaded for user ID ' . $id);
+            $_SESSION['profile_errors'] = ['Le profil a été enregistré, mais le compte n’a pas pu être rechargé. Reconnectez-vous.'];
+            $this->redirect('/profile');
+        }
+
+        Auth::login($updatedUser);
 
         $this->redirect('/profile?success=1');
     }

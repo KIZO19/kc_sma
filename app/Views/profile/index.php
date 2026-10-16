@@ -43,6 +43,7 @@
                   <h3 class="card-title">Informations personnelles</h3>
                 </div>
                 <div class="card-body">
+                  <p class="text-muted">Les informations enregistrées ici mettent à jour votre compte utilisateur dans la base de données.</p>
                   <form method="post" action="<?= BASE_URL ?>/profile/update" enctype="multipart/form-data">
                     <div class="mb-3">
                       <label class="form-label">Photo de profil (avatar)</label>
@@ -51,11 +52,11 @@
                     </div>
                     <div class="mb-3">
                       <label class="form-label">Nom complet</label>
-                      <input type="text" name="nom_complet" class="form-control" value="<?= htmlspecialchars($user['nom_complet'] ?? '') ?>" required>
+                      <input type="text" name="nom_complet" class="form-control" maxlength="150" value="<?= htmlspecialchars($user['nom_complet'] ?? '') ?>" required>
                     </div>
                     <div class="mb-3">
                       <label class="form-label">Identifiant</label>
-                      <input type="text" name="identifiant" class="form-control" value="<?= htmlspecialchars($user['identifiant'] ?? '') ?>" required>
+                      <input type="text" name="identifiant" class="form-control" maxlength="100" value="<?= htmlspecialchars($user['identifiant'] ?? '') ?>" required>
                     </div>
                     <div class="mb-3">
                       <label class="form-label">Rôle</label>

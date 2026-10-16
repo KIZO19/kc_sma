@@ -19,14 +19,35 @@ class Auth
         self::start();
         session_regenerate_id(true);
 
+        $role = self::canonicalizeRole((string) ($user['role'] ?? ''));
         $_SESSION['user'] = [
             'id' => (int) $user['id'],
             'nom_complet' => $user['nom_complet'],
-            'role' => $user['role'],
+            'role' => $role,
             'ecole_id' => isset($user['ecole_id']) ? (int) $user['ecole_id'] : null,
             'reference_id' => isset($user['reference_id']) ? (int) $user['reference_id'] : null,
             'statut' => $user['statut'] ?? 'Actif',
         ];
+    }
+
+    private static function canonicalizeRole(string $role): string
+    {
+        $normalized = strtolower(strtr(trim($role), [
+            'É' => 'E',
+            'È' => 'E',
+            'Ê' => 'E',
+            'Ë' => 'E',
+            'é' => 'e',
+            'è' => 'e',
+            'ê' => 'e',
+            'ë' => 'e',
+        ]));
+        $normalized = preg_replace('/[\s-]+/', '_', $normalized) ?? $normalized;
+
+        return match ($normalized) {
+            'prefet_ecole', 'prefet_des_etudes' => 'préfet_école',
+            default => $role,
+        };
     }
 
     public static function user(): ?array

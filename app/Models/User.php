@@ -316,6 +316,7 @@ class User
             $stmt = $db->prepare('UPDATE utilisateurs SET ' . implode(', ', $fields) . ' WHERE id = :id');
             return $stmt->execute($params);
         } catch (\Throwable $e) {
+            error_log('User::updateProfile failed for user ID ' . $id . ': ' . $e->getMessage());
             return false;
         }
     }
