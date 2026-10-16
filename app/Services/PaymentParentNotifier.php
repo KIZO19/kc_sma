@@ -70,9 +70,12 @@ class PaymentParentNotifier
         $db = Database::getConnection();
         $stmt = $db->prepare(
             'SELECT e.id, e.nom, e.postnom, e.prenom, ec.nom_etablissement AS school_name, '
+            . 'COALESCE(NULLIF(TRIM(admin_agent.telephone), \'\'), NULLIF(TRIM(ec.telephone_contact), \'\')) AS school_whatsapp_sender, '
             . 'p.telephone AS parent_phone, p.nom_responsable AS parent_nom_responsable '
             . 'FROM eleves e '
             . 'LEFT JOIN ecoles ec ON ec.id = e.ecole_id '
+            . 'LEFT JOIN utilisateurs admin_user ON admin_user.id = ec.admin_ecole_id '
+            . 'LEFT JOIN agents admin_agent ON admin_agent.id = admin_user.reference_id '
             . 'LEFT JOIN parents p ON p.id = e.parent_id '
             . 'WHERE e.id = :eleve_id LIMIT 1'
         );
@@ -105,7 +108,7 @@ class PaymentParentNotifier
         $message = '[' . $schoolName . "]\n" . $greeting . ' le paiement de ' . number_format($montant, 2, ',', ' ') . ' ' . $currency
             . ' pour ' . $paymentLabel . ' a bien été enregistré pour l\'élève ' . $studentName . '.';
 
-        return $this->dispatchMessage($phone, $message, $schoolName);
+        return $this->dispatchMessage($phone, $message, $schoolName, (string) ($eleve['school_whatsapp_sender'] ?? ''));
     }
 
     public function notifyAfterRegistration(int $eleveId): array
@@ -116,8 +119,11 @@ class PaymentParentNotifier
 
         $stmt = Database::getConnection()->prepare(
             'SELECT e.id, e.nom, e.postnom, e.prenom, e.matricule, ec.nom_etablissement AS school_name, '
+            . 'COALESCE(NULLIF(TRIM(admin_agent.telephone), \'\'), NULLIF(TRIM(ec.telephone_contact), \'\')) AS school_whatsapp_sender, '
             . 'p.telephone AS parent_phone, p.nom_responsable AS parent_nom_responsable '
             . 'FROM eleves e LEFT JOIN ecoles ec ON ec.id = e.ecole_id '
+            . 'LEFT JOIN utilisateurs admin_user ON admin_user.id = ec.admin_ecole_id '
+            . 'LEFT JOIN agents admin_agent ON admin_agent.id = admin_user.reference_id '
             . 'LEFT JOIN parents p ON p.id = e.parent_id WHERE e.id = :eleve_id LIMIT 1'
         );
         $stmt->execute([':eleve_id' => $eleveId]);
@@ -143,7 +149,7 @@ class PaymentParentNotifier
             return ['sent' => false, 'delivered' => false, 'status' => 'failed', 'reason' => 'missing_parent_phone', 'message' => 'Notification d’inscription non envoyée.', 'details' => 'Le parent associé à cet élève n’a pas de numéro de téléphone valide.'];
         }
 
-        return $this->dispatchMessage($phone, $message, $schoolName);
+        return $this->dispatchMessage($phone, $message, $schoolName, (string) ($student['school_whatsapp_sender'] ?? ''));
     }
 
     public function sendSchoolAnnouncement(int $ecoleId, string $title, string $body): array
@@ -153,9 +159,17 @@ class PaymentParentNotifier
         }
 
         $db = Database::getConnection();
-        $schoolStmt = $db->prepare('SELECT nom_etablissement FROM ecoles WHERE id = :id LIMIT 1');
+        $schoolStmt = $db->prepare(
+            'SELECT e.nom_etablissement, '
+            . 'COALESCE(NULLIF(TRIM(a.telephone), \'\'), NULLIF(TRIM(e.telephone_contact), \'\')) AS whatsapp_sender '
+            . 'FROM ecoles e '
+            . 'LEFT JOIN utilisateurs u ON u.id = e.admin_ecole_id '
+            . 'LEFT JOIN agents a ON a.id = u.reference_id '
+            . 'WHERE e.id = :id LIMIT 1'
+        );
         $schoolStmt->execute([':id' => $ecoleId]);
-        $schoolName = trim((string) $schoolStmt->fetchColumn());
+        $school = $schoolStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $schoolName = trim((string) ($school['nom_etablissement'] ?? ''));
         if ($schoolName === '') {
             return ['sent' => false, 'status' => 'failed', 'reason' => 'school_not_found', 'message' => 'Envoi impossible : école introuvable.', 'details' => 'Aucun établissement ne correspond à cette école.'];
         }
@@ -200,7 +214,7 @@ class PaymentParentNotifier
         $fullySent = 0;
         $failureReasons = [];
         foreach ($phones as $phone) {
-            $result = $this->dispatchMessage($phone, $message, $schoolName);
+            $result = $this->dispatchMessage($phone, $message, $schoolName, (string) ($school['whatsapp_sender'] ?? ''));
             if (!empty($result['delivered'])) {
                 $delivered++;
             }
@@ -229,7 +243,7 @@ class PaymentParentNotifier
         ];
     }
 
-    private function dispatchMessage(string $phone, string $message, string $schoolName): array
+    private function dispatchMessage(string $phone, string $message, string $schoolName, string $schoolWhatsappSender = ''): array
     {
         $attempts = [];
         if ($this->provider === 'infobip') {
@@ -237,7 +251,7 @@ class PaymentParentNotifier
                 $attempts[] = $this->sendInfobipSms($phone, $message, $schoolName);
             }
             if ($this->shouldSendWhatsapp()) {
-                $attempts[] = $this->sendInfobipWhatsapp($phone, $message);
+                $attempts[] = $this->sendInfobipWhatsapp($phone, $message, $schoolWhatsappSender);
             }
         } elseif ($this->provider === 'twilio') {
             if ($this->shouldSendSms()) {
@@ -359,11 +373,14 @@ class PaymentParentNotifier
         return $this->sendJsonRequest($baseUrl . '/sms/3/messages', $payload, $apiKey, 'sms', true);
     }
 
-    private function sendInfobipWhatsapp(string $phone, string $message): array
+    private function sendInfobipWhatsapp(string $phone, string $message, string $schoolSender = ''): array
     {
         $apiKey = trim($this->infobipApiKey);
         $baseUrl = trim($this->infobipBaseUrl);
-        $from = trim($this->infobipWhatsappFrom);
+        $from = $this->normalizePhone($schoolSender);
+        if ($from === '') {
+            $from = $this->normalizePhone($this->infobipWhatsappFrom);
+        }
 
         if ($apiKey === '' || $baseUrl === '') {
             return ['sent' => false, 'channel' => 'whatsapp', 'reason' => 'missing_infobip_config', 'message' => 'Infobip WhatsApp non configuré.', 'details' => 'La clé API Infobip ou l’URL de base du compte est absente.'];
@@ -373,7 +390,7 @@ class PaymentParentNotifier
         }
 
         $payload = [
-            'from' => $from,
+            'from' => ltrim($from, '+'),
             'to' => ltrim($phone, '+'),
             'content' => [
                 'text' => $message,

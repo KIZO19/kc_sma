@@ -819,24 +819,24 @@ class InscriptionsController extends Controller
                     : Eleve::findByIdAndSchool($eleveId, $ecoleId);
                 if ($student) {
                     $wasAlreadyActive = ($student['statut_eleve'] ?? '') === 'actif';
-                    if (Eleve::approve($eleveId)) {
+                    if ($wasAlreadyActive) {
+                        $_SESSION['inscriptions_success'] = 'Cette inscription était déjà validée.';
+                    } elseif (Eleve::approve($eleveId)) {
                         $_SESSION['inscriptions_success'] = 'Inscription validée par le personnel autorisé.';
-                        if (!$wasAlreadyActive) {
-                            try {
-                                $_SESSION['inscriptions_notification'] = (new PaymentParentNotifier())
-                                    ->notifyAfterRegistration($eleveId);
-                            } catch (\Throwable $e) {
-                                error_log('InscriptionsController::approve notification failed: ' . $e->getMessage());
-                                $_SESSION['inscriptions_notification'] = [
-                                    'sent' => false,
-                                    'status' => 'failed',
-                                    'message' => 'L’inscription est validée, mais la notification au parent a échoué.',
-                                    'details' => 'Consultez les journaux du serveur pour le détail de l’erreur.',
-                                ];
-                            }
+                        try {
+                            $_SESSION['inscriptions_notification'] = (new PaymentParentNotifier())
+                                ->notifyAfterRegistration($eleveId);
+                        } catch (\Throwable $e) {
+                            error_log('InscriptionsController::approve notification failed: ' . $e->getMessage());
+                            $_SESSION['inscriptions_notification'] = [
+                                'sent' => false,
+                                'status' => 'failed',
+                                'message' => 'L’inscription est validée, mais la notification au parent a échoué.',
+                                'details' => 'Consultez les journaux du serveur pour le détail de l’erreur.',
+                            ];
                         }
                     } else {
-                        $_SESSION['inscriptions_errors'] = ['Impossible de valider cette inscription.'];
+                        $_SESSION['inscriptions_errors'] = ['Cette inscription a déjà été validée ou ne peut plus être modifiée.'];
                     }
                 } else {
                     $_SESSION['inscriptions_errors'] = ['Vous n’êtes pas autorisé(e) à valider cette inscription.'];

@@ -472,8 +472,8 @@ class Eleve
     public static function approve(int $id): bool
     {
         $db = Database::getConnection();
-        $stmt = $db->prepare('UPDATE eleves SET statut_eleve = :statut WHERE id = :id');
-        return $stmt->execute([':statut' => 'actif', ':id' => $id]);
+        $stmt = $db->prepare("UPDATE eleves SET statut_eleve = 'actif' WHERE id = :id AND statut_eleve <> 'actif'");
+        return $stmt->execute([':id' => $id]) && $stmt->rowCount() === 1;
     }
 
     public static function findById(int $id): ?array
