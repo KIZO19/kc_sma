@@ -213,7 +213,7 @@ class PaymentParentNotifier
         $from = trim($this->infobipSmsFrom);
 
         if ($apiKey === '' || $baseUrl === '') {
-            return ['sent' => false, 'channel' => 'sms', 'reason' => 'missing_infobip_config', 'message' => 'Infobip SMS non configuré.', 'details' => 'La clé API Infobip ou l’URL de base est absente.'];
+            return ['sent' => false, 'channel' => 'sms', 'reason' => 'missing_infobip_config', 'message' => 'Infobip SMS non configuré.', 'details' => 'La clé API Infobip ou l’URL de base du compte est absente.'];
         }
 
         $payload = [
@@ -234,11 +234,14 @@ class PaymentParentNotifier
         $from = trim($this->infobipWhatsappFrom);
 
         if ($apiKey === '' || $baseUrl === '') {
-            return ['sent' => false, 'channel' => 'whatsapp', 'reason' => 'missing_infobip_config', 'message' => 'Infobip WhatsApp non configuré.', 'details' => 'La clé API Infobip ou l’URL de base est absente.'];
+            return ['sent' => false, 'channel' => 'whatsapp', 'reason' => 'missing_infobip_config', 'message' => 'Infobip WhatsApp non configuré.', 'details' => 'La clé API Infobip ou l’URL de base du compte est absente.'];
+        }
+        if ($from === '') {
+            return ['sent' => false, 'channel' => 'whatsapp', 'reason' => 'missing_infobip_whatsapp_sender', 'message' => 'Expéditeur WhatsApp Infobip non configuré.', 'details' => 'Renseignez le numéro WhatsApp approuvé et associé à votre compte Infobip.'];
         }
 
         $payload = [
-            'from' => $from !== '' ? $from : '447860099299',
+            'from' => $from,
             'to' => ltrim($phone, '+'),
             'content' => [
                 'text' => $message,
