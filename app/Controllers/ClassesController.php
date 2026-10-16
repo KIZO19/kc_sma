@@ -67,6 +67,7 @@ class ClassesController extends Controller
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
         $sections = Section::getAll();
         $options = $ecoleId > 0 ? Option::getAllForSchool($ecoleId) : [];
         $oldInput = $_SESSION['class_old'] ?? [];

@@ -43,7 +43,7 @@ class InscriptionsController extends Controller
         $pendingStudents = $ecoleId > 0 ? Eleve::getPendingBySchool($ecoleId) : Eleve::getPending();
         $enrolledStudents = $ecoleId > 0 ? Eleve::getEnrolledBySchool($ecoleId) : [];
         $sections = Section::getAll();
-        $options = Option::getAll();
+        $options = $ecoleId > 0 ? Option::getAllForSchool($ecoleId) : Option::getAll();
 
         $this->view('inscriptions/index', [
             'title' => APP_NAME . ' - Dossiers d’inscription',
@@ -73,7 +73,7 @@ class InscriptionsController extends Controller
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
         $parents = $ecoleId > 0 ? ParentModel::getAllBySchool($ecoleId) : [];
         $sections = Section::getAll();
-        $options = Option::getAll();
+        $options = $ecoleId > 0 ? Option::getAllForSchool($ecoleId) : Option::getAll();
         $selectedSection = null;
         $selectedOption = null;
         $sectionId = (int) ($_GET['section_id'] ?? 0);
@@ -82,7 +82,9 @@ class InscriptionsController extends Controller
             $selectedSection = Section::findById($sectionId);
         }
         if ($optionId > 0) {
-            $selectedOption = Option::findById($optionId);
+            $selectedOption = $ecoleId > 0
+                ? Option::findByIdForSchool($optionId, $ecoleId)
+                : Option::findById($optionId);
         }
 
         $classes = [];
@@ -515,7 +517,7 @@ class InscriptionsController extends Controller
         $parents = $ecoleId > 0 ? ParentModel::getAllBySchool($ecoleId) : [];
         $classes = $ecoleId > 0 ? Classe::getAllBySchool($ecoleId) : [];
         $sections = Section::getAll();
-        $options = Option::getAll();
+        $options = $ecoleId > 0 ? Option::getAllForSchool($ecoleId) : Option::getAll();
         $db = Database::getConnection();
         $inscriptionStmt = $db->prepare(
             'SELECT i.*, c.section_id, c.option_id

@@ -28,6 +28,9 @@ class OptionsController extends Controller
 
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
+        if (!in_array($role, array_merge(self::CREATION_ROLES, ['super_admin', 'ecole_admin']), true)) {
+            $this->redirect('/error/accessDenied');
+        }
         $modules = $this->getModulesForRole($role);
         if ($role === 'super_admin') {
             $options = Option::getAll();
@@ -54,6 +57,9 @@ class OptionsController extends Controller
 
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
+        if (!$this->canManage((string) $role)) {
+            $this->redirect('/error/accessDenied');
+        }
         $modules = $this->getModulesForRole($role);
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
         $sections = Section::getAll();
@@ -84,6 +90,9 @@ class OptionsController extends Controller
 
         $user = Auth::refresh() ?: Auth::user();
         $role = (string) ($user['role'] ?? '');
+        if (!$this->canManage($role)) {
+            $this->redirect('/error/accessDenied');
+        }
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
         $nomOption = trim((string) ($_POST['nom_option'] ?? ''));
         $sectionId = (int) ($_POST['section_id'] ?? 0);
@@ -140,6 +149,9 @@ class OptionsController extends Controller
 
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
+        if (!$this->canManage((string) $role)) {
+            $this->redirect('/error/accessDenied');
+        }
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
         if ($role !== 'super_admin') {
             $option = $ecoleId > 0 ? Option::findByIdForSchool($id, $ecoleId) : null;
@@ -182,6 +194,9 @@ class OptionsController extends Controller
 
         $user = Auth::refresh() ?: Auth::user();
         $role = (string) ($user['role'] ?? '');
+        if (!$this->canManage($role)) {
+            $this->redirect('/error/accessDenied');
+        }
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
         $id = (int) ($_POST['id'] ?? 0);
         $nomOption = trim($_POST['nom_option'] ?? '');
@@ -244,9 +259,16 @@ class OptionsController extends Controller
     {
         Auth::requireAuth();
         Auth::requireRoles(self::CREATION_ROLES);
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->redirect('/options');
+            return;
+        }
 
         $user = Auth::refresh() ?: Auth::user();
         $role = (string) ($user['role'] ?? '');
+        if (!$this->canManage($role)) {
+            $this->redirect('/error/accessDenied');
+        }
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
         $id = (int) ($_POST['id'] ?? 0);
         if ($id <= 0) {
