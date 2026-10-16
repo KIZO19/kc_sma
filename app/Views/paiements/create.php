@@ -85,13 +85,8 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
               </div>
 
               <div class="mb-3">
-                <label class="form-label">Caisse / Compte</label>
-                <select name="caisse_id" class="form-select">
-                  <option value="">-- Sélectionner --</option>
-                  <?php foreach (($caisses ?? []) as $c): ?>
-                    <option value="<?= (int) $c['id'] ?>" <?= ((int) ($oldInput['caisse_id'] ?? 0) === (int) $c['id']) ? 'selected' : '' ?>><?= htmlspecialchars($c['nom_compte']) ?> (<?= htmlspecialchars($c['type_compte']) ?>)</option>
-                  <?php endforeach; ?>
-                </select>
+                <label class="form-label">Paiement enregistré par</label>
+                <input type="text" class="form-control" value="<?= htmlspecialchars($paymentRecorderName ?? 'Utilisateur connecté', ENT_QUOTES, 'UTF-8') ?>" readonly>
               </div>
 
                 <div class="d-flex gap-2">

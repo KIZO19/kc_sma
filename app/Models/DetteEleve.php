@@ -7,6 +7,64 @@ use PDO;
 
 class DetteEleve
 {
+    public static function getLatestEnrollmentForEleve(int $eleveId): ?array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            'SELECT i.classe_id, i.annee_scolaire_id, c.ecole_id, c.option_id, c.section_id
+             FROM inscriptions i
+             INNER JOIN classes c ON c.id = i.classe_id
+             WHERE i.eleve_id = :eleve
+             ORDER BY i.date_inscription DESC, i.id DESC
+             LIMIT 1'
+        );
+        $stmt->execute([':eleve' => $eleveId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    public static function isFeeApplicableToEleve(int $eleveId, array $fee): bool
+    {
+        return self::isFeeApplicableToEnrollment($fee, self::getLatestEnrollmentForEleve($eleveId));
+    }
+
+    public static function isFeeApplicableToEnrollment(array $fee, ?array $enrollment): bool
+    {
+        if (
+            $enrollment
+            && !empty($fee['annee_scolaire_id'])
+            && !empty($enrollment['annee_scolaire_id'])
+            && (int) $fee['annee_scolaire_id'] !== (int) $enrollment['annee_scolaire_id']
+        ) {
+            return false;
+        }
+
+        $scope = (string) ($fee['scope'] ?? 'class');
+        $scopeId = isset($fee['scope_id']) && $fee['scope_id'] !== '' ? (int) $fee['scope_id'] : null;
+        $classId = (int) ($enrollment['classe_id'] ?? 0);
+
+        if ($scope === 'school') {
+            return true;
+        }
+        if (!$enrollment) {
+            return false;
+        }
+
+        if ($scope === 'class') {
+            $feeClassId = (int) ($fee['classe_id'] ?? 0);
+            return ($feeClassId > 0 && $feeClassId === $classId)
+                || ($scopeId !== null && $scopeId === $classId);
+        }
+        if ($scope === 'option') {
+            return $scopeId !== null && $scopeId === (int) ($enrollment['option_id'] ?? 0);
+        }
+        if ($scope === 'section') {
+            return $scopeId !== null && $scopeId === (int) ($enrollment['section_id'] ?? 0);
+        }
+
+        return false;
+    }
+
     public static function create(int $eleveId, int $fraisId, int $anneeScolaireId, float $montant, string $devise): bool
     {
         $db = Database::getConnection();

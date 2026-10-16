@@ -43,15 +43,6 @@
                 <label class="form-label">Libellé</label>
                 <input type="text" name="libelle" class="form-control" required value="<?= htmlspecialchars($payment['libelle'] ?? 'Paiement élève') ?>">
               </div>
-              <div class="mb-3">
-                <label class="form-label">Caisse / Compte</label>
-                <select name="caisse_id" class="form-select">
-                  <option value="">-- Sélectionner --</option>
-                  <?php foreach (($caisses ?? []) as $caisse): ?>
-                    <option value="<?= (int) $caisse['id'] ?>" <?= ((int) ($payment['caisse_banque_id'] ?? 0) === (int) $caisse['id']) ? 'selected' : '' ?>><?= htmlspecialchars($caisse['nom_compte']) ?> (<?= htmlspecialchars($caisse['type_compte']) ?>)</option>
-                  <?php endforeach; ?>
-                </select>
-              </div>
               <div class="d-flex gap-2">
                 <button type="submit" class="btn btn-primary">Enregistrer la modification</button>
                 <a href="<?= BASE_URL ?>/paiements" class="btn btn-secondary">Retour à l’historique</a>

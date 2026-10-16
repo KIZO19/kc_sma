@@ -115,7 +115,7 @@ class PaiementsController extends Controller
             // BOM for Excel compatibility with UTF-8
             echo "\xEF\xBB\xBF";
             $out = fopen('php://output', 'w');
-            fputcsv($out, ['Réf reçu', 'Élève', 'Date', 'Montant', 'Caisse', 'Perçu par', 'Fonction', 'Libellé']);
+            fputcsv($out, ['Réf reçu', 'Élève', 'Date', 'Montant', 'Perçu par', 'Fonction', 'Libellé']);
             foreach ($payments as $p) {
                 $name = trim(($p['prenom'] ?? '') . ' ' . ($p['nom'] ?? '') . ' ' . ($p['postnom'] ?? ''));
                 fputcsv($out, [
@@ -123,7 +123,6 @@ class PaiementsController extends Controller
                     $name,
                     $p['date_operation'] ?? '',
                     $p['montant_affiche'] ?? number_format((float) ($p['montant'] ?? 0), 2),
-                    $p['nom_compte'] ?? '',
                     $p['agent_nom'] ?? '',
                     $p['agent_fonction'] ?? '',
                     $p['libelle'] ?? '',
@@ -267,15 +266,15 @@ class PaiementsController extends Controller
     private function fetchPaymentsForUser(array $user, int $limit = 0, ?int $eleveId = null, ?int $fraisId = null): array
     {
         $db = \App\Core\Database::getConnection();
-        $sql = 'SELECT ece.id, ece.frais_id, ece.reference_recu, ece.date_operation, ece.montant, ece.libelle, ce.eleve_id, el.nom, el.postnom, el.prenom, cb.nom_compte, COALESCE(NULLIF(CONCAT_WS(\' \', a.nom, a.postnom, a.prenom), \'\'), u.nom_complet, \'Agent non identifié\') AS agent_nom, COALESCE(ra.titre_role, u.role, \'Agent\') AS agent_fonction, fs.devise AS frais_devise, COALESCE(fs.devise, ecole.devise_principale, \'USD\') AS transaction_devise '
+        $sql = 'SELECT ece.id, ece.frais_id, ece.reference_recu, ece.date_operation, ece.montant, ece.libelle, ce.eleve_id, el.nom, el.postnom, el.prenom, COALESCE(NULLIF(us.nom_complet, \'\'), NULLIF(CONCAT_WS(\' \', a.nom, a.postnom, a.prenom), \'\'), u.nom_complet, \'Agent non identifié\') AS agent_nom, COALESCE(ra.titre_role, us.role, u.role, \'Agent\') AS agent_fonction, fs.devise AS frais_devise, COALESCE(fs.devise, ecole.devise_principale, \'USD\') AS transaction_devise '
             . 'FROM ecritures_comptables_eleves ece '
             . 'INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id '
             . 'INNER JOIN eleves el ON ce.eleve_id = el.id '
             . 'LEFT JOIN ecoles ecole ON el.ecole_id = ecole.id '
-            . 'LEFT JOIN caisses_banques cb ON ece.caisse_banque_id = cb.id '
             . 'LEFT JOIN frais_scolaires fs ON ece.frais_id = fs.id '
             . 'LEFT JOIN agents a ON ece.agent_saisie_id = a.id '
             . 'LEFT JOIN roles_administration ra ON a.role_id = ra.id '
+            . 'LEFT JOIN utilisateurs us ON ece.utilisateur_saisie_id = us.id '
             . 'LEFT JOIN (SELECT reference_id, MAX(nom_complet) AS nom_complet, MAX(role) AS role FROM utilisateurs WHERE role NOT IN (\'eleve_ecole\', \'parent_ecole\') GROUP BY reference_id) u ON ece.agent_saisie_id = u.reference_id '
             . 'WHERE ece.type_mouvement = :type ';
 
@@ -378,7 +377,6 @@ class PaiementsController extends Controller
                     'nom' => $l['nom'] ?? null,
                     'postnom' => $l['postnom'] ?? null,
                     'prenom' => $l['prenom'] ?? null,
-                    'nom_compte' => null,
                     'agent_nom' => null,
                     'agent_fonction' => null,
                     'frais_devise' => $l['frais_devise'] ?? 'USD',
@@ -433,33 +431,83 @@ class PaiementsController extends Controller
         return (int) $db->lastInsertId();
     }
 
-    private function persistPaymentEntry(\PDO $db, int $compteId, int $eleveId, ?int $fraisId, ?int $detteId, ?int $caisseId, float $montant, string $libelle, int $agentId, string $reference): int
+    private function persistPaymentEntry(\PDO $db, int $eleveId, ?int $fraisId, float $montant, string $libelle, int $agentId, string $reference, array $fee, int $userSchool, int $userId): int
     {
         $db->beginTransaction();
         try {
+            $studentLock = $db->prepare('SELECT id, ecole_id FROM eleves WHERE id = :id FOR UPDATE');
+            $studentLock->execute([':id' => $eleveId]);
+            $student = $studentLock->fetch(\PDO::FETCH_ASSOC);
+            if (!$student || $fraisId === null) {
+                throw new \RuntimeException('Élève ou frais scolaire invalide.');
+            }
+
+            $enrollment = DetteEleve::getLatestEnrollmentForEleve($eleveId);
+            $schoolId = $userSchool > 0 ? $userSchool : (int) ($student['ecole_id'] ?? 0);
+            if ($schoolId <= 0) {
+                $schoolId = (int) ($enrollment['ecole_id'] ?? $fee['ecole_id'] ?? 0);
+            }
+            $detteStmt = $db->prepare(
+                'SELECT * FROM dettes_eleves
+                 WHERE eleve_id = :eleve AND frais_id = :frais
+                 ORDER BY id ASC LIMIT 1 FOR UPDATE'
+            );
+            $detteStmt->execute([':eleve' => $eleveId, ':frais' => $fraisId]);
+            $dette = $detteStmt->fetch(\PDO::FETCH_ASSOC);
+            if (!$dette) {
+                if (!DetteEleve::isFeeApplicableToEnrollment($fee, $enrollment)) {
+                    throw new \RuntimeException('Ce frais ne s’applique pas à la classe, à l’option ou à la section actuelle de cet élève.');
+                }
+                $feeTotal = (float) ($fee['montant_total'] ?? 0);
+                if ($feeTotal <= 0) {
+                    throw new \RuntimeException('Le montant du frais sélectionné est invalide.');
+                }
+                $createDebt = $db->prepare(
+                    'INSERT INTO dettes_eleves (eleve_id, frais_id, annee_scolaire_id, montant_initial, montant_restant, devise)
+                     VALUES (:eleve, :frais, :annee, :initial, :restant, :devise)'
+                );
+                $createDebt->execute([
+                    ':eleve' => $eleveId,
+                    ':frais' => $fraisId,
+                    ':annee' => (int) ($fee['annee_scolaire_id'] ?? 0),
+                    ':initial' => $feeTotal,
+                    ':restant' => $feeTotal,
+                    ':devise' => (string) ($fee['devise'] ?? 'USD'),
+                ]);
+                $dette = [
+                    'id' => (int) $db->lastInsertId(),
+                    'montant_initial' => $feeTotal,
+                    'montant_restant' => $feeTotal,
+                ];
+            }
+
+            $remaining = (float) ($dette['montant_restant'] ?? 0);
+            $initial = (float) ($dette['montant_initial'] ?? 0);
+            if ($montant <= 0 || $remaining <= 0 || $montant > $remaining || $montant > $initial) {
+                throw new \RuntimeException('Le montant du paiement dépasse le reste à payer pour ce frais.');
+            }
+
+            $compteId = $this->ensureStudentAccount($db, $eleveId, $schoolId);
+
             $agentFkId = null;
             if ($agentId > 0) {
-                $agentCheck = $db->prepare('SELECT id FROM agents WHERE id = :id LIMIT 1');
-                $agentCheck->execute([':id' => $agentId]);
+                $agentCheck = $db->prepare('SELECT id FROM agents WHERE id = :id AND ecole_id = :ecole LIMIT 1');
+                $agentCheck->execute([':id' => $agentId, ':ecole' => $schoolId]);
                 if ($agentCheck->fetch()) {
                     $agentFkId = $agentId;
                 }
             }
-            if ($agentFkId === null) {
-                $fallbackAgent = $db->query('SELECT id FROM agents ORDER BY id LIMIT 1')->fetch();
-                $agentFkId = $fallbackAgent['id'] ?? null;
-            }
 
-            $stmt = $db->prepare('INSERT INTO ecritures_comptables_eleves (compte_eleve_id, frais_id, caisse_banque_id, type_mouvement, montant, reference_recu, libelle, agent_saisie_id) VALUES (:compte, :frais, :caisse, :type, :montant, :ref, :libelle, :agent)');
+            $stmt = $db->prepare('INSERT INTO ecritures_comptables_eleves (compte_eleve_id, frais_id, caisse_banque_id, type_mouvement, montant, reference_recu, libelle, agent_saisie_id, utilisateur_saisie_id) VALUES (:compte, :frais, NULL, :type, :montant, :ref, :libelle, :agent, :utilisateur)');
             $stmt->execute([
                 ':compte' => $compteId,
                 ':frais' => $fraisId,
-                ':caisse' => $caisseId,
                 ':type' => 'CREDIT',
                 ':montant' => $montant,
                 ':ref' => $reference,
                 ':libelle' => $libelle,
                 ':agent' => $agentFkId,
+                ':utilisateur' => $userId > 0 ? $userId : null,
             ]);
             $ecritureId = (int) $db->lastInsertId();
 
@@ -474,10 +522,8 @@ class PaiementsController extends Controller
             $upd = $db->prepare('UPDATE comptes_eleves SET solde_debiteur = solde_debiteur - :montant WHERE id = :id');
             $upd->execute([':montant' => $montant, ':id' => $compteId]);
 
-            if ($detteId !== null && $detteId > 0) {
-                $detteStmt = $db->prepare('UPDATE dettes_eleves SET montant_restant = GREATEST(0, montant_restant - :montant) WHERE id = :id');
-                $detteStmt->execute([':montant' => $montant, ':id' => $detteId]);
-            }
+            $detteUpdate = $db->prepare('UPDATE dettes_eleves SET montant_restant = GREATEST(0, montant_restant - :montant) WHERE id = :id');
+            $detteUpdate->execute([':montant' => $montant, ':id' => $dette['id']]);
 
             $db->commit();
             return $ecritureId;
@@ -604,9 +650,6 @@ class PaiementsController extends Controller
         $db = Database::getConnection();
         $paymentFormToken = bin2hex(random_bytes(16));
         $_SESSION['payment_form_token'] = $paymentFormToken;
-        $stmt = $db->prepare('SELECT * FROM caisses_banques WHERE ecole_id = :ecole_id OR ecole_id IS NULL');
-        $stmt->execute([':ecole_id' => $user['ecole_id'] ?? 0]);
-        $caisses = $stmt->fetchAll();
 
         $authorizedFeeIds = in_array($role, ['super_admin', 'comptable_école'], true)
             ? []
@@ -617,43 +660,20 @@ class PaiementsController extends Controller
         try {
             $schoolIdForFees = (int) ($user['ecole_id'] ?? 0);
             if ($eleveId > 0) {
-                // determine student's latest class/option/section
-                $stmtCls = $db->prepare('SELECT i.classe_id FROM inscriptions i WHERE i.eleve_id = :eleve ORDER BY i.date_inscription DESC LIMIT 1');
-                $stmtCls->execute([':eleve' => $eleveId]);
-                $rowCls = $stmtCls->fetch();
-                $classeIdForFees = (int) ($rowCls['classe_id'] ?? 0);
-                $classRec = $classeIdForFees > 0 ? Classe::findById($classeIdForFees) : null;
-                $optionForClass = (int) ($classRec['option_id'] ?? 0);
-                $sectionForClass = (int) ($classRec['section_id'] ?? 0);
-
+                $enrollment = DetteEleve::getLatestEnrollmentForEleve($eleveId);
                 $allFees = \App\Models\FraisScolaire::getAllBySchool($schoolIdForFees);
                 foreach ($allFees as $f) {
                     $feeId = (int) ($f['id'] ?? 0);
-                    $scope = $f['scope'] ?? 'class';
-                    $scopeId = isset($f['scope_id']) ? (int) $f['scope_id'] : null;
-                    $apply = false;
-                    if ($scope === 'class') {
-                        $feeClasseId = isset($f['classe_id']) ? (int) $f['classe_id'] : null;
-                        if ($feeClasseId === $classeIdForFees || $scopeId === $classeIdForFees) {
-                            $apply = true;
-                        }
-                    } elseif ($scope === 'option') {
-                        if (!empty($scopeId) && $scopeId === $optionForClass) $apply = true;
-                    } elseif ($scope === 'section') {
-                        if (!empty($scopeId) && $scopeId === $sectionForClass) $apply = true;
-                    } elseif ($scope === 'school') {
-                        $apply = true;
+                    $d = DetteEleve::findByEleveAndFrais($eleveId, $feeId);
+                    $hasOutstandingDebt = $d && (float) ($d['montant_restant'] ?? 0) > 0;
+                    if (!$hasOutstandingDebt && !DetteEleve::isFeeApplicableToEnrollment($f, $enrollment)) {
+                        continue;
                     }
-
-                    if ($apply) {
-                        if (!empty($authorizedFeeIds) && !in_array($feeId, $authorizedFeeIds, true)) {
-                            continue;
-                        }
-                        // attach remaining amount if a dette exists for this eleve and frais
-                        $d = DetteEleve::findByEleveAndFrais($eleveId, $feeId);
-                        $f['remaining'] = $d ? (float) ($d['montant_restant'] ?? ($f['montant_total'] ?? 0)) : (float) ($f['montant_total'] ?? 0);
-                        $fees[] = $f;
+                    if (!empty($authorizedFeeIds) && !in_array($feeId, $authorizedFeeIds, true)) {
+                        continue;
                     }
+                    $f['remaining'] = $d ? (float) ($d['montant_restant'] ?? ($f['montant_total'] ?? 0)) : (float) ($f['montant_total'] ?? 0);
+                    $fees[] = $f;
                 }
             } else {
                 $allFees = \App\Models\FraisScolaire::getAllBySchool($schoolIdForFees);
@@ -676,11 +696,12 @@ class PaiementsController extends Controller
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $modules,
             'eleve' => $eleve,
+            'students' => $students,
             'compte' => $compte,
             'totalDebt' => $totalDebt ?? null,
             'totalDebtByCurrency' => $totalDebtByCurrency ?? [],
-            'caisses' => $caisses,
             'fees' => $fees,
+            'paymentRecorderName' => trim((string) ($user['nom_complet'] ?? '')),
             'paymentFormToken' => $paymentFormToken,
             'authorizedFeeIds' => $authorizedFeeIds,
         ]);
@@ -705,13 +726,11 @@ class PaiementsController extends Controller
         $montant = (float) ($_POST['montant'] ?? 0);
         $fraisId = !empty($_POST['frais_id']) ? (int) $_POST['frais_id'] : null;
         $libelle = '';
-        $caisseId = !empty($_POST['caisse_id']) ? (int) $_POST['caisse_id'] : null;
         $oldInput = [
             'eleve_id' => $eleveId,
             'montant' => $montant,
             'frais_id' => $fraisId,
             'libelle' => trim($_POST['libelle'] ?? ''),
-            'caisse_id' => $caisseId,
         ];
 
         if (!$this->canCreatePayment($user, $fraisId)) {
@@ -741,8 +760,10 @@ class PaiementsController extends Controller
         $errors = [];
         $fee = null;
         $dette = null;
+        $feeTotal = 0.0;
         $db = Database::getConnection();
         $userSchool = (int) ($user['ecole_id'] ?? 0);
+        $eleve = null;
 
         if ($eleveId <= 0) {
             $errors[] = 'Élève invalide.';
@@ -781,36 +802,20 @@ class PaiementsController extends Controller
                     $errors[] = 'Le montant saisi ne peut pas être supérieur au montant total du frais scolaire sélectionné.';
                 }
             } elseif ($fee && !$dette) {
-                // Older records may have a fee without a dettes_eleves row. Create the
-                // missing debt from the fee total so the payment can still be tracked.
                 $feeTotal = (float) ($fee['montant_total'] ?? 0);
-                if ($montant <= 0) {
-                    $montant = $feeTotal;
-                }
-                if ($montant <= 0) {
+                if (!DetteEleve::isFeeApplicableToEleve($eleveId, $fee)) {
+                    $errors[] = 'Ce frais ne s’applique pas à la classe, à l’option ou à la section actuelle de cet élève.';
+                } elseif ($feeTotal <= 0) {
                     $errors[] = 'Le montant du frais sélectionné est invalide.';
-                } elseif ($montant > $feeTotal) {
+                } elseif ($montant > 0 && $montant > $feeTotal) {
                     $errors[] = 'Le montant saisi ne peut pas être supérieur au montant total du frais scolaire sélectionné.';
                 } else {
                     $libelle = $fee['type_frais'] . ' - ' . number_format($feeTotal, 2) . ' ' . ($fee['devise'] ?? '');
-                    try {
-                        if (DetteEleve::create(
-                            $eleveId,
-                            $fraisId,
-                            (int) ($fee['annee_scolaire_id'] ?? 0),
-                            $feeTotal,
-                            (string) ($fee['devise'] ?? 'USD')
-                        )) {
-                            $dette = DetteEleve::findByEleveAndFrais($eleveId, $fraisId);
-                        }
-                    } catch (\Throwable $e) {
-                        error_log('PaiementsController::store debt creation failed: ' . $e->getMessage());
-                    }
-                    if (!$dette) {
-                        $errors[] = 'Impossible de préparer la dette de cet élève.';
+                    if ($montant <= 0) {
+                        $montant = $feeTotal;
                     }
                 }
-            } elseif (($user['role'] ?? '') !== 'super_admin' && $userSchool > 0) {
+            } else {
                 $errors[] = 'Le frais scolaire sélectionné est invalide pour votre école.';
             }
         }
@@ -818,8 +823,6 @@ class PaiementsController extends Controller
         if ($libelle === '') {
             $libelle = trim($_POST['libelle'] ?? 'Paiement élève');
         }
-        $caisseId = !empty($_POST['caisse_id']) ? (int) $_POST['caisse_id'] : null;
-
         if ($eleveId <= 0 || $montant <= 0) {
             if (!in_array('Élève ou montant invalide.', $errors, true)) {
                 $errors[] = 'Élève ou montant invalide.';
@@ -839,20 +842,19 @@ class PaiementsController extends Controller
 
         $db = Database::getConnection();
 
-        $compteId = $this->ensureStudentAccount($db, $eleveId, $userSchool);
         $reference = $this->generateUniqueReceiptReference($db);
         try {
             $ecritureId = $this->persistPaymentEntry(
                 $db,
-                $compteId,
                 $eleveId,
                 $fraisId,
-                $dette ? (int) ($dette['id'] ?? 0) : null,
-                $caisseId,
                 $montant,
                 $libelle,
                 $agentId,
-                $reference
+                $reference,
+                $fee,
+                $userSchool,
+                (int) ($user['id'] ?? 0)
             );
             unset($_SESSION['payment_form_token']);
         } catch (\Throwable $e) {
@@ -963,24 +965,28 @@ class PaiementsController extends Controller
 
         $id = (int) ($_GET['id'] ?? 0);
         $db = Database::getConnection();
+        $schoolId = (int) ($user['ecole_id'] ?? 0);
         $stmt = $db->prepare(
-            'SELECT ece.*, ce.eleve_id, el.nom, el.postnom, el.prenom, fs.type_frais, fs.devise, cb.nom_compte AS caisse_name
+            'SELECT ece.*, ce.eleve_id, el.nom, el.postnom, el.prenom, fs.type_frais, fs.devise
              FROM ecritures_comptables_eleves ece
              INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
              INNER JOIN eleves el ON el.id = ce.eleve_id
              LEFT JOIN frais_scolaires fs ON fs.id = ece.frais_id
-             LEFT JOIN caisses_banques cb ON cb.id = ece.caisse_banque_id
-             WHERE ece.id = :id AND ece.type_mouvement = \'CREDIT\' LIMIT 1'
+             WHERE ece.id = :id AND ece.type_mouvement = \'CREDIT\'
+               AND (el.ecole_id = :ecole OR EXISTS (
+                   SELECT 1 FROM inscriptions i
+                   INNER JOIN classes c ON c.id = i.classe_id
+                   WHERE i.eleve_id = el.id AND c.ecole_id = :inscription_ecole
+               ))
+             LIMIT 1'
         );
-        $stmt->execute([':id' => $id]);
+        $stmt->execute([':id' => $id, ':ecole' => $schoolId, ':inscription_ecole' => $schoolId]);
         $payment = $stmt->fetch(\PDO::FETCH_ASSOC);
         if (!$payment) {
             $this->redirect('/paiements');
             return;
         }
 
-        $caisseStmt = $db->prepare('SELECT * FROM caisses_banques WHERE ecole_id = :ecole_id OR ecole_id IS NULL');
-        $caisseStmt->execute([':ecole_id' => $user['ecole_id'] ?? 0]);
         $this->view('paiements/edit', [
             'title' => APP_NAME . ' - Modifier paiement',
             'user' => $user,
@@ -988,7 +994,6 @@ class PaiementsController extends Controller
             'roleLabel' => User::getRoleLabel($user['role'] ?? 'default'),
             'modules' => $this->getModulesForRole($user['role'] ?? 'default'),
             'payment' => $payment,
-            'caisses' => $caisseStmt->fetchAll(\PDO::FETCH_ASSOC),
         ]);
     }
 
@@ -1005,33 +1010,52 @@ class PaiementsController extends Controller
         $id = (int) ($_POST['id'] ?? 0);
         $newAmount = (float) ($_POST['montant'] ?? 0);
         $newLabel = trim((string) ($_POST['libelle'] ?? 'Paiement élève'));
-        $newCaisseId = !empty($_POST['caisse_id']) ? (int) $_POST['caisse_id'] : null;
         $db = Database::getConnection();
+        $schoolId = (int) ($user['ecole_id'] ?? 0);
         $db->beginTransaction();
         try {
             $stmt = $db->prepare(
                 'SELECT ece.*, ce.eleve_id FROM ecritures_comptables_eleves ece
                  INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
-                 WHERE ece.id = :id AND ece.type_mouvement = \'CREDIT\' FOR UPDATE'
+                 INNER JOIN eleves el ON el.id = ce.eleve_id
+                 WHERE ece.id = :id AND ece.type_mouvement = \'CREDIT\'
+                   AND (el.ecole_id = :ecole OR EXISTS (
+                       SELECT 1 FROM inscriptions i
+                       INNER JOIN classes c ON c.id = i.classe_id
+                       WHERE i.eleve_id = el.id AND c.ecole_id = :inscription_ecole
+                   ))
+                 FOR UPDATE'
             );
-            $stmt->execute([':id' => $id]);
+            $stmt->execute([':id' => $id, ':ecole' => $schoolId, ':inscription_ecole' => $schoolId]);
             $payment = $stmt->fetch(\PDO::FETCH_ASSOC);
             if (!$payment || $newAmount <= 0) {
                 throw new \RuntimeException('Paiement ou montant invalide.');
             }
 
+            $studentLock = $db->prepare('SELECT id FROM eleves WHERE id = :id FOR UPDATE');
+            $studentLock->execute([':id' => (int) $payment['eleve_id']]);
+
             $oldAmount = (float) $payment['montant'];
             $delta = $newAmount - $oldAmount;
-            $dette = DetteEleve::findByEleveAndFrais((int) $payment['eleve_id'], (int) $payment['frais_id']);
+            $dette = null;
+            if (!empty($payment['frais_id'])) {
+                $debtStmt = $db->prepare(
+                    'SELECT * FROM dettes_eleves
+                     WHERE eleve_id = :eleve AND frais_id = :frais
+                     ORDER BY id ASC LIMIT 1 FOR UPDATE'
+                );
+                $debtStmt->execute([':eleve' => $payment['eleve_id'], ':frais' => $payment['frais_id']]);
+                $dette = $debtStmt->fetch(\PDO::FETCH_ASSOC) ?: null;
+            }
             if ($dette) {
                 $available = (float) $dette['montant_restant'] + $oldAmount;
-                if ($newAmount > $available) {
+                if ($newAmount > $available || $newAmount > (float) $dette['montant_initial']) {
                     throw new \RuntimeException('Le nouveau montant dépasse le reste à payer de ce frais.');
                 }
             }
 
-            $update = $db->prepare('UPDATE ecritures_comptables_eleves SET montant = :montant, libelle = :libelle, caisse_banque_id = :caisse WHERE id = :id');
-            $update->execute([':montant' => $newAmount, ':libelle' => $newLabel, ':caisse' => $newCaisseId, ':id' => $id]);
+            $update = $db->prepare('UPDATE ecritures_comptables_eleves SET montant = :montant, libelle = :libelle WHERE id = :id');
+            $update->execute([':montant' => $newAmount, ':libelle' => $newLabel, ':id' => $id]);
 
             // Keep the mirrored legacy row synchronized when it can be identified.
             $legacy = $db->prepare('SELECT pe.id FROM paiements_eleves pe WHERE pe.eleve_id = :eleve AND pe.frais_id = :frais AND ABS(pe.montant_paye - :montant) < 0.001 ORDER BY ABS(TIMESTAMPDIFF(SECOND, pe.date_paiement, :date_operation)) ASC LIMIT 1');
@@ -1099,13 +1123,12 @@ class PaiementsController extends Controller
                     'nom' => $legacy['nom'] ?? null,
                     'postnom' => $legacy['postnom'] ?? null,
                     'prenom' => $legacy['prenom'] ?? null,
-                    'caisse_name' => null,
                 ];
             }
         } else {
             $ecritureId = (int) $idParam;
             if ($ecritureId > 0) {
-                $stmt = $db->prepare('SELECT ece.*, ce.eleve_id, el.nom, el.postnom, el.prenom, cb.nom_compte AS caisse_name, COALESCE(NULLIF(CONCAT_WS(\' \', a.nom, a.postnom, a.prenom), \'\'), u.nom_complet, \'Agent non identifié\') AS agent_nom, COALESCE(ra.titre_role, u.role, \'Agent\') AS agent_fonction FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id INNER JOIN eleves el ON ce.eleve_id = el.id LEFT JOIN caisses_banques cb ON ece.caisse_banque_id = cb.id LEFT JOIN agents a ON ece.agent_saisie_id = a.id LEFT JOIN roles_administration ra ON a.role_id = ra.id LEFT JOIN (SELECT reference_id, MAX(nom_complet) AS nom_complet, MAX(role) AS role FROM utilisateurs WHERE role NOT IN (\'eleve_ecole\', \'parent_ecole\') GROUP BY reference_id) u ON ece.agent_saisie_id = u.reference_id WHERE ece.id = :id LIMIT 1');
+                $stmt = $db->prepare('SELECT ece.*, ce.eleve_id, el.nom, el.postnom, el.prenom, COALESCE(NULLIF(us.nom_complet, \'\'), NULLIF(CONCAT_WS(\' \', a.nom, a.postnom, a.prenom), \'\'), u.nom_complet, \'Agent non identifié\') AS agent_nom, COALESCE(ra.titre_role, us.role, u.role, \'Agent\') AS agent_fonction FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id INNER JOIN eleves el ON ce.eleve_id = el.id LEFT JOIN agents a ON ece.agent_saisie_id = a.id LEFT JOIN roles_administration ra ON a.role_id = ra.id LEFT JOIN utilisateurs us ON ece.utilisateur_saisie_id = us.id LEFT JOIN (SELECT reference_id, MAX(nom_complet) AS nom_complet, MAX(role) AS role FROM utilisateurs WHERE role NOT IN (\'eleve_ecole\', \'parent_ecole\') GROUP BY reference_id) u ON ece.agent_saisie_id = u.reference_id WHERE ece.id = :id LIMIT 1');
                 $stmt->execute([':id' => $ecritureId]);
                 $data = $stmt->fetch(\PDO::FETCH_ASSOC);
             }
@@ -1114,6 +1137,30 @@ class PaiementsController extends Controller
         if (!$data) {
             header('Location: ' . BASE_URL . '/error/notFound');
             exit;
+        }
+
+        $data['agent_nom'] = 'Agent non identifié';
+        if (!empty($data['utilisateur_saisie_id'])) {
+            $recorderStmt = $db->prepare('SELECT nom_complet, role FROM utilisateurs WHERE id = :id LIMIT 1');
+            $recorderStmt->execute([':id' => (int) $data['utilisateur_saisie_id']]);
+            $recorder = $recorderStmt->fetch(\PDO::FETCH_ASSOC);
+            if ($recorder) {
+                $data['agent_nom'] = trim((string) ($recorder['nom_complet'] ?? '')) ?: $data['agent_nom'];
+                $data['agent_fonction'] = User::getRoleLabel((string) ($recorder['role'] ?? ''));
+            }
+        }
+        if ($data['agent_nom'] === 'Agent non identifié' && !empty($data['agent_saisie_id'])) {
+            $agentStmt = $db->prepare(
+                'SELECT CONCAT_WS(\' \', a.nom, a.postnom, a.prenom) AS nom, ra.titre_role
+                 FROM agents a LEFT JOIN roles_administration ra ON ra.id = a.role_id
+                 WHERE a.id = :id LIMIT 1'
+            );
+            $agentStmt->execute([':id' => (int) $data['agent_saisie_id']]);
+            $agent = $agentStmt->fetch(\PDO::FETCH_ASSOC);
+            if ($agent && trim((string) ($agent['nom'] ?? '')) !== '') {
+                $data['agent_nom'] = trim((string) $agent['nom']);
+                $data['agent_fonction'] = $agent['titre_role'] ?? 'Agent';
+            }
         }
 
         // Ensure user can only view receipts for élèves in their school (unless super_admin)
@@ -1266,13 +1313,12 @@ class PaiementsController extends Controller
                     'nom' => $legacy['nom'] ?? null,
                     'postnom' => $legacy['postnom'] ?? null,
                     'prenom' => $legacy['prenom'] ?? null,
-                    'caisse_name' => null,
                 ];
             }
         } else {
             $ecritureId = (int) $idParam;
             if ($ecritureId > 0) {
-                $stmt = $db->prepare('SELECT ece.*, ce.eleve_id, el.nom, el.postnom, el.prenom, cb.nom_compte AS caisse_name FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id INNER JOIN eleves el ON ce.eleve_id = el.id LEFT JOIN caisses_banques cb ON ece.caisse_banque_id = cb.id WHERE ece.id = :id LIMIT 1');
+                $stmt = $db->prepare('SELECT ece.*, ce.eleve_id, el.nom, el.postnom, el.prenom FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id INNER JOIN eleves el ON ce.eleve_id = el.id WHERE ece.id = :id LIMIT 1');
                 $stmt->execute([':id' => $ecritureId]);
                 $data = $stmt->fetch(\PDO::FETCH_ASSOC);
             }

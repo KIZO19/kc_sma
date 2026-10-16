@@ -49,7 +49,6 @@ unset($_SESSION['payment_notification_status']);
                   <img src="<?= htmlspecialchars($ecole_logo, ENT_QUOTES, 'UTF-8') ?>" alt="Logo de l'école" style="display:block;width:30px;height:30px;object-fit:contain;margin:0 auto 3px;">
                 <?php endif; ?>
                 <h4><?= htmlspecialchars($ecole_name ?? APP_NAME) ?></h4>
-                <div><?= htmlspecialchars($ecriture['caisse_name'] ?? '') ?></div>
                 <div class="pos-line"></div>
                 <div>REÇU DE PAIEMENT</div>
                 <div class="text-muted">Réf: <strong><?= htmlspecialchars($ecriture['reference_recu'] ?? '') ?></strong></div>
