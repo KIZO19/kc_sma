@@ -144,6 +144,16 @@ class DetteEleve
 
     public static function computeOutstandingFromApplicableFees(int $eleveId): array
     {
+        $result = [];
+        foreach (self::getOutstandingFeeDetails($eleveId) as $fee) {
+            $currency = $fee['devise'];
+            $result[$currency] = ($result[$currency] ?? 0.0) + $fee['montant_restant'];
+        }
+        return $result;
+    }
+
+    public static function getOutstandingFeeDetails(int $eleveId): array
+    {
         $db = Database::getConnection();
         $enrollment = self::getLatestEnrollmentForEleve($eleveId);
         $yearId = (int) ($enrollment['annee_scolaire_id'] ?? 0);
@@ -174,7 +184,12 @@ class DetteEleve
             $allFees = [];
         }
 
-        $result = [];
+        $feesById = [];
+        foreach ($allFees as $fee) {
+            $feesById[(int) ($fee['id'] ?? 0)] = $fee;
+        }
+
+        $details = [];
         $debtsByFee = [];
         $debtStmt = $db->prepare(
             'SELECT frais_id, COALESCE(devise, \'USD\') AS devise, SUM(montant_restant) AS montant_restant
@@ -189,7 +204,13 @@ class DetteEleve
             $remaining = max(0.0, (float) ($debt['montant_restant'] ?? 0));
             $debtsByFee[$feeId] = true;
             if ($remaining > 0) {
-                $result[$devise] = ($result[$devise] ?? 0.0) + $remaining;
+                $details[] = [
+                    'frais_id' => $feeId,
+                    'type_frais' => (string) ($feesById[$feeId]['type_frais'] ?? 'Frais scolaire'),
+                    'montant_total' => (float) ($feesById[$feeId]['montant_total'] ?? 0),
+                    'montant_restant' => $remaining,
+                    'devise' => $devise,
+                ];
             }
         }
 
@@ -229,13 +250,16 @@ class DetteEleve
                 continue;
             }
 
-            if (!isset($result[$devise])) {
-                $result[$devise] = 0.0;
-            }
-            $result[$devise] += $remaining;
+            $details[] = [
+                'frais_id' => $feeId,
+                'type_frais' => (string) ($f['type_frais'] ?? 'Frais scolaire'),
+                'montant_total' => $feeAmount,
+                'montant_restant' => $remaining,
+                'devise' => $devise,
+            ];
         }
 
-        return $result;
+        return $details;
     }
 
     public static function findByEleveAndFrais(int $eleveId, int $fraisId): ?array

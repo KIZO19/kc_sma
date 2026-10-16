@@ -582,6 +582,7 @@ class PaiementsController extends Controller
         }
         $eleve = null;
         $students = [];
+        $feeDebtDetails = [];
         if ($eleveId > 0) {
             if (($user['role'] ?? '') !== 'super_admin' && (int) ($user['ecole_id'] ?? 0) > 0) {
                 $eleve = Eleve::findByIdAndSchool($eleveId, (int) $user['ecole_id']);
@@ -595,7 +596,13 @@ class PaiementsController extends Controller
             $compte = Eleve::getAccount($eleveId);
             // Include recorded balances and any applicable fee not yet materialized as a debt row.
             try {
-                $totalDebtByCurrency = DetteEleve::computeOutstandingFromApplicableFees($eleveId);
+                $feeDebtDetails = DetteEleve::getOutstandingFeeDetails($eleveId);
+                $totalDebtByCurrency = [];
+                foreach ($feeDebtDetails as $feeDebt) {
+                    $currency = strtoupper(trim((string) ($feeDebt['devise'] ?? 'USD'))) ?: 'USD';
+                    $totalDebtByCurrency[$currency] = ($totalDebtByCurrency[$currency] ?? 0.0)
+                        + max(0.0, (float) ($feeDebt['montant_restant'] ?? 0));
+                }
                 $totalDebt = array_sum($totalDebtByCurrency);
             } catch (\Throwable $e) {
                 $totalDebt = null;
@@ -613,9 +620,16 @@ class PaiementsController extends Controller
                 }
 
                 try {
-                    $debtByCurrency = DetteEleve::computeOutstandingFromApplicableFees($studentId);
+                    $feeDebtDetails = DetteEleve::getOutstandingFeeDetails($studentId);
+                    $debtByCurrency = [];
+                    foreach ($feeDebtDetails as $feeDebt) {
+                        $currency = strtoupper(trim((string) ($feeDebt['devise'] ?? 'USD'))) ?: 'USD';
+                        $debtByCurrency[$currency] = ($debtByCurrency[$currency] ?? 0.0)
+                            + max(0.0, (float) ($feeDebt['montant_restant'] ?? 0));
+                    }
                     $remaining = (float) array_sum($debtByCurrency);
                     $student['remaining_debt_by_currency'] = $debtByCurrency;
+                    $student['outstanding_fee_details'] = $feeDebtDetails;
                     $student['remaining_debt'] = $remaining;
                     $student['is_settled'] = $remaining <= 0.0;
                     $students[] = $student;
@@ -644,25 +658,44 @@ class PaiementsController extends Controller
         $authorizedFeeIds = in_array($role, ['super_admin', 'comptable_école'], true)
             ? []
             : PaiementAutorisation::getAuthorizedFeeIdsForUser($user);
+        if (!empty($authorizedFeeIds)) {
+            foreach ($students as &$student) {
+                $student['outstanding_fee_details'] = array_values(array_filter(
+                    $student['outstanding_fee_details'] ?? [],
+                    static fn (array $feeDebt): bool => in_array((int) ($feeDebt['frais_id'] ?? 0), $authorizedFeeIds, true)
+                ));
+                $student['remaining_debt_by_currency'] = [];
+                foreach ($student['outstanding_fee_details'] as $feeDebt) {
+                    $currency = strtoupper(trim((string) ($feeDebt['devise'] ?? 'USD'))) ?: 'USD';
+                    $student['remaining_debt_by_currency'][$currency] =
+                        ($student['remaining_debt_by_currency'][$currency] ?? 0.0)
+                        + max(0.0, (float) ($feeDebt['montant_restant'] ?? 0));
+                }
+                $student['remaining_debt'] = array_sum($student['remaining_debt_by_currency']);
+                $student['is_settled'] = $student['remaining_debt'] <= 0.0;
+            }
+            unset($student);
+        }
 
         // Fetch fees applicable to populate motif picklist
         $fees = [];
         try {
             $schoolIdForFees = (int) ($user['ecole_id'] ?? 0);
             if ($eleveId > 0) {
-                $enrollment = DetteEleve::getLatestEnrollmentForEleve($eleveId);
                 $allFees = \App\Models\FraisScolaire::getAllBySchool($schoolIdForFees);
+                $feeDebtsById = [];
+                foreach ($feeDebtDetails as $feeDebt) {
+                    $feeDebtsById[(int) ($feeDebt['frais_id'] ?? 0)] = $feeDebt;
+                }
                 foreach ($allFees as $f) {
                     $feeId = (int) ($f['id'] ?? 0);
-                    $d = DetteEleve::findByEleveAndFrais($eleveId, $feeId);
-                    $hasOutstandingDebt = $d && (float) ($d['montant_restant'] ?? 0) > 0;
-                    if (!$hasOutstandingDebt && !DetteEleve::isFeeApplicableToEnrollment($f, $enrollment)) {
+                    if (!isset($feeDebtsById[$feeId])) {
                         continue;
                     }
                     if (!empty($authorizedFeeIds) && !in_array($feeId, $authorizedFeeIds, true)) {
                         continue;
                     }
-                    $f['remaining'] = $d ? (float) ($d['montant_restant'] ?? ($f['montant_total'] ?? 0)) : (float) ($f['montant_total'] ?? 0);
+                    $f['remaining'] = (float) $feeDebtsById[$feeId]['montant_restant'];
                     $fees[] = $f;
                 }
             } else {
@@ -690,6 +723,7 @@ class PaiementsController extends Controller
             'compte' => $compte,
             'totalDebt' => $totalDebt ?? null,
             'totalDebtByCurrency' => $totalDebtByCurrency ?? [],
+            'feeDebtDetails' => $feeDebtDetails,
             'fees' => $fees,
             'paymentRecorderName' => trim((string) ($user['nom_complet'] ?? '')),
             'paymentFormToken' => $paymentFormToken,

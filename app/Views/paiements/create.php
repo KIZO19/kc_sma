@@ -2,6 +2,16 @@
 <?php
 $oldInput = $_SESSION['paiements_old'] ?? [];
 $errors = $_SESSION['paiements_errors'] ?? [];
+$oldStudentId = (int) ($oldInput['eleve_id'] ?? 0);
+$oldStudent = null;
+if ($oldStudentId > 0) {
+    foreach (($students ?? []) as $student) {
+        if ((int) ($student['id'] ?? 0) === $oldStudentId) {
+            $oldStudent = $student;
+            break;
+        }
+    }
+}
 unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
 ?>
 <div class="modal-backdrop fade show"></div>
@@ -41,26 +51,19 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
               <?php else: ?>
                 <div class="mb-3">
                   <label class="form-label">Élève</label>
-                  <select name="eleve_id" id="studentSelect" class="form-select" required>
-                    <option value="">-- Sélectionner un élève --</option>
-                    <?php foreach (($students ?? []) as $s): ?>
-                      <?php $isSettled = !empty($s['is_settled']); ?>
-                      <?php $fullName = trim((string) (($s['nom'] ?? '') . ' ' . ($s['postnom'] ?? '') . ' ' . ($s['prenom'] ?? ''))); ?>
-                      <?php
-                        $studentDebtLabel = [];
-                        foreach (($s['remaining_debt_by_currency'] ?? []) as $currency => $amount) {
-                            if ((float) $amount > 0) {
-                                $studentDebtLabel[] = number_format((float) $amount, 2, ',', ' ') . ' ' . $currency;
-                            }
-                        }
-                      ?>
-                      <?php $selected = ((int) ($oldInput['eleve_id'] ?? 0) === (int) $s['id']) ? 'selected' : ''; ?>
-                      <option value="<?= (int) $s['id'] ?>" <?= $selected ?> data-settled="<?= $isSettled ? '1' : '0' ?>" data-debt-by-currency="<?= htmlspecialchars(json_encode($s['remaining_debt_by_currency'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), ENT_QUOTES, 'UTF-8') ?>" style="<?= $isSettled ? 'color:#8a8f98;' : '' ?>">
-                        <?= htmlspecialchars($fullName, ENT_QUOTES, 'UTF-8') ?><?= $isSettled ? ' — Soldé' : ' — Reste: ' . htmlspecialchars(implode(' / ', $studentDebtLabel), ENT_QUOTES, 'UTF-8') ?>
-                      </option>
-                    <?php endforeach; ?>
-                  </select>
+                  <input type="hidden" name="eleve_id" id="studentId" value="<?= $oldStudent ? (int) $oldStudent['id'] : '' ?>">
+                  <input type="search" id="studentSearch" class="form-control" autocomplete="off" placeholder="Tapez le nom ou le postnom de l’élève" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="studentSearchResults" value="<?= htmlspecialchars(trim(($oldStudent['nom'] ?? '') . ' ' . ($oldStudent['postnom'] ?? '') . ' ' . ($oldStudent['prenom'] ?? '')), ENT_QUOTES, 'UTF-8') ?>">
+                  <div id="studentSearchResults" class="list-group position-absolute shadow w-100" role="listbox" hidden style="z-index:1080; max-height:16rem; overflow-y:auto"></div>
                   <div id="studentDebtStatus" class="form-text" aria-live="polite"></div>
+                  <script type="application/json" id="studentData"><?= json_encode(array_map(static function (array $student): array {
+                      return [
+                          'id' => (int) ($student['id'] ?? 0),
+                          'name' => trim((string) (($student['nom'] ?? '') . ' ' . ($student['postnom'] ?? '') . ' ' . ($student['prenom'] ?? ''))),
+                          'settled' => !empty($student['is_settled']),
+                          'debtByCurrency' => $student['remaining_debt_by_currency'] ?? [],
+                          'feeDebts' => $student['outstanding_fee_details'] ?? [],
+                      ];
+                  }, $students ?? []), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?></script>
                 </div>
               <?php endif; ?>
 
@@ -78,6 +81,20 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
                       <?php endif; ?>
                     <?php else: ?>
                       <li>Sélectionnez un élève pour afficher sa dette.</li>
+                    <?php endif; ?>
+                  </ul>
+                  <div id="studentDebtFeeHeading" class="fw-semibold mt-2">Frais restant à payer</div>
+                  <ul id="studentDebtFees" class="list-unstyled mb-0 mt-1">
+                    <?php if (!empty($eleve)): ?>
+                      <?php if (!empty($feeDebtDetails)): ?>
+                        <?php foreach ($feeDebtDetails as $feeDebt): ?>
+                          <li><?= htmlspecialchars((string) $feeDebt['type_frais'], ENT_QUOTES, 'UTF-8') ?> : <?= number_format((float) $feeDebt['montant_restant'], 2, ',', ' ') ?> <?= htmlspecialchars((string) $feeDebt['devise'], ENT_QUOTES, 'UTF-8') ?></li>
+                        <?php endforeach; ?>
+                      <?php else: ?>
+                        <li>Aucun frais impayé.</li>
+                      <?php endif; ?>
+                    <?php else: ?>
+                      <li>Sélectionnez un élève pour afficher ses frais impayés.</li>
                     <?php endif; ?>
                   </ul>
                 </div>
@@ -163,56 +180,217 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
 <script>
   document.addEventListener('DOMContentLoaded', function () {
     document.body.classList.add('modal-open');
-    const studentSelect = document.getElementById('studentSelect');
-    if (!studentSelect) {
-      return;
-    }
-
-    const options = Array.from(studentSelect.options);
-    if (!options.length) {
-      return;
-    }
-
+    const studentSearch = document.getElementById('studentSearch');
+    const studentId = document.getElementById('studentId');
+    const studentSearchResults = document.getElementById('studentSearchResults');
+    const students = JSON.parse(document.getElementById('studentData')?.textContent || '[]');
     const studentDebtStatus = document.getElementById('studentDebtStatus');
     const studentDebtSummary = document.getElementById('studentDebtSummary');
     const studentDebtByCurrency = document.getElementById('studentDebtByCurrency');
-    function updateStudentDebtAppearance() {
-      const selectedOption = studentSelect.selectedOptions[0];
-      const isSettled = selectedOption && selectedOption.dataset.settled === '1';
-      studentSelect.classList.toggle('text-muted', Boolean(isSettled));
-      if (studentDebtStatus) {
-        studentDebtStatus.textContent = isSettled ? 'Aucune dette restante pour cet élève.' : '';
+    const studentDebtFees = document.getElementById('studentDebtFees');
+    const fraisSelect = document.getElementById('fraisSelect');
+    function updateStudentFees(student) {
+      if (!studentSearch || !fraisSelect) return;
+      const previousFeeId = fraisSelect.value;
+      fraisSelect.replaceChildren(new Option('-- Sélectionner le motif --', ''));
+      (student?.feeDebts || []).forEach((fee) => {
+        const remaining = Number(fee.montant_restant || 0);
+        if (remaining <= 0) return;
+        const currency = fee.devise || 'USD';
+        const option = new Option(
+          `${fee.type_frais} (${currency}) — Reste: ${new Intl.NumberFormat('fr-FR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          }).format(remaining)}`,
+          String(fee.frais_id)
+        );
+        option.dataset.amount = String(fee.montant_total || remaining);
+        option.dataset.remaining = String(remaining);
+        option.dataset.devise = currency;
+        fraisSelect.appendChild(option);
+      });
+      if (Array.from(fraisSelect.options).some((option) => option.value === previousFeeId && previousFeeId !== '')) {
+        fraisSelect.value = previousFeeId;
       }
-      if (studentDebtSummary && studentDebtByCurrency) {
-        if (!selectedOption || !selectedOption.value) {
+      fraisSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function updateStudentDebtSummary(student) {
+      if (studentDebtStatus) {
+        studentDebtStatus.textContent = student?.settled ? 'Aucune dette restante pour cet élève.' : '';
+      }
+      if (studentDebtSummary && studentDebtByCurrency && studentDebtFees) {
+        if (!student) {
           studentDebtSummary.hidden = true;
           return;
         }
         studentDebtSummary.hidden = false;
-        const balances = JSON.parse(selectedOption.dataset.debtByCurrency || '{}');
+        const balances = student.debtByCurrency || {};
         studentDebtByCurrency.replaceChildren();
+        studentDebtFees.replaceChildren();
         const currencies = Object.entries(balances).filter(([, amount]) => Number(amount) > 0);
         if (currencies.length === 0) {
           const item = document.createElement('li');
           item.textContent = 'Aucune dette restante.';
           studentDebtByCurrency.appendChild(item);
+        } else {
+          currencies.forEach(([currency, amount]) => {
+            const item = document.createElement('li');
+            const formattedAmount = new Intl.NumberFormat('fr-FR', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            }).format(Number(amount));
+            item.textContent = `${currency} : ${formattedAmount}`;
+            studentDebtByCurrency.appendChild(item);
+          });
+        }
+        const feeDebts = (student.feeDebts || []).filter((fee) => Number(fee.montant_restant) > 0);
+        if (feeDebts.length === 0) {
+          const item = document.createElement('li');
+          item.textContent = 'Aucun frais impayé.';
+          studentDebtFees.appendChild(item);
+        } else {
+          feeDebts.forEach((fee) => {
+            const item = document.createElement('li');
+            const formattedAmount = new Intl.NumberFormat('fr-FR', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            }).format(Number(fee.montant_restant));
+            item.textContent = `${fee.type_frais} : ${formattedAmount} ${fee.devise}`;
+            studentDebtFees.appendChild(item);
+          });
+        }
+      }
+      updateStudentFees(student);
+    }
+
+    if (studentSearch && studentId && studentSearchResults) {
+      let visibleStudents = [];
+      let activeResultIndex = -1;
+      const normalize = (value) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase();
+
+      function hideStudentResults() {
+        studentSearchResults.hidden = true;
+        studentSearch.setAttribute('aria-expanded', 'false');
+        studentSearch.removeAttribute('aria-activedescendant');
+        activeResultIndex = -1;
+      }
+
+      function selectStudent(student) {
+        studentId.value = String(student.id);
+        studentSearch.value = student.name;
+        studentSearch.classList.toggle('text-muted', student.settled);
+        updateStudentDebtSummary(student);
+        hideStudentResults();
+      }
+
+      function renderStudentResults() {
+        const query = normalize(studentSearch.value.trim());
+        studentId.value = '';
+        studentSearch.classList.remove('text-muted');
+        updateStudentDebtSummary(null);
+        studentSearchResults.replaceChildren();
+        visibleStudents = query
+          ? students.filter((student) => normalize(student.name).includes(query)).slice(0, 20)
+          : [];
+        activeResultIndex = -1;
+
+        if (!query) {
+          hideStudentResults();
           return;
         }
-        currencies.forEach(([currency, amount]) => {
-          const item = document.createElement('li');
-          const formattedAmount = new Intl.NumberFormat('fr-FR', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-          }).format(Number(amount));
-          item.textContent = `${currency} : ${formattedAmount}`;
-          studentDebtByCurrency.appendChild(item);
+        if (visibleStudents.length === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'list-group-item text-muted';
+          empty.textContent = 'Aucun élève correspondant.';
+          studentSearchResults.appendChild(empty);
+        } else {
+          visibleStudents.forEach((student, index) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.id = `student-search-result-${index}`;
+            button.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+            button.setAttribute('role', 'option');
+            button.setAttribute('aria-selected', 'false');
+            button.textContent = student.name;
+            if (student.settled) {
+              button.classList.add('text-muted');
+              const settled = document.createElement('span');
+              settled.className = 'badge text-bg-secondary ms-2';
+              settled.textContent = 'Soldé';
+              button.appendChild(settled);
+            } else {
+              const balances = Object.entries(student.debtByCurrency || {})
+                .filter(([, amount]) => Number(amount) > 0)
+                .map(([currency, amount]) => `${new Intl.NumberFormat('fr-FR', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2
+                }).format(Number(amount))} ${currency}`);
+              if (balances.length) {
+                const remaining = document.createElement('span');
+                remaining.className = 'small text-muted ms-2';
+                remaining.textContent = balances.join(' / ');
+                button.appendChild(remaining);
+              }
+            }
+            button.addEventListener('click', () => selectStudent(student));
+            studentSearchResults.appendChild(button);
+          });
+        }
+
+        studentSearchResults.hidden = false;
+        studentSearch.setAttribute('aria-expanded', 'true');
+      }
+
+      studentSearch.addEventListener('input', renderStudentResults);
+      studentSearch.addEventListener('keydown', (event) => {
+        if (studentSearchResults.hidden) {
+          if (event.key === 'ArrowDown' && studentSearch.value.trim()) {
+            renderStudentResults();
+            event.preventDefault();
+          }
+          return;
+        }
+        if (event.key === 'ArrowDown' && visibleStudents.length) {
+          event.preventDefault();
+          activeResultIndex = (activeResultIndex + 1) % visibleStudents.length;
+        } else if (event.key === 'ArrowUp' && visibleStudents.length) {
+          event.preventDefault();
+          activeResultIndex = (activeResultIndex - 1 + visibleStudents.length) % visibleStudents.length;
+        } else if (event.key === 'Enter' && activeResultIndex >= 0) {
+          event.preventDefault();
+          selectStudent(visibleStudents[activeResultIndex]);
+          return;
+        } else if (event.key === 'Escape') {
+          hideStudentResults();
+          return;
+        } else {
+          return;
+        }
+        Array.from(studentSearchResults.querySelectorAll('[role="option"]')).forEach((option, index) => {
+          const active = index === activeResultIndex;
+          option.classList.toggle('active', active);
+          option.setAttribute('aria-selected', active ? 'true' : 'false');
         });
+        studentSearch.setAttribute('aria-activedescendant', `student-search-result-${activeResultIndex}`);
+      });
+      document.addEventListener('click', (event) => {
+        if (!studentSearch.contains(event.target) && !studentSearchResults.contains(event.target)) {
+          hideStudentResults();
+        }
+      });
+      studentSearch.addEventListener('focus', () => {
+        if (studentSearch.value.trim() && !studentId.value) {
+          renderStudentResults();
+        }
+      });
+
+      const initialStudent = students.find((student) => String(student.id) === studentId.value);
+      if (initialStudent) {
+        selectStudent(initialStudent);
       }
     }
-    studentSelect.addEventListener('change', updateStudentDebtAppearance);
-    updateStudentDebtAppearance();
 
-    const fraisSelect = document.getElementById('fraisSelect');
     const libelleInput = document.getElementById('libelleInput');
     const montantInput = document.querySelector('input[name="montant"]');
     const montantHint = document.getElementById('montantHint');
@@ -277,21 +455,36 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
       fraisSelect.dispatchEvent(event);
     }
 
+    let lastSelectedFeeId = fraisSelect.value;
+    let lastGeneratedFeeLabel = '';
     fraisSelect.addEventListener('change', function () {
       const opt = fraisSelect.selectedOptions[0];
       if (!opt) return;
       const amount = parseFloat(opt.dataset.amount || '0');
       const remaining = parseFloat(opt.dataset.remaining || '0');
-      if (amount && montantInput && (montantInput.value === '' || parseFloat(montantInput.value) === 0)) {
+      const feeChanged = opt.value !== lastSelectedFeeId;
+      if (feeChanged && montantInput) {
         montantInput.value = remaining > 0 ? remaining.toFixed(2) : amount.toFixed(2);
       }
-      if (libelleInput && libelleInput.value.trim() === '') {
+      if (libelleInput && (libelleInput.value.trim() === '' || libelleInput.value === lastGeneratedFeeLabel)) {
         libelleInput.value = opt.textContent.trim();
+        lastGeneratedFeeLabel = libelleInput.value;
       }
+      lastSelectedFeeId = opt.value;
       updateMontantHint();
     });
 
     paiementForm.addEventListener('submit', function (event) {
+      if (studentId && !studentId.value) {
+        event.preventDefault();
+        if (studentSearch) {
+          studentSearch.setCustomValidity('Sélectionnez un élève dans les résultats de recherche.');
+          studentSearch.reportValidity();
+          studentSearch.addEventListener('input', () => studentSearch.setCustomValidity(''), { once: true });
+          studentSearch.focus();
+        }
+        return;
+      }
       const opt = fraisSelect.selectedOptions[0];
       if (!opt) return;
       const feeAmount = parseFloat(opt.dataset.amount || '0');
