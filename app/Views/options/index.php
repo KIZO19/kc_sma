@@ -5,7 +5,7 @@
           <div class="row mb-2">
             <div class="col-sm-6">
               <h1>Options</h1>
-              <p class="text-muted">Gérez les options disponibles pour les classes du secondaire.</p>
+              <p class="text-muted">Gérez le catalogue d’options propre à votre établissement.</p>
             </div>
             <div class="col-sm-6">
               <ol class="breadcrumb float-sm-end">
@@ -56,6 +56,9 @@
                       <tr>
                         <th>#</th>
                         <th>Option</th>
+                        <th>Section</th>
+                        <th>Utilisation</th>
+                        <th class="text-end">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -63,6 +66,11 @@
                         <tr>
                           <td><?= $index + 1 ?></td>
                           <td><?= htmlspecialchars($option['nom_option']) ?></td>
+                          <td><?= htmlspecialchars($option['nom_section'] ?? '-') ?></td>
+                          <td>
+                            <span class="badge text-bg-light"><?= (int) ($option['class_count'] ?? 0) ?> classe(s)</span>
+                            <span class="badge text-bg-light"><?= (int) ($option['fee_count'] ?? 0) ?> frais</span>
+                          </td>
                           <td class="text-end">
                             <?php if ($canCreate): ?>
                               <a href="<?= BASE_URL ?>/options/edit?id=<?= (int) $option['id'] ?>" class="btn btn-sm btn-primary">Modifier</a>
