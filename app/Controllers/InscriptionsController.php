@@ -14,6 +14,7 @@ use App\Models\Option;
 use App\Models\ParentModel;
 use App\Models\Section;
 use App\Models\User;
+use App\Services\PaymentParentNotifier;
 
 class InscriptionsController extends Controller
 {
@@ -813,9 +814,30 @@ class InscriptionsController extends Controller
             $eleveId = (int) ($_POST['eleve_id'] ?? 0);
 
             if ($eleveId > 0) {
-                if ($role === 'super_admin' || $ecoleId <= 0 || Eleve::findByIdAndSchool($eleveId, $ecoleId)) {
-                    Eleve::approve($eleveId);
-                    $_SESSION['inscriptions_success'] = 'Inscription validée par le personnel autorisé.';
+                $student = $role === 'super_admin' || $ecoleId <= 0
+                    ? Eleve::findById($eleveId)
+                    : Eleve::findByIdAndSchool($eleveId, $ecoleId);
+                if ($student) {
+                    $wasAlreadyActive = ($student['statut_eleve'] ?? '') === 'actif';
+                    if (Eleve::approve($eleveId)) {
+                        $_SESSION['inscriptions_success'] = 'Inscription validée par le personnel autorisé.';
+                        if (!$wasAlreadyActive) {
+                            try {
+                                $_SESSION['inscriptions_notification'] = (new PaymentParentNotifier())
+                                    ->notifyAfterRegistration($eleveId);
+                            } catch (\Throwable $e) {
+                                error_log('InscriptionsController::approve notification failed: ' . $e->getMessage());
+                                $_SESSION['inscriptions_notification'] = [
+                                    'sent' => false,
+                                    'status' => 'failed',
+                                    'message' => 'L’inscription est validée, mais la notification au parent a échoué.',
+                                    'details' => 'Consultez les journaux du serveur pour le détail de l’erreur.',
+                                ];
+                            }
+                        }
+                    } else {
+                        $_SESSION['inscriptions_errors'] = ['Impossible de valider cette inscription.'];
+                    }
                 } else {
                     $_SESSION['inscriptions_errors'] = ['Vous n’êtes pas autorisé(e) à valider cette inscription.'];
                 }

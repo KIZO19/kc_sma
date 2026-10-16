@@ -105,6 +105,132 @@ class PaymentParentNotifier
         $message = '[' . $schoolName . "]\n" . $greeting . ' le paiement de ' . number_format($montant, 2, ',', ' ') . ' ' . $currency
             . ' pour ' . $paymentLabel . ' a bien été enregistré pour l\'élève ' . $studentName . '.';
 
+        return $this->dispatchMessage($phone, $message, $schoolName);
+    }
+
+    public function notifyAfterRegistration(int $eleveId): array
+    {
+        if ($eleveId <= 0) {
+            return ['sent' => false, 'delivered' => false, 'status' => 'failed', 'reason' => 'invalid_student', 'message' => 'Notification impossible : élève invalide.', 'details' => 'L’identifiant de l’élève est absent ou invalide.'];
+        }
+
+        $stmt = Database::getConnection()->prepare(
+            'SELECT e.id, e.nom, e.postnom, e.prenom, e.matricule, ec.nom_etablissement AS school_name, '
+            . 'p.telephone AS parent_phone, p.nom_responsable AS parent_nom_responsable '
+            . 'FROM eleves e LEFT JOIN ecoles ec ON ec.id = e.ecole_id '
+            . 'LEFT JOIN parents p ON p.id = e.parent_id WHERE e.id = :eleve_id LIMIT 1'
+        );
+        $stmt->execute([':eleve_id' => $eleveId]);
+        $student = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$student) {
+            return ['sent' => false, 'delivered' => false, 'status' => 'failed', 'reason' => 'student_not_found', 'message' => 'Notification impossible : élève introuvable.', 'details' => 'Aucun élève ne correspond à cet identifiant.'];
+        }
+
+        $schoolName = trim((string) ($student['school_name'] ?? '')) ?: 'Établissement scolaire';
+        $studentName = trim(implode(' ', array_filter(
+            [$student['nom'] ?? '', $student['postnom'] ?? '', $student['prenom'] ?? ''],
+            static fn ($value): bool => trim((string) $value) !== ''
+        )));
+        $parentName = trim((string) ($student['parent_nom_responsable'] ?? ''));
+        $greeting = $parentName !== '' ? 'Bonjour ' . $parentName . ',' : 'Bonjour,';
+        $matricule = trim((string) ($student['matricule'] ?? ''));
+        $message = '[' . $schoolName . "]\n" . $greeting . ' l’inscription de ' . $studentName
+            . ($matricule !== '' ? ' (matricule ' . $matricule . ')' : '')
+            . ' a été validée. Bienvenue dans notre établissement.';
+
+        $phone = $this->normalizePhone((string) ($student['parent_phone'] ?? ''));
+        if ($phone === '') {
+            return ['sent' => false, 'delivered' => false, 'status' => 'failed', 'reason' => 'missing_parent_phone', 'message' => 'Notification d’inscription non envoyée.', 'details' => 'Le parent associé à cet élève n’a pas de numéro de téléphone valide.'];
+        }
+
+        return $this->dispatchMessage($phone, $message, $schoolName);
+    }
+
+    public function sendSchoolAnnouncement(int $ecoleId, string $title, string $body): array
+    {
+        if ($ecoleId <= 0) {
+            return ['sent' => false, 'status' => 'failed', 'reason' => 'invalid_school', 'message' => 'Envoi impossible : école invalide.', 'details' => 'Aucune école valide n’a été sélectionnée.'];
+        }
+
+        $db = Database::getConnection();
+        $schoolStmt = $db->prepare('SELECT nom_etablissement FROM ecoles WHERE id = :id LIMIT 1');
+        $schoolStmt->execute([':id' => $ecoleId]);
+        $schoolName = trim((string) $schoolStmt->fetchColumn());
+        if ($schoolName === '') {
+            return ['sent' => false, 'status' => 'failed', 'reason' => 'school_not_found', 'message' => 'Envoi impossible : école introuvable.', 'details' => 'Aucun établissement ne correspond à cette école.'];
+        }
+
+        $recipientStmt = $db->prepare(
+            'SELECT DISTINCT p.id, p.telephone FROM parents p '
+            . 'INNER JOIN eleves e ON e.parent_id = p.id '
+            . 'LEFT JOIN inscriptions i ON i.eleve_id = e.id '
+            . 'LEFT JOIN classes c ON c.id = i.classe_id '
+            . 'WHERE p.telephone IS NOT NULL AND TRIM(p.telephone) <> \'\' '
+            . 'AND (p.ecole_id = :parent_school OR e.ecole_id = :student_school OR c.ecole_id = :class_school)'
+        );
+        $recipientStmt->execute([
+            ':parent_school' => $ecoleId,
+            ':student_school' => $ecoleId,
+            ':class_school' => $ecoleId,
+        ]);
+
+        $phones = [];
+        foreach ($recipientStmt->fetchAll(PDO::FETCH_ASSOC) as $recipient) {
+            $phone = $this->normalizePhone((string) ($recipient['telephone'] ?? ''));
+            if ($phone !== '') {
+                $phones[$phone] = $phone;
+            }
+        }
+
+        if ($phones === []) {
+            return [
+                'sent' => false,
+                'status' => 'failed',
+                'reason' => 'no_parent_phone',
+                'message' => 'Aucun communiqué n’a été envoyé.',
+                'details' => 'Aucun numéro de parent valide n’a été trouvé pour cette école.',
+                'recipients_total' => 0,
+                'recipients_delivered' => 0,
+                'recipients_failed' => 0,
+            ];
+        }
+
+        $message = '[' . $schoolName . "]\nCOMMUNIQUÉ : " . trim($title) . "\n" . trim($body);
+        $delivered = 0;
+        $fullySent = 0;
+        $failureReasons = [];
+        foreach ($phones as $phone) {
+            $result = $this->dispatchMessage($phone, $message, $schoolName);
+            if (!empty($result['delivered'])) {
+                $delivered++;
+            }
+            if (!empty($result['sent'])) {
+                $fullySent++;
+            }
+            if (empty($result['sent'])) {
+                $failureReasons[] = $result['details'] ?? $result['reason'] ?? 'Échec du fournisseur.';
+            }
+        }
+
+        $status = $fullySent === count($phones) ? 'success' : ($delivered > 0 ? 'partial' : 'failed');
+        return [
+            'sent' => $status === 'success',
+            'status' => $status,
+            'reason' => $status === 'success' ? '' : ($status === 'partial' ? 'partial_delivery' : 'all_deliveries_failed'),
+            'message' => $status === 'success'
+                ? 'Communiqué envoyé à tous les parents concernés.'
+                : ($status === 'partial' ? 'Communiqué envoyé partiellement; certains envois ont échoué.' : 'Le communiqué n’a pu être envoyé à aucun parent.'),
+            'details' => $fullySent . ' envoi(s) complet(s) sur ' . count($phones) . '; '
+                . $delivered . ' parent(s) ont reçu au moins un canal.'
+                . ($failureReasons !== [] ? ' Détail du premier échec : ' . $failureReasons[0] : ''),
+            'recipients_total' => count($phones),
+            'recipients_delivered' => $delivered,
+            'recipients_failed' => count($phones) - $delivered,
+        ];
+    }
+
+    private function dispatchMessage(string $phone, string $message, string $schoolName): array
+    {
         $attempts = [];
         if ($this->provider === 'infobip') {
             if ($this->shouldSendSms()) {
@@ -130,7 +256,7 @@ class PaymentParentNotifier
         }
 
         if ($attempts === []) {
-            return ['sent' => false, 'status' => 'failed', 'reason' => 'no_channel_configured', 'message' => 'Envoi impossible : aucun canal de notification n’est configuré.', 'details' => 'Le fournisseur ou le canal WhatsApp/SMS n’est pas prêt pour cet envoi.'];
+            return ['sent' => false, 'delivered' => false, 'status' => 'failed', 'reason' => 'no_channel_configured', 'message' => 'Aucun canal de notification n’est configuré.', 'details' => 'Le fournisseur ou le canal WhatsApp/SMS n’est pas prêt pour cet envoi.'];
         }
 
         $successes = array_filter($attempts, static fn ($attempt) => !empty($attempt['sent']));
@@ -152,6 +278,7 @@ class PaymentParentNotifier
         if (count($successes) === count($attempts)) {
             return [
                 'sent' => true,
+                'delivered' => true,
                 'status' => 'success',
                 'reason' => '',
                 'message' => 'Notification envoyée par ' . implode(' et ', $channelLabels) . '.',
@@ -164,6 +291,7 @@ class PaymentParentNotifier
         $status = $successes ? 'partial' : 'failed';
         return [
             'sent' => false,
+            'delivered' => $successes !== [],
             'status' => $status,
             'reason' => $status === 'partial' ? 'partial_delivery' : 'all_channels_failed',
             'message' => $status === 'partial'

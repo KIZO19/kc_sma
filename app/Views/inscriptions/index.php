@@ -58,6 +58,24 @@
             </div>
             <?php unset($_SESSION['inscriptions_errors']); ?>
           <?php endif; ?>
+          <?php if (!empty($_SESSION['inscriptions_notification'])): ?>
+            <?php $registrationNotification = $_SESSION['inscriptions_notification']; unset($_SESSION['inscriptions_notification']); ?>
+            <?php
+              $registrationStatus = $registrationNotification['status'] ?? '';
+              $registrationAlertClass = $registrationStatus === 'success' ? 'alert-success' : ($registrationStatus === 'partial' ? 'alert-warning' : 'alert-danger');
+              $registrationTitle = $registrationStatus === 'success'
+                  ? 'Notification d’inscription envoyée'
+                  : ($registrationStatus === 'partial' ? 'Notification d’inscription partielle' : 'Notification d’inscription non envoyée');
+            ?>
+            <div class="alert <?= $registrationAlertClass ?> alert-dismissible">
+              <strong><?= htmlspecialchars($registrationTitle, ENT_QUOTES, 'UTF-8') ?></strong><br>
+              <?= htmlspecialchars($registrationNotification['message'] ?? '', ENT_QUOTES, 'UTF-8') ?>
+              <?php if (!empty($registrationNotification['details'])): ?>
+                <div class="small mt-1"><?= htmlspecialchars($registrationNotification['details'], ENT_QUOTES, 'UTF-8') ?></div>
+              <?php endif; ?>
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
+            </div>
+          <?php endif; ?>
 
           <div class="row">
             <div class="col-xl-12">

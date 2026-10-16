@@ -98,6 +98,7 @@ class Controller
                 ['name' => 'Agents', 'path' => '/agents', 'icon' => 'bi-people-fill'],
                 ['name' => 'Parents', 'path' => '/parents', 'icon' => 'bi-people'],
                 ['name' => 'Élèves', 'path' => '/eleves', 'icon' => 'bi-person-badge'],
+                ['name' => 'Communiqués', 'path' => '/communiques', 'icon' => 'bi-megaphone'],
                 ['name' => 'Inscriptions', 'path' => '/inscriptions', 'icon' => 'bi-person-plus'],
                 ['name' => 'Options', 'path' => '/options', 'icon' => 'bi-grid-1x2'],
                 ['name' => 'Paiements', 'path' => '/paiements', 'icon' => 'bi-currency-dollar'],
@@ -148,6 +149,7 @@ class Controller
             ],
             'sec_école' => [
                 ['name' => 'Inscriptions', 'path' => '/inscriptions', 'icon' => 'bi-person-plus'],
+                ['name' => 'Communiqués', 'path' => '/communiques', 'icon' => 'bi-megaphone'],
                 ['name' => 'Classes', 'path' => '/classes', 'icon' => 'bi-houses'],
                 ['name' => 'Options', 'path' => '/options', 'icon' => 'bi-grid-1x2'],
                 ['name' => 'Parents', 'path' => '/parents', 'icon' => 'bi-people'],
@@ -183,6 +185,10 @@ class Controller
                 ['name' => 'Accueil', 'path' => '/dashboard', 'icon' => 'bi-house'],
             ],
         };
+
+        if (in_array($role, ['préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école'], true)) {
+            array_unshift($modules, ['name' => 'Communiqués', 'path' => '/communiques', 'icon' => 'bi-megaphone']);
+        }
 
         $user = Auth::user();
         if (!$user || ($user['role'] ?? '') !== $role) {
