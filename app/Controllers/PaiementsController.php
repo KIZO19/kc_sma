@@ -1425,4 +1425,20 @@ class PaiementsController extends Controller
             'historique_paiements' => $historiquePaiements,
         ]);
     }
+
+    public function verifierSolvabilite(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['ecole_admin', 'promoteur_école', 'comptable_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'parent_ecole']);
+
+        $user = Auth::refresh() ?: Auth::user();
+        $role = $user['role'] ?? 'default';
+        $this->view('paiements/verify_solvency', [
+            'title' => 'Vérifier solvabilité',
+            'user' => $user,
+            'role' => $role,
+            'roleLabel' => User::getRoleLabel($role),
+            'modules' => $this->getModulesForRole($role),
+        ]);
+    }
 }

@@ -471,6 +471,9 @@ require __DIR__ . '/../partials/app_header.php';
                     <a class="accounting-action" href="<?= BASE_URL ?>/comptes_eleves">
                       <i class="bi bi-journal-text"></i><span><strong class="d-block">Comptes des élèves</strong><small class="text-muted">Vérifier les mouvements</small></span>
                     </a>
+                    <a class="accounting-action" href="<?= BASE_URL ?>/paiements/verifierSolvabilite">
+                      <i class="bi bi-qr-code-scan"></i><span><strong class="d-block">Vérifier solvabilité</strong><small class="text-muted">Scanner un reçu et consulter les totaux de l’élève</small></span>
+                    </a>
                     <a class="accounting-action" href="<?= BASE_URL ?>/frais/create">
                       <i class="bi bi-file-earmark-plus"></i><span><strong class="d-block">Créer un frais</strong><small class="text-muted">Ajouter une ligne de facturation</small></span>
                     </a>

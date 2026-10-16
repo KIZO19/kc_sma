@@ -125,7 +125,7 @@ unset($_SESSION['payment_notification_status']);
 
                 <div class="qr">
                   <img src="https://api.qrserver.com/v1/create-qr-code?size=200x200&data=<?= urlencode($qrPayload) ?>" alt="QR code" style="width:140px;height:140px;" />
-                  <div style="font-size:11px;margin-top:6px;">Scannez pour voir le résumé du paiement</div>
+                  <div style="font-size:11px;margin-top:6px;">Scannez pour vérifier le total payé et la dette totale</div>
                 </div>
 
                 <div class="pos-line"></div>
