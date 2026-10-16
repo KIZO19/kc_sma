@@ -6,14 +6,62 @@ $options = $options ?? [];
 $oldInput = $oldInput ?? [];
 $pageStyles = <<<STYLE
 <style>
-  .registration-card { width: 100%; }
+  .registration-card { width: 100%; border-radius: 1rem; overflow: hidden; }
   .registration-card .form-control,
   .registration-card .form-select { min-width: 0; }
-  .registration-card .form-actions { gap: .75rem; }
+  .registration-card .card-header { padding: 1.25rem 1.5rem; }
+  .registration-card .card-body { padding: 1.5rem; }
+  .registration-intro { color: #64748b; max-width: 58rem; }
+  .registration-section {
+    padding: 1.25rem;
+    margin-bottom: 1.25rem;
+    border: 1px solid #e2e8f0;
+    border-radius: .875rem;
+    background: #fff;
+  }
+  .registration-section-heading {
+    display: flex;
+    align-items: flex-start;
+    gap: .875rem;
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid #edf0f4;
+  }
+  .registration-section-step {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 2.25rem;
+    width: 2.25rem;
+    height: 2.25rem;
+    color: #fff;
+    background: #198754;
+    border-radius: 50%;
+    font-weight: 700;
+  }
+  .registration-section-heading h4 { margin: 0 0 .2rem; font-size: 1rem; font-weight: 700; }
+  .registration-section-heading p { margin: 0; color: #64748b; font-size: .875rem; }
+  .registration-card .form-label { font-weight: 600; }
+  .registration-card .form-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    justify-content: flex-end !important;
+    padding: 1rem 0 0;
+    margin-top: .5rem;
+    border-top: 1px solid #e2e8f0;
+    background: #fff;
+  }
+  [data-theme="dark"] .registration-section { background: rgba(255,255,255,.03); border-color: rgba(255,255,255,.12); }
+  [data-theme="dark"] .registration-section-heading { border-color: rgba(255,255,255,.1); }
+  [data-theme="dark"] .registration-section-heading p { color: #adb5bd; }
+  [data-theme="dark"] .registration-card .form-actions { background: #212529; border-color: rgba(255,255,255,.12); }
   @media (max-width: 575.98px) {
     .content-header h1 { font-size: 1.5rem; }
     .content-header .breadcrumb { float: none !important; flex-wrap: wrap; margin-top: .75rem; }
-    .registration-card .card-body { padding: 1rem .75rem; }
+    .registration-card .card-header { padding: 1rem; }
+    .registration-card .card-body { padding: .75rem; }
+    .registration-section { padding: 1rem .75rem; }
     .registration-card .form-actions { flex-direction: column-reverse; }
     .registration-card .form-actions .btn { width: 100%; }
     .registration-card .input-group { flex-wrap: nowrap; }
@@ -27,7 +75,7 @@ STYLE;
           <div class="row mb-2">
             <div class="col-sm-6">
               <h1>Nouvelle inscription</h1>
-              <p class="text-muted">Créez un dossier d'élève en attente de validation par le secrétaire.</p>
+              <p class="registration-intro mb-0">Renseignez les informations de l’élève, son affectation scolaire et les coordonnées de son parent ou tuteur.</p>
             </div>
             <div class="col-sm-6">
               <ol class="breadcrumb float-sm-end">
@@ -63,31 +111,43 @@ STYLE;
           <?php endif; ?>
 
           <div class="row justify-content-center">
-            <div class="col-lg-8">
+            <div class="col-12 col-xl-10 col-xxl-9">
               <div class="card card-outline card-success registration-card">
-                <div class="card-header">
-                  <h3 class="card-title">Formulaire d’inscription</h3>
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                  <div>
+                    <h3 class="card-title fw-bold mb-1">Formulaire d’inscription</h3>
+                    <div class="small text-muted">Les champs marqués d’un astérisque sont obligatoires.</div>
+                  </div>
+                  <span class="badge text-bg-success rounded-pill px-3 py-2">Nouveau dossier</span>
                 </div>
                 <div class="card-body">
                   <form id="registration-form" method="post" action="<?= BASE_URL ?>/inscriptions/submit" autocomplete="off" novalidate enctype="multipart/form-data">
+                    <section class="registration-section" aria-labelledby="registration-identity-heading">
+                      <div class="registration-section-heading">
+                        <span class="registration-section-step">1</span>
+                        <div>
+                          <h4 id="registration-identity-heading">Identité de l’élève</h4>
+                          <p>État civil et identification scolaire.</p>
+                        </div>
+                      </div>
                     <div class="row">
                       <div class="col-md-6 mb-3">
-                        <label class="form-label">Nom</label>
+                        <label class="form-label" for="nom-input">Nom <span class="text-danger">*</span></label>
                         <input id="nom-input" type="text" name="nom" class="form-control" required minlength="2" maxlength="100" value="<?= htmlspecialchars($oldInput['nom'] ?? '') ?>">
                       </div>
                       <div class="col-md-6 mb-3">
-                        <label class="form-label">Postnom</label>
+                        <label class="form-label" for="postnom-input">Postnom <span class="text-danger">*</span></label>
                         <input id="postnom-input" type="text" name="postnom" class="form-control" required minlength="2" maxlength="100" value="<?= htmlspecialchars($oldInput['postnom'] ?? '') ?>">
                       </div>
                     </div>
 
                     <div class="row">
                       <div class="col-md-6 mb-3">
-                        <label class="form-label">Prénom</label>
+                        <label class="form-label" for="prenom-input">Prénom</label>
                         <input id="prenom-input" type="text" name="prenom" class="form-control" maxlength="100" value="<?= htmlspecialchars($oldInput['prenom'] ?? '') ?>">
                       </div>
                       <div class="col-md-6 mb-3">
-                        <label class="form-label">Genre</label>
+                        <label class="form-label">Genre <span class="text-danger">*</span></label>
                         <select name="genre" class="form-select" required>
                           <option value="">Sélectionnez</option>
                           <option value="M" <?= ($oldInput['genre'] ?? '') === 'M' ? 'selected' : '' ?>>Masculin</option>
@@ -98,11 +158,11 @@ STYLE;
 
                     <div class="row align-items-end">
                       <div class="col-md-6 mb-3">
-                        <label class="form-label">Date de naissance</label>
+                        <label class="form-label" for="date-naissance-input">Date de naissance <span class="text-danger">*</span></label>
                         <input id="date-naissance-input" type="date" name="date_naissance" class="form-control" required max="<?= date('Y-m-d') ?>" value="<?= htmlspecialchars($oldInput['date_naissance'] ?? '') ?>">
                       </div>
                       <div class="col-md-6 mb-3">
-                        <label class="form-label">Matricule (optionnel)</label>
+                        <label class="form-label" for="matricule-input">Matricule <span class="text-muted fw-normal">(optionnel)</span></label>
                         <div class="input-group">
                           <input id="matricule-input" type="text" name="matricule" class="form-control" pattern="[A-Z]{4}[0-9]{5}" maxlength="9" placeholder="Généré automatiquement si vide" value="<?= htmlspecialchars($oldInput['matricule'] ?? '') ?>">
                           <button id="generate-matricule-btn" type="button" class="btn btn-outline-secondary">Aperçu</button>
@@ -110,7 +170,16 @@ STYLE;
                         <div id="matricule-preview" class="form-text text-muted mt-1">Aperçu du matricule généré disponible après saisie du nom et du postnom. Format attendu : 4 lettres majuscules suivies de 5 chiffres (ex. ABCD12345).</div>
                       </div>
                     </div>
+                    </section>
 
+                    <section class="registration-section" aria-labelledby="registration-school-heading">
+                      <div class="registration-section-heading">
+                        <span class="registration-section-step">2</span>
+                        <div>
+                          <h4 id="registration-school-heading">Affectation scolaire</h4>
+                          <p>Choisissez la section, l’option et la classe d’inscription.</p>
+                        </div>
+                      </div>
                     <div class="mb-3">
                       <div class="row">
                         <div class="col-md-6 mb-3">
@@ -155,9 +224,18 @@ STYLE;
                       </select>
                       <small class="form-text text-muted">Sélectionnez la classe où l’élève doit être inscrit.</small>
                     </div>
+                    </section>
 
+                    <section class="registration-section" aria-labelledby="registration-parent-heading">
+                      <div class="registration-section-heading">
+                        <span class="registration-section-step">3</span>
+                        <div>
+                          <h4 id="registration-parent-heading">Parent ou tuteur</h4>
+                          <p>Liez un parent déjà enregistré ou créez sa fiche.</p>
+                        </div>
+                      </div>
                     <div class="mb-3">
-                      <label class="form-label">Parent / tuteur</label>
+                      <label class="form-label">Choix du parent / tuteur</label>
                       <div class="form-check form-check-inline">
                         <input class="form-check-input" type="radio" name="parent_choice" id="parent-choice-existing" value="existing" <?= (($oldInput['parent_choice'] ?? 'existing') === 'existing') ? 'checked' : '' ?>>
                         <label class="form-check-label" for="parent-choice-existing">Parent existant</label>
@@ -198,11 +276,22 @@ STYLE;
                           <input id="new-parent-email" type="email" name="new_parent_email" class="form-control" maxlength="100" value="<?= htmlspecialchars($oldInput['new_parent_email'] ?? '') ?>">
                         </div>
                         <div class="col-md-6 mb-3">
-                          <label class="form-label">Note</label>
-                          <textarea class="form-control" rows="3" readonly>Remplissez ces champs uniquement si le parent n’existe pas dans la liste ci-dessus.</textarea>
+                          <div class="alert alert-info h-100 mb-0 d-flex align-items-center">
+                            Renseignez ces informations uniquement si le parent n’existe pas encore dans la liste.
+                          </div>
                         </div>
                       </div>
                     </div>
+                    </section>
+
+                    <section class="registration-section" aria-labelledby="registration-family-heading">
+                      <div class="registration-section-heading">
+                        <span class="registration-section-step">4</span>
+                        <div>
+                          <h4 id="registration-family-heading">Famille et origine</h4>
+                          <p>Informations complémentaires sur les parents et l’origine de l’élève.</p>
+                        </div>
+                      </div>
                     <div class="row">
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Nom du père</label>
@@ -254,19 +343,29 @@ STYLE;
                         <input type="text" name="num_permanent" class="form-control" value="<?= htmlspecialchars($oldInput['num_permanent'] ?? '') ?>" placeholder="Numéro permanent MINEDUB">
                       </div>
                     </div>
+                    </section>
+
+                    <section class="registration-section" aria-labelledby="registration-contact-heading">
+                      <div class="registration-section-heading">
+                        <span class="registration-section-step">5</span>
+                        <div>
+                          <h4 id="registration-contact-heading">Coordonnées et photo</h4>
+                          <p>Lieu de naissance, adresse et photo facultative.</p>
+                        </div>
+                      </div>
                     <div class="mb-3">
-                      <label class="form-label">Lieu de naissance</label>
-                      <input type="text" name="lieu_naissance" class="form-control" value="<?= htmlspecialchars($oldInput['lieu_naissance'] ?? '') ?>">
+                      <label class="form-label" for="birthplace-input">Lieu de naissance</label>
+                      <input id="birthplace-input" type="text" name="lieu_naissance" class="form-control" value="<?= htmlspecialchars($oldInput['lieu_naissance'] ?? '') ?>">
                     </div>
                     <div class="mb-3">
-                      <label class="form-label">Adresse</label>
-                      <textarea name="adresse" class="form-control" rows="4"><?= htmlspecialchars($oldInput['adresse'] ?? '') ?></textarea>
+                      <label class="form-label" for="student-address">Adresse</label>
+                      <textarea id="student-address" name="adresse" class="form-control" rows="3"><?= htmlspecialchars($oldInput['adresse'] ?? '') ?></textarea>
                     </div>
                     <div class="mb-3">
-                      <label class="form-label">Photo de l'élève (PNG/JPEG, ≤250KB)</label>
+                      <label class="form-label" for="student-photo">Photo de l’élève <span class="text-muted fw-normal">(facultative, PNG/JPEG, 250 Ko maximum)</span></label>
                       <input id="student-photo" type="file" name="photo" accept="image/png,image/jpeg" class="form-control">
-                      <small class="form-text text-muted">Optionnel — téléversez une photo de l'élève.</small>
                     </div>
+                    </section>
                     <div class="d-flex justify-content-between form-actions">
                       <a href="<?= BASE_URL ?>/inscriptions" class="btn btn-secondary">Retour aux dossiers</a>
                       <button id="registration-submit" type="submit" class="btn btn-success">Enregistrer</button>

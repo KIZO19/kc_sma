@@ -141,6 +141,66 @@ $pageStyles = <<<'CSS'
   [data-theme="dark"] .school-admin-dashboard .school-action { border-color: rgba(255,255,255,.14); }
   [data-theme="dark"] .school-admin-dashboard .school-action i { color: #b8e3f4; background: rgba(49,130,170,.2); }
   [data-theme="dark"] .school-admin-dashboard .school-panel .table thead th { color: #cbd5e1; background: rgba(255,255,255,.04); }
+  .academic-dashboard .academic-intro {
+    border: 0;
+    border-radius: 1rem;
+    color: #fff;
+    background: linear-gradient(120deg, #12243a 0%, #174b70 58%, #16859a 100%);
+    box-shadow: 0 1rem 2rem rgba(18, 36, 58, .16);
+  }
+  .academic-dashboard .academic-intro p { color: rgba(255,255,255,.78); }
+  .academic-dashboard .academic-kpi,
+  .academic-dashboard .academic-panel {
+    border: 1px solid rgba(20, 45, 70, .08);
+    border-radius: .9rem;
+    box-shadow: 0 .35rem 1.2rem rgba(20, 45, 70, .05);
+  }
+  .academic-dashboard .academic-kpi-icon {
+    display: grid;
+    width: 2.8rem;
+    height: 2.8rem;
+    place-items: center;
+    border-radius: .85rem;
+    font-size: 1.2rem;
+  }
+  .academic-dashboard .academic-kpi-value {
+    margin: .8rem 0 .15rem;
+    font-size: clamp(1.5rem, 2vw, 2rem);
+    font-weight: 750;
+    letter-spacing: -.03em;
+  }
+  .academic-dashboard .academic-action {
+    display: flex;
+    align-items: center;
+    gap: .85rem;
+    min-height: 4.5rem;
+    padding: .8rem;
+    color: inherit;
+    text-decoration: none;
+    border: 1px solid rgba(20, 45, 70, .1);
+    border-radius: .75rem;
+    transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease;
+  }
+  .academic-dashboard .academic-action:hover {
+    border-color: #2876a5;
+    box-shadow: 0 .4rem 1rem rgba(20, 45, 70, .08);
+    transform: translateY(-1px);
+  }
+  .academic-dashboard .academic-action i {
+    display: grid;
+    width: 2.6rem;
+    height: 2.6rem;
+    flex: 0 0 auto;
+    place-items: center;
+    color: #17618a;
+    background: #eaf4f8;
+    border-radius: .7rem;
+    font-size: 1.15rem;
+  }
+  [data-theme="dark"] .academic-dashboard .academic-kpi,
+  [data-theme="dark"] .academic-dashboard .academic-panel { border-color: rgba(255,255,255,.1); }
+  [data-theme="dark"] .academic-dashboard .academic-action { border-color: rgba(255,255,255,.14); }
+  [data-theme="dark"] .academic-dashboard .academic-action i { color: #b8e3f4; background: rgba(49,130,170,.2); }
 </style>
 CSS;
 require __DIR__ . '/../partials/app_header.php';
@@ -149,12 +209,12 @@ require __DIR__ . '/../partials/app_header.php';
         <div class="container-fluid">
           <div class="row mb-2">
             <div class="col-sm-6">
-              <h1><?= ($role ?? '') === 'comptable_école' ? 'Espace comptable' : ((($role ?? '') === 'super_admin') ? 'Pilotage des écoles' : 'Dashboard') ?></h1>
+              <h1><?= ($role ?? '') === 'comptable_école' ? 'Espace comptable' : ((($role ?? '') === 'super_admin') ? 'Pilotage des écoles' : (in_array(($role ?? ''), ['préfet_école', 'DP_école'], true) ? 'Pilotage pédagogique' : 'Dashboard')) ?></h1>
             </div>
             <div class="col-sm-6">
               <ol class="breadcrumb float-sm-end">
                 <li class="breadcrumb-item"><a href="<?= BASE_URL ?>/dashboard">Accueil</a></li>
-                <li class="breadcrumb-item active"><?= ($role ?? '') === 'comptable_école' ? 'Espace comptable' : ((($role ?? '') === 'super_admin') ? 'Pilotage des écoles' : 'Dashboard') ?></li>
+                <li class="breadcrumb-item active"><?= ($role ?? '') === 'comptable_école' ? 'Espace comptable' : ((($role ?? '') === 'super_admin') ? 'Pilotage des écoles' : (in_array(($role ?? ''), ['préfet_école', 'DP_école'], true) ? 'Pilotage pédagogique' : 'Dashboard')) ?></li>
               </ol>
             </div>
           </div>
@@ -323,6 +383,116 @@ require __DIR__ . '/../partials/app_header.php';
                     <a class="school-action" href="<?= BASE_URL ?>/ecoles/create">
                       <i class="bi bi-plus-circle" aria-hidden="true"></i>
                       <span><strong class="d-block">Créer une école</strong><small class="text-muted">Enregistrer un établissement</small></span>
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <?php elseif (in_array(($role ?? ''), ['préfet_école', 'DP_école'], true)): ?>
+          <?php
+            $isPrefect = (bool) ($dashboardData['direction']['isPrefect'] ?? false);
+            $quickActions = $isPrefect
+                ? [
+                    ['name' => 'Créer une classe', 'description' => 'Organiser les groupes scolaires', 'path' => '/classes/create', 'icon' => 'bi-plus-square'],
+                    ['name' => 'Gérer les options', 'description' => 'Configurer les filières disponibles', 'path' => '/options', 'icon' => 'bi-grid-1x2'],
+                    ['name' => 'Admissions', 'description' => 'Suivre les dossiers d’inscription', 'path' => '/inscriptions', 'icon' => 'bi-person-plus'],
+                    ['name' => 'Répertoire des élèves', 'description' => 'Consulter les effectifs de l’école', 'path' => '/eleves', 'icon' => 'bi-people'],
+                    ['name' => 'Notes et résultats', 'description' => 'Accéder au suivi des évaluations', 'path' => '/notes', 'icon' => 'bi-pencil-square'],
+                    ['name' => 'Vérifier la solvabilité', 'description' => 'Scanner un reçu ou rechercher un paiement', 'path' => '/paiements/verifierSolvabilite', 'icon' => 'bi-qr-code-scan'],
+                ]
+                : [
+                    ['name' => 'Créer une classe', 'description' => 'Mettre à jour l’organisation scolaire', 'path' => '/classes/create', 'icon' => 'bi-plus-square'],
+                    ['name' => 'Suivi des élèves', 'description' => 'Consulter les effectifs de l’école', 'path' => '/eleves', 'icon' => 'bi-people'],
+                    ['name' => 'Notes et résultats', 'description' => 'Suivre les performances scolaires', 'path' => '/notes', 'icon' => 'bi-pencil-square'],
+                    ['name' => 'Bulletins', 'description' => 'Consulter les résultats publiés', 'path' => '/bulletins', 'icon' => 'bi-file-earmark-text'],
+                    ['name' => 'Présences', 'description' => 'Suivre l’assiduité des élèves', 'path' => '/presences', 'icon' => 'bi-calendar-check'],
+                    ['name' => 'Activités scolaires', 'description' => 'Consulter les évaluations et événements', 'path' => '/evaluations', 'icon' => 'bi-journal-check'],
+                ];
+            $availableModulePaths = array_column($modules ?? [], 'path');
+            $quickActions = array_values(array_filter($quickActions, static function (array $action) use ($availableModulePaths): bool {
+                $modulePath = '/' . explode('/', trim($action['path'], '/'), 2)[0];
+                return in_array($modulePath, $availableModulePaths, true);
+            }));
+          ?>
+          <div class="academic-dashboard">
+            <div class="card academic-intro mb-4">
+              <div class="card-body p-4 p-lg-5 d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-4">
+                <div>
+                  <span class="badge rounded-pill text-bg-light mb-3"><?= $isPrefect ? 'ESPACE DU PRÉFET' : 'DIRECTION DES ÉTUDES' ?></span>
+                  <h2 class="h3 fw-bold mb-2">Bonjour <?= htmlspecialchars($user['nom_complet'] ?? '') ?>, bienvenue dans votre espace de pilotage.</h2>
+                  <p class="mb-0"><?= htmlspecialchars($dashboardData['direction']['schoolName'] ?? 'Votre établissement') ?> · <?= $isPrefect ? 'Organisez les classes et les parcours scolaires.' : 'Suivez les effectifs et les activités pédagogiques.' ?></p>
+                </div>
+                <a href="<?= BASE_URL ?>/classes" class="btn btn-light fw-semibold px-4 py-2 flex-shrink-0">
+                  <i class="bi bi-houses me-2"></i>Voir les classes
+                </a>
+              </div>
+            </div>
+
+            <div class="row g-3 mb-4">
+              <?php foreach ($dashboardData['stats'] ?? [] as $stat): ?>
+                <?php
+                  $tone = match ($stat['bg'] ?? '') {
+                      'bg-success' => 'success',
+                      'bg-info' => 'info',
+                      'bg-warning' => 'warning',
+                      'bg-danger' => 'danger',
+                      default => 'primary',
+                  };
+                ?>
+                <div class="col-12 col-sm-6 col-xl-3">
+                  <div class="card academic-kpi h-100 mb-0">
+                    <div class="card-body p-3 p-lg-4">
+                      <div class="d-flex justify-content-between align-items-center">
+                        <span class="small text-muted fw-semibold"><?= htmlspecialchars($stat['title'] ?? '') ?></span>
+                        <span class="academic-kpi-icon text-<?= $tone ?> bg-<?= $tone ?>-subtle"><i class="bi <?= htmlspecialchars($stat['icon'] ?? 'bi-bar-chart-line') ?>"></i></span>
+                      </div>
+                      <div class="academic-kpi-value"><?= htmlspecialchars((string) ($stat['value'] ?? '0')) ?></div>
+                      <div class="small text-muted"><?= htmlspecialchars($stat['hint'] ?? '') ?></div>
+                    </div>
+                  </div>
+                </div>
+              <?php endforeach; ?>
+            </div>
+
+            <div class="row g-3">
+              <div class="col-xl-8">
+                <div class="card academic-panel h-100 mb-0">
+                  <div class="card-header bg-transparent border-bottom-0 pt-4 px-4">
+                    <span class="small text-uppercase fw-bold text-primary">Accès direct</span>
+                    <h2 class="h5 fw-bold mb-1 mt-1">Actions de pilotage</h2>
+                    <p class="small text-muted mb-0">Les outils sont adaptés à vos responsabilités dans l’établissement.</p>
+                  </div>
+                  <div class="card-body px-4 pt-3">
+                    <div class="row g-2">
+                      <?php foreach ($quickActions as $action): ?>
+                        <div class="col-md-6">
+                          <a class="academic-action h-100" href="<?= BASE_URL . $action['path'] ?>">
+                            <i class="bi <?= htmlspecialchars($action['icon']) ?>" aria-hidden="true"></i>
+                            <span><strong class="d-block"><?= htmlspecialchars($action['name']) ?></strong><small class="text-muted"><?= htmlspecialchars($action['description']) ?></small></span>
+                          </a>
+                        </div>
+                      <?php endforeach; ?>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-xl-4">
+                <div class="card academic-panel h-100 mb-0">
+                  <div class="card-header bg-transparent border-bottom-0 pt-4 px-4">
+                    <span class="small text-uppercase fw-bold text-primary">Repères</span>
+                    <h2 class="h5 fw-bold mb-1 mt-1"><?= htmlspecialchars($dashboardData['overview']['title'] ?? 'Vue synthétique') ?></h2>
+                    <p class="small text-muted mb-0">Indicateurs calculés pour votre établissement.</p>
+                  </div>
+                  <div class="card-body px-4 pt-2">
+                    <?php foreach ($dashboardData['overview']['items'] ?? [] as $item): ?>
+                      <div class="d-flex align-items-center justify-content-between py-3 border-bottom">
+                        <span class="small text-muted"><?= htmlspecialchars($item['label'] ?? '') ?></span>
+                        <strong><?= htmlspecialchars($item['value'] ?? '0') ?></strong>
+                      </div>
+                    <?php endforeach; ?>
+                    <a href="<?= BASE_URL ?>/dashboard" class="btn btn-outline-primary btn-sm mt-3">
+                      <i class="bi bi-arrow-clockwise me-1"></i>Actualiser les indicateurs
                     </a>
                   </div>
                 </div>

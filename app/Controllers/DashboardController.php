@@ -89,6 +89,14 @@ class DashboardController extends Controller
             'overview' => $overview,
         ];
 
+        if (in_array($role, ['préfet_école', 'DP_école'], true)) {
+            $school = Ecole::findById((int) ($user['ecole_id'] ?? 0));
+            $data['direction'] = [
+                'schoolName' => $school['nom_etablissement'] ?? 'Votre établissement',
+                'isPrefect' => $role === 'préfet_école',
+            ];
+        }
+
         if ($role === 'comptable_école') {
             $data['accounting'] = $this->getAccountingData($user);
         }
@@ -318,6 +326,18 @@ class DashboardController extends Controller
                 ['title' => 'Parents', 'value' => $parentCount, 'icon' => 'bi-people', 'bg' => 'bg-success', 'hint' => 'Contacts actifs'],
                 ['title' => 'Classes', 'value' => $classCount, 'icon' => 'bi-diagram-3', 'bg' => 'bg-info', 'hint' => 'Disponibles'],
                 ['title' => 'Événements', 'value' => $eventCount, 'icon' => 'bi-calendar3', 'bg' => 'bg-warning', 'hint' => 'À venir'],
+            ],
+            'préfet_école' => [
+                ['title' => 'Élèves inscrits', 'value' => $studentCount, 'icon' => 'bi-people-fill', 'bg' => 'bg-primary', 'hint' => 'Effectif de l’école'],
+                ['title' => 'Classes', 'value' => $classCount, 'icon' => 'bi-diagram-3', 'bg' => 'bg-info', 'hint' => 'Organisation scolaire'],
+                ['title' => 'Options actives', 'value' => $schoolId > 0 ? $this->countSchoolOptions($schoolId) : 0, 'icon' => 'bi-grid-1x2', 'bg' => 'bg-success', 'hint' => 'Rattachées aux classes'],
+                ['title' => 'Enseignants', 'value' => $schoolId > 0 ? $this->countSchoolUsers($schoolId, ['enseignant_école']) : 0, 'icon' => 'bi-person-workspace', 'bg' => 'bg-warning', 'hint' => 'Comptes enseignants'],
+            ],
+            'DP_école' => [
+                ['title' => 'Élèves inscrits', 'value' => $studentCount, 'icon' => 'bi-people-fill', 'bg' => 'bg-primary', 'hint' => 'Effectif de l’école'],
+                ['title' => 'Classes', 'value' => $classCount, 'icon' => 'bi-diagram-3', 'bg' => 'bg-info', 'hint' => 'Organisation scolaire'],
+                ['title' => 'Enseignants', 'value' => $schoolId > 0 ? $this->countSchoolUsers($schoolId, ['enseignant_école']) : 0, 'icon' => 'bi-person-workspace', 'bg' => 'bg-success', 'hint' => 'Comptes enseignants'],
+                ['title' => 'Événements', 'value' => $eventCount, 'icon' => 'bi-calendar-event', 'bg' => 'bg-warning', 'hint' => 'Activités enregistrées'],
             ],
             'enseignant_école' => [
                 ['title' => 'Cours', 'value' => $classCount, 'icon' => 'bi-book', 'bg' => 'bg-primary', 'hint' => 'Programmes actifs'],
@@ -560,6 +580,14 @@ class DashboardController extends Controller
                 'Suivi simplifié des inscriptions, parents et classes de l’établissement.',
                 'Les informations affichées permettent de traiter les dossiers plus rapidement et plus proprement.',
             ],
+            'préfet_école' => [
+                'Pilotez l’organisation scolaire, les classes, les options et le suivi des élèves.',
+                'Les indicateurs sont limités à votre établissement et les accès rapides respectent votre rôle.',
+            ],
+            'DP_école' => [
+                'Suivez les effectifs, l’équipe pédagogique et les activités de l’établissement.',
+                'Retrouvez les outils de suivi des classes, des résultats et des présences dans un espace centralisé.',
+            ],
             'enseignant_école' => [
                 'Vue rapide des classes, événements et élèves suivis dans votre enseignement.',
                 'Le tableau de bord centralise les éléments de suivi pédagogique et de planification.',
@@ -603,6 +631,16 @@ class DashboardController extends Controller
                 ['label' => 'Classes', 'value' => (string) ($schoolId > 0 ? $this->countSchoolClasses($schoolId) : $this->countTable('classes')), 'color' => 'bg-info'],
                 ['label' => 'Parents', 'value' => (string) ($schoolId > 0 ? $this->countSchoolUsers($schoolId, ['parent_ecole']) : $this->countTable('parents')), 'color' => 'bg-success'],
             ],
+            'préfet_école' => [
+                ['label' => 'Effectif scolaire', 'value' => (string) $students, 'color' => 'bg-primary'],
+                ['label' => 'Classes organisées', 'value' => (string) ($schoolId > 0 ? $this->countSchoolClasses($schoolId) : 0), 'color' => 'bg-info'],
+                ['label' => 'Options rattachées', 'value' => (string) ($schoolId > 0 ? $this->countSchoolOptions($schoolId) : 0), 'color' => 'bg-success'],
+            ],
+            'DP_école' => [
+                ['label' => 'Effectif scolaire', 'value' => (string) $students, 'color' => 'bg-primary'],
+                ['label' => 'Enseignants', 'value' => (string) ($schoolId > 0 ? $this->countSchoolUsers($schoolId, ['enseignant_école']) : 0), 'color' => 'bg-success'],
+                ['label' => 'Événements enregistrés', 'value' => (string) ($schoolId > 0 ? $this->countSchoolEvents($schoolId) : 0), 'color' => 'bg-warning'],
+            ],
             default => [
                 ['label' => 'Vue globale', 'value' => 'Active', 'color' => 'bg-primary'],
                 ['label' => 'Élèves', 'value' => (string) $students, 'color' => 'bg-success'],
@@ -624,7 +662,8 @@ class DashboardController extends Controller
             $stmt->execute([':ecole' => $schoolId]);
             return (int) ($stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
         } catch (\Throwable $e) {
-            return $this->countTable('eleves');
+            error_log('DashboardController::countSchoolStudents failed: ' . $e->getMessage());
+            return 0;
         }
     }
 
@@ -636,6 +675,20 @@ class DashboardController extends Controller
             $stmt->execute([':ecole' => $schoolId]);
             return (int) ($stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
         } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+
+    private function countSchoolOptions(int $schoolId): int
+    {
+        try {
+            $db = Database::getConnection();
+            $stmt = $db->prepare('SELECT COUNT(DISTINCT option_id) FROM classes WHERE ecole_id = :ecole AND option_id IS NOT NULL');
+            $stmt->execute([':ecole' => $schoolId]);
+
+            return (int) $stmt->fetchColumn();
+        } catch (\Throwable $e) {
+            error_log('DashboardController::countSchoolOptions failed: ' . $e->getMessage());
             return 0;
         }
     }

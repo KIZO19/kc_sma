@@ -122,7 +122,26 @@ class Controller
                 ['name' => 'Bulletins parents', 'path' => '/bulletins-enfant', 'icon' => 'bi-file-earmark-text'],
                 ['name' => 'Messages', 'path' => '/messages', 'icon' => 'bi-chat-dots'],
             ],
-            'promoteur_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école' => [
+            'préfet_école' => [
+                ['name' => 'Admissions', 'path' => '/inscriptions', 'icon' => 'bi-person-plus'],
+                ['name' => 'Classes', 'path' => '/classes', 'icon' => 'bi-houses'],
+                ['name' => 'Options', 'path' => '/options', 'icon' => 'bi-grid-1x2'],
+                ['name' => 'Élèves', 'path' => '/eleves', 'icon' => 'bi-person-badge'],
+                ['name' => 'Notes', 'path' => '/notes', 'icon' => 'bi-pencil-square'],
+                ['name' => 'Bulletins', 'path' => '/bulletins', 'icon' => 'bi-file-earmark-text'],
+                ['name' => 'Présences', 'path' => '/presences', 'icon' => 'bi-calendar-check'],
+                ['name' => 'Évaluations', 'path' => '/evaluations', 'icon' => 'bi-journal-check'],
+            ],
+            'DP_école' => [
+                ['name' => 'Classes', 'path' => '/classes', 'icon' => 'bi-houses'],
+                ['name' => 'Élèves', 'path' => '/eleves', 'icon' => 'bi-person-badge'],
+                ['name' => 'Notes', 'path' => '/notes', 'icon' => 'bi-pencil-square'],
+                ['name' => 'Bulletins', 'path' => '/bulletins', 'icon' => 'bi-file-earmark-text'],
+                ['name' => 'Présences', 'path' => '/presences', 'icon' => 'bi-calendar-check'],
+                ['name' => 'Évaluations', 'path' => '/evaluations', 'icon' => 'bi-journal-check'],
+                ['name' => 'Événements', 'path' => '/evenements', 'icon' => 'bi-calendar-event'],
+            ],
+            'promoteur_école', 'DE_école', 'DD_école', 'DA_école' => [
                 ['name' => 'Admissions', 'path' => '/inscriptions', 'icon' => 'bi-person-plus'],
                 ['name' => 'Utilisateurs', 'path' => '/utilisateurs', 'icon' => 'bi-person-check'],
                 ['name' => 'Classes', 'path' => '/classes', 'icon' => 'bi-houses'],

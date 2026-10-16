@@ -132,6 +132,46 @@
     .app-sidebar .sidebar {
       padding-top: 0.5rem;
     }
+    .app-sidebar .nav-header {
+      padding: .85rem .65rem .45rem;
+      color: rgba(207,216,227,.62);
+      font-size: .64rem;
+      font-weight: 800;
+      letter-spacing: .1em;
+    }
+    .app-sidebar .nav-sidebar .nav-link {
+      margin: .12rem 0;
+      padding: .68rem .75rem;
+      border-radius: .65rem;
+      color: var(--sidebar-text);
+      transition: background-color .15s ease, color .15s ease, transform .15s ease;
+    }
+    .app-sidebar .nav-sidebar .nav-link:hover {
+      color: var(--sidebar-text-active);
+      background: rgba(255,255,255,.08);
+    }
+    .app-sidebar .nav-sidebar .nav-link.active {
+      color: var(--sidebar-text-active);
+      background: linear-gradient(100deg, var(--sidebar-active), rgba(31,111,235,.78));
+      box-shadow: 0 .35rem .8rem rgba(0,0,0,.15);
+    }
+    .app-sidebar .nav-treeview {
+      margin: .2rem 0 .45rem .25rem;
+      padding-left: .45rem !important;
+      border-left: 1px solid rgba(255,255,255,.14);
+    }
+    .app-sidebar .nav-treeview .nav-link {
+      padding-top: .55rem;
+      padding-bottom: .55rem;
+      font-size: .9rem;
+    }
+    .app-sidebar .sidebar-role-label {
+      color: rgba(207,216,227,.68);
+      font-size: .68rem;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
     .app-sidebar .user-panel {
       background: rgba(255,255,255,.04);
       border-radius: 0.75rem;
@@ -200,7 +240,8 @@ $currentPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?? '';
 $moduleMenuOpen = false;
 if (!empty($modules) && is_array($modules)) {
     foreach ($modules as $module) {
-        if ($currentPath === BASE_URL . $module['path']) {
+        $moduleUrl = BASE_URL . $module['path'];
+        if ($currentPath === $moduleUrl || strpos($currentPath, $moduleUrl . '/') === 0) {
             $moduleMenuOpen = true;
             break;
         }
@@ -370,7 +411,7 @@ if (!empty($schoolContext['logo_url'])) {
           </div>
           <div class="info">
             <a href="<?= BASE_URL ?>/profile" class="d-block fw-bold small"><?= htmlspecialchars($user['nom_complet'] ?? 'Utilisateur') ?></a>
-            <span class="small text-muted"><?= htmlspecialchars($roleLabel ?? '') ?></span>
+            <span class="sidebar-role-label"><?= htmlspecialchars($roleLabel ?? '') ?></span>
           </div>
         </div>
 
@@ -385,7 +426,7 @@ if (!empty($schoolContext['logo_url'])) {
 
         <nav class="mt-2">
           <ul id="sidebarNavMenu" class="nav nav-pills nav-sidebar flex-column" data-lte-treeview="true" role="menu" data-accordion="true">
-            <li class="nav-header">MENU</li>
+            <li class="nav-header"><?= in_array(($role ?? ''), ['préfet_école', 'DP_école'], true) ? 'ESPACE SCOLAIRE' : 'MENU' ?></li>
             <li class="nav-item">
               <a href="<?= BASE_URL ?>/dashboard" class="nav-link <?= $currentPath === BASE_URL . '/dashboard' ? 'active' : '' ?>">
                 <i class="nav-icon bi bi-speedometer2"></i>
@@ -394,16 +435,17 @@ if (!empty($schoolContext['logo_url'])) {
             </li>
 
             <?php if (!empty($modules) && is_array($modules)): ?>
-              <li class="nav-header"><?= ($role ?? '') === 'super_admin' ? 'GESTION DE LA PLATEFORME' : 'MODULES' ?></li>
+              <li class="nav-header"><?= ($role ?? '') === 'super_admin' ? 'GESTION DE LA PLATEFORME' : (in_array(($role ?? ''), ['préfet_école', 'DP_école'], true) ? 'PILOTAGE PÉDAGOGIQUE' : 'MODULES') ?></li>
               <li class="nav-item has-treeview <?= $moduleMenuOpen ? 'menu-open' : '' ?>">
                 <a href="#" class="nav-link <?= $moduleMenuOpen ? 'active' : '' ?>" data-lte-toggle="treeview">
                   <i class="nav-icon bi bi-grid-1x2"></i>
-                  <p>Modules <i class="bi bi-caret-down-fill float-end"></i></p>
+                  <p><?= in_array(($role ?? ''), ['préfet_école', 'DP_école'], true) ? 'Accès rapides' : 'Modules' ?> <i class="bi bi-caret-down-fill float-end"></i></p>
                 </a>
                 <ul class="nav nav-treeview ps-3">
                   <?php foreach ($modules as $module): ?>
                     <li class="nav-item">
-                      <a href="<?= BASE_URL . $module['path'] ?>" class="nav-link <?= $currentPath === BASE_URL . $module['path'] ? 'active' : '' ?>">
+                      <?php $moduleUrl = BASE_URL . $module['path']; ?>
+                      <a href="<?= $moduleUrl ?>" class="nav-link <?= ($currentPath === $moduleUrl || strpos($currentPath, $moduleUrl . '/') === 0) ? 'active' : '' ?>">
                         <i class="nav-icon <?= htmlspecialchars($module['icon']) ?>"></i>
                         <p><?= htmlspecialchars($module['name']) ?></p>
                       </a>
