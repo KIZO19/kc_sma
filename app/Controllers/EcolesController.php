@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Core\Auth;
 use App\Core\Controller;
 use App\Models\Ecole;
+use App\Models\NotificationAccess;
 use App\Models\User;
 
 class EcolesController extends Controller
@@ -648,6 +649,68 @@ class EcolesController extends Controller
             'plans' => Ecole::getPlans(),
             'selectedSchoolId' => $selectedSchoolId,
         ]);
+    }
+
+    public function notificationAccess(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin']);
+        $user = Auth::refresh() ?: Auth::user();
+        if (empty($_SESSION['notification_access_form_token'])) {
+            $_SESSION['notification_access_form_token'] = bin2hex(random_bytes(32));
+        }
+
+        $this->view('ecoles/notification_access', [
+            'title' => APP_NAME . ' - Accès SMS et WhatsApp',
+            'user' => $user,
+            'role' => $user['role'] ?? 'super_admin',
+            'roleLabel' => User::getRoleLabel((string) ($user['role'] ?? 'super_admin')),
+            'modules' => $this->getModulesForRole((string) ($user['role'] ?? 'super_admin')),
+            'schoolNotificationAccess' => NotificationAccess::getAllSchools(),
+            'formToken' => $_SESSION['notification_access_form_token'],
+            'success' => $_SESSION['notification_access_success'] ?? null,
+            'error' => $_SESSION['notification_access_error'] ?? null,
+        ]);
+        unset($_SESSION['notification_access_success'], $_SESSION['notification_access_error']);
+    }
+
+    public function updateNotificationAccess(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin']);
+        $user = Auth::refresh() ?: Auth::user();
+        $submittedToken = (string) ($_POST['notification_access_form_token'] ?? '');
+        $expectedToken = (string) ($_SESSION['notification_access_form_token'] ?? '');
+        if ($submittedToken === '' || $expectedToken === '' || !hash_equals($expectedToken, $submittedToken)) {
+            $_SESSION['notification_access_error'] = 'Le formulaire a expiré. Rechargez la page avant de réessayer.';
+            $this->redirect('/ecoles/notificationAccess');
+        }
+
+        $schoolId = filter_var($_POST['ecole_id'] ?? null, FILTER_VALIDATE_INT);
+        $smsInput = $_POST['sms_enabled'] ?? null;
+        $whatsappInput = $_POST['whatsapp_enabled'] ?? null;
+        if (
+            $schoolId === false || $schoolId === null || $schoolId <= 0
+            || !in_array($smsInput, ['0', '1', 0, 1], true)
+            || !in_array($whatsappInput, ['0', '1', 0, 1], true)
+            || !Ecole::findById((int) $schoolId)
+        ) {
+            $_SESSION['notification_access_error'] = 'École ou paramètres de notification invalides.';
+            $this->redirect('/ecoles/notificationAccess');
+        }
+
+        if (NotificationAccess::update(
+            (int) $schoolId,
+            (string) $smsInput === '1',
+            (string) $whatsappInput === '1',
+            (int) ($user['id'] ?? 0)
+        )) {
+            $_SESSION['notification_access_success'] = 'Les accès SMS et WhatsApp de l’école ont été mis à jour.';
+        } else {
+            $_SESSION['notification_access_error'] = 'Impossible d’enregistrer les accès de notification. Réessayez.';
+        }
+        $_SESSION['notification_access_form_token'] = bin2hex(random_bytes(32));
+        $this->redirect('/ecoles/notificationAccess');
     }
 
     public function updateSubscription(): void

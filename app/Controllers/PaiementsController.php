@@ -1190,9 +1190,19 @@ class PaiementsController extends Controller
         // Ensure user can only view receipts for élèves in their school (unless super_admin)
         try {
             $userSchool = (int) ($user['ecole_id'] ?? 0);
-            if (($user['role'] ?? '') !== 'super_admin' && $userSchool > 0) {
+            $userRole = (string) ($user['role'] ?? '');
+            if ($userRole !== 'super_admin') {
                 $paymentEleveId = (int) ($data['eleve_id'] ?? 0);
-                if ($paymentEleveId <= 0 || !Eleve::findByIdAndSchool($paymentEleveId, $userSchool)) {
+                $student = $paymentEleveId > 0 ? Eleve::findById($paymentEleveId) : null;
+                if (
+                    $userSchool <= 0
+                    || !$student
+                    || !Eleve::findByIdAndSchool($paymentEleveId, $userSchool)
+                    || (
+                        $userRole === 'parent_ecole'
+                        && (int) ($student['parent_id'] ?? 0) !== (int) ($user['reference_id'] ?? 0)
+                    )
+                ) {
                     header('Location: ' . BASE_URL . '/error/notFound');
                     exit;
                 }
@@ -1322,7 +1332,7 @@ class PaiementsController extends Controller
                 exit;
             }
 
-            $lstmt = $db->prepare('SELECT pe.*, el.id AS eleve_id, el.nom, el.postnom, el.prenom, pe.frais_id AS frais_id FROM paiements_eleves pe INNER JOIN eleves el ON pe.eleve_id = el.id WHERE pe.id = :id LIMIT 1');
+            $lstmt = $db->prepare('SELECT pe.*, el.id AS eleve_id, el.nom, el.postnom, el.prenom, el.parent_id, el.ecole_id, pe.frais_id AS frais_id FROM paiements_eleves pe INNER JOIN eleves el ON pe.eleve_id = el.id WHERE pe.id = :id LIMIT 1');
             $lstmt->execute([':id' => $legacyId]);
             $legacy = $lstmt->fetch(\PDO::FETCH_ASSOC);
             if ($legacy) {
@@ -1333,6 +1343,8 @@ class PaiementsController extends Controller
                     'montant' => $legacy['montant_paye'] ?? 0,
                     'libelle' => $legacy['libelle'] ?? 'Paiement',
                     'eleve_id' => $legacy['eleve_id'] ?? null,
+                    'parent_id' => $legacy['parent_id'] ?? null,
+                    'ecole_id' => $legacy['ecole_id'] ?? null,
                     'frais_id' => $legacy['frais_id'] ?? null,
                     'nom' => $legacy['nom'] ?? null,
                     'postnom' => $legacy['postnom'] ?? null,
@@ -1342,7 +1354,7 @@ class PaiementsController extends Controller
         } else {
             $ecritureId = (int) $idParam;
             if ($ecritureId > 0) {
-                $stmt = $db->prepare('SELECT ece.*, ce.eleve_id, el.nom, el.postnom, el.prenom FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id INNER JOIN eleves el ON ce.eleve_id = el.id WHERE ece.id = :id LIMIT 1');
+                $stmt = $db->prepare('SELECT ece.*, ce.eleve_id, el.nom, el.postnom, el.prenom, el.parent_id, el.ecole_id FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id INNER JOIN eleves el ON ce.eleve_id = el.id WHERE ece.id = :id LIMIT 1');
                 $stmt->execute([':id' => $ecritureId]);
                 $data = $stmt->fetch(\PDO::FETCH_ASSOC);
             }
@@ -1354,15 +1366,20 @@ class PaiementsController extends Controller
         }
 
         $eleveId = (int) ($data['eleve_id'] ?? 0);
-        $fraisId = !empty($data['frais_id']) ? (int) $data['frais_id'] : 0;
-        $reste = null;
-        if ($eleveId > 0) {
-            $reste = DetteEleve::getTotalOutstandingByEleve($eleveId);
-            if ($fraisId > 0) {
-                $dette = DetteEleve::findByEleveAndFrais($eleveId, $fraisId);
-                if ($dette) {
-                    $reste = (float) ($dette['montant_restant'] ?? 0);
-                }
+        $role = (string) ($user['role'] ?? '');
+        if ($role === 'parent_ecole') {
+            if (
+                (int) ($data['parent_id'] ?? 0) <= 0
+                || (int) ($data['parent_id'] ?? 0) !== (int) ($user['reference_id'] ?? 0)
+            ) {
+                header('Location: ' . BASE_URL . '/error/notFound');
+                exit;
+            }
+        } elseif ($role !== 'super_admin') {
+            $schoolId = (int) ($user['ecole_id'] ?? 0);
+            if ($schoolId <= 0 || !Eleve::findByIdAndSchool($eleveId, $schoolId)) {
+                header('Location: ' . BASE_URL . '/error/notFound');
+                exit;
             }
         }
 
@@ -1372,6 +1389,9 @@ class PaiementsController extends Controller
             $data['prenom'] ?? '',
         ], fn($value) => $value !== null && trim((string) $value) !== '');
         $eleveName = implode(' ', array_map('trim', $parts));
+
+        $totalPayeParDevise = $this->fetchTotalPaidByCurrency($user, $eleveId);
+        $detteTotaleParDevise = DetteEleve::computeOutstandingFromApplicableFees($eleveId);
 
         $historiquePaiements = [];
         if ($eleveId > 0) {
@@ -1400,7 +1420,8 @@ class PaiementsController extends Controller
             'eleve_name' => $eleveName,
             'montant_paye' => (float) ($data['montant'] ?? 0),
             'date_paiement' => $data['date_operation'] ?? null,
-            'reste_a_payer' => $reste,
+            'total_paye_par_devise' => $totalPayeParDevise,
+            'dette_totale_par_devise' => $detteTotaleParDevise,
             'historique_paiements' => $historiquePaiements,
         ]);
     }

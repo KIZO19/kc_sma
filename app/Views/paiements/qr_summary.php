@@ -63,18 +63,6 @@
     font-size: 14px;
     text-align: right;
   }
-  .progress-wrap {
-    background: #edf2ff;
-    border-radius: 999px;
-    overflow: hidden;
-    height: 12px;
-    margin-top: 8px;
-  }
-  .progress-bar {
-    height: 100%;
-    border-radius: 999px;
-    background: linear-gradient(90deg, #28a745, #198754);
-  }
   .summary-footer {
     text-align: center;
     padding: 0 22px 18px;
@@ -90,9 +78,9 @@
 
 <?php
   $currency = strtoupper(trim($ecriture['transaction_devise'] ?? $ecriture['frais_devise'] ?? 'USD')) ?: 'USD';
-  $formatCurrency = function (float $amount) use ($currency) {
-      $usdEquivalent = $currency !== 'USD' ? \App\Models\Devise::convertToUsd($amount, $currency) : null;
-      return \App\Models\Devise::formatAmountWithCurrency($amount, $currency, $usdEquivalent);
+  $formatCurrency = function (float $amount, ?string $currencyCode = null) use ($currency) {
+      $currencyCode = strtoupper(trim($currencyCode ?? $currency)) ?: $currency;
+      return \App\Models\Devise::formatAmountWithCurrency($amount, $currencyCode);
   };
 ?>
 
@@ -127,27 +115,33 @@
 
       <div class="stat-box">
         <div>
-          <div class="stat-label">Reste à payer</div>
-          <div class="stat-value"><?= htmlspecialchars($formatCurrency((float) ($reste_a_payer ?? 0))) ?></div>
+          <div class="stat-label">Total déjà payé</div>
+          <?php if (!empty($total_paye_par_devise)): ?>
+            <?php foreach ($total_paye_par_devise as $paidCurrency => $paidAmount): ?>
+              <div class="stat-value"><?= htmlspecialchars($formatCurrency((float) $paidAmount, (string) $paidCurrency)) ?></div>
+            <?php endforeach; ?>
+          <?php else: ?>
+            <div class="stat-value"><?= htmlspecialchars($formatCurrency(0.0, $currency)) ?></div>
+          <?php endif; ?>
         </div>
-        <div class="text-warning">
-          <i class="bi bi-wallet2 fs-4"></i>
+        <div class="text-success">
+          <i class="bi bi-cash-stack fs-4"></i>
         </div>
       </div>
 
-      <?php
-        $paid = (float) ($montant_paye ?? 0);
-        $rest = max(0.0, (float) ($reste_a_payer ?? 0));
-        $total = $paid + $rest;
-        $progress = $total > 0 ? min(100, ($paid / $total) * 100) : 0;
-      ?>
-      <div class="mt-3">
-        <div class="d-flex justify-content-between small text-muted mb-1">
-          <span>Progression</span>
-          <span><?= round($progress, 0) ?>%</span>
+      <div class="stat-box">
+        <div>
+          <div class="stat-label">Dette totale restante</div>
+          <?php if (!empty($dette_totale_par_devise)): ?>
+            <?php foreach ($dette_totale_par_devise as $debtCurrency => $debtAmount): ?>
+              <div class="stat-value"><?= htmlspecialchars($formatCurrency((float) $debtAmount, (string) $debtCurrency)) ?></div>
+            <?php endforeach; ?>
+          <?php else: ?>
+            <div class="stat-value"><?= htmlspecialchars($formatCurrency(0.0, $currency)) ?></div>
+          <?php endif; ?>
         </div>
-        <div class="progress-wrap">
-          <div class="progress-bar" style="width: <?= $progress ?>%"></div>
+        <div class="text-warning">
+          <i class="bi bi-wallet2 fs-4"></i>
         </div>
       </div>
 

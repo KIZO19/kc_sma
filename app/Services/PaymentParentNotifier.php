@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Core\Database;
+use App\Models\NotificationAccess;
 use PDO;
 
 class PaymentParentNotifier
@@ -69,7 +70,7 @@ class PaymentParentNotifier
 
         $db = Database::getConnection();
         $stmt = $db->prepare(
-            'SELECT e.id, e.nom, e.postnom, e.prenom, ec.nom_etablissement AS school_name, '
+            'SELECT e.id, e.ecole_id, e.nom, e.postnom, e.prenom, ec.nom_etablissement AS school_name, '
             . 'COALESCE(NULLIF(TRIM(admin_agent.telephone), \'\'), NULLIF(TRIM(ec.telephone_contact), \'\')) AS school_whatsapp_sender, '
             . 'p.telephone AS parent_phone, p.nom_responsable AS parent_nom_responsable '
             . 'FROM eleves e '
@@ -104,11 +105,36 @@ class PaymentParentNotifier
             $schoolName = 'Établissement scolaire';
         }
         $parentName = trim((string) ($eleve['parent_nom_responsable'] ?? ''));
-        $greeting = $parentName !== '' ? 'Bonjour ' . $parentName . ',' : 'Bonjour,';
-        $message = '[' . $schoolName . "]\n" . $greeting . ' le paiement de ' . number_format($montant, 2, ',', ' ') . ' ' . $currency
-            . ' pour ' . $paymentLabel . ' a bien été enregistré pour l\'élève ' . $studentName . '.';
+        $parentName = $parentName !== '' ? $parentName : 'Parent/tuteur';
+        $remainingStmt = $db->prepare(
+            'SELECT COALESCE(SUM(montant_restant), 0) AS montant_restant,
+                    COALESCE(MAX(devise), :devise) AS devise
+             FROM dettes_eleves
+             WHERE eleve_id = :eleve_id AND frais_id = :frais_id'
+        );
+        $remainingStmt->execute([
+            ':devise' => $currency,
+            ':eleve_id' => $eleveId,
+            ':frais_id' => $fraisId,
+        ]);
+        $remainingDebt = $remainingStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $remainingAmount = max(0.0, (float) ($remainingDebt['montant_restant'] ?? 0));
+        $remainingCurrency = strtoupper(trim((string) ($remainingDebt['devise'] ?? $currency))) ?: $currency;
 
-        return $this->dispatchMessage($phone, $message, $schoolName, (string) ($eleve['school_whatsapp_sender'] ?? ''));
+        $message = '[' . $schoolName . "]\n"
+            . 'Parent : ' . $parentName . "\n"
+            . 'Paiement reçu pour l’élève ' . $studentName . ".\n"
+            . 'Frais : ' . $paymentLabel . "\n"
+            . 'Montant payé : ' . number_format($montant, 2, ',', ' ') . ' ' . $currency . "\n"
+            . 'Reste à payer pour ce frais : ' . number_format($remainingAmount, 2, ',', ' ') . ' ' . $remainingCurrency . '.';
+
+        return $this->dispatchMessage(
+            $phone,
+            $message,
+            (int) ($eleve['ecole_id'] ?? 0),
+            $schoolName,
+            (string) ($eleve['school_whatsapp_sender'] ?? '')
+        );
     }
 
     public function notifyAfterRegistration(int $eleveId): array
@@ -118,7 +144,7 @@ class PaymentParentNotifier
         }
 
         $stmt = Database::getConnection()->prepare(
-            'SELECT e.id, e.nom, e.postnom, e.prenom, e.matricule, ec.nom_etablissement AS school_name, '
+            'SELECT e.id, e.ecole_id, e.nom, e.postnom, e.prenom, e.matricule, ec.nom_etablissement AS school_name, '
             . 'COALESCE(NULLIF(TRIM(admin_agent.telephone), \'\'), NULLIF(TRIM(ec.telephone_contact), \'\')) AS school_whatsapp_sender, '
             . 'p.telephone AS parent_phone, p.nom_responsable AS parent_nom_responsable '
             . 'FROM eleves e LEFT JOIN ecoles ec ON ec.id = e.ecole_id '
@@ -149,7 +175,13 @@ class PaymentParentNotifier
             return ['sent' => false, 'delivered' => false, 'status' => 'failed', 'reason' => 'missing_parent_phone', 'message' => 'Notification d’inscription non envoyée.', 'details' => 'Le parent associé à cet élève n’a pas de numéro de téléphone valide.'];
         }
 
-        return $this->dispatchMessage($phone, $message, $schoolName, (string) ($student['school_whatsapp_sender'] ?? ''));
+        return $this->dispatchMessage(
+            $phone,
+            $message,
+            (int) ($student['ecole_id'] ?? 0),
+            $schoolName,
+            (string) ($student['school_whatsapp_sender'] ?? '')
+        );
     }
 
     public function sendSchoolAnnouncement(int $ecoleId, string $title, string $body): array
@@ -214,7 +246,13 @@ class PaymentParentNotifier
         $fullySent = 0;
         $failureReasons = [];
         foreach ($phones as $phone) {
-            $result = $this->dispatchMessage($phone, $message, $schoolName, (string) ($school['whatsapp_sender'] ?? ''));
+            $result = $this->dispatchMessage(
+                $phone,
+                $message,
+                $ecoleId,
+                $schoolName,
+                (string) ($school['whatsapp_sender'] ?? '')
+            );
             if (!empty($result['delivered'])) {
                 $delivered++;
             }
@@ -243,34 +281,57 @@ class PaymentParentNotifier
         ];
     }
 
-    private function dispatchMessage(string $phone, string $message, string $schoolName, string $schoolWhatsappSender = ''): array
+    private function dispatchMessage(
+        string $phone,
+        string $message,
+        int $ecoleId,
+        string $schoolName,
+        string $schoolWhatsappSender = ''
+    ): array
     {
         $attempts = [];
+        $access = NotificationAccess::getEnabledChannels($ecoleId);
+        $smsEnabled = $this->shouldSendSms() && $access['sms'];
+        $whatsappEnabled = $this->shouldSendWhatsapp() && $access['whatsapp'];
         if ($this->provider === 'infobip') {
-            if ($this->shouldSendSms()) {
+            if ($smsEnabled) {
                 $attempts[] = $this->sendInfobipSms($phone, $message, $schoolName);
             }
-            if ($this->shouldSendWhatsapp()) {
+            if ($whatsappEnabled) {
                 $attempts[] = $this->sendInfobipWhatsapp($phone, $message, $schoolWhatsappSender);
             }
         } elseif ($this->provider === 'twilio') {
-            if ($this->shouldSendSms()) {
+            if ($smsEnabled) {
                 $attempts[] = $this->sendTwilioSms($phone, $message);
             }
-            if ($this->shouldSendWhatsapp()) {
+            if ($whatsappEnabled) {
                 $attempts[] = $this->sendTwilioWhatsapp($phone, $message);
             }
         } else {
-            if ($this->shouldSendSms()) {
+            if ($smsEnabled) {
                 $attempts[] = $this->sendSms($phone, $message, $schoolName);
             }
-            if ($this->shouldSendWhatsapp()) {
+            if ($whatsappEnabled) {
                 $attempts[] = $this->sendWhatsapp($phone, $message);
             }
         }
 
         if ($attempts === []) {
-            return ['sent' => false, 'delivered' => false, 'status' => 'failed', 'reason' => 'no_channel_configured', 'message' => 'Aucun canal de notification n’est configuré.', 'details' => 'Le fournisseur ou le canal WhatsApp/SMS n’est pas prêt pour cet envoi.'];
+            $reason = !$access['sms'] && !$access['whatsapp']
+                ? 'school_notifications_disabled'
+                : 'no_channel_configured';
+            return [
+                'sent' => false,
+                'delivered' => false,
+                'status' => 'failed',
+                'reason' => $reason,
+                'message' => $reason === 'school_notifications_disabled'
+                    ? 'Les notifications SMS et WhatsApp sont désactivées pour cette école.'
+                    : 'Aucun canal de notification autorisé et configuré.',
+                'details' => $reason === 'school_notifications_disabled'
+                    ? 'Le super-administrateur doit autoriser au moins un canal pour cette école.'
+                    : 'Vérifiez les canaux autorisés pour l’école et la configuration du fournisseur.',
+            ];
         }
 
         $successes = array_filter($attempts, static fn ($attempt) => !empty($attempt['sent']));
@@ -402,11 +463,37 @@ class PaymentParentNotifier
 
     private function resolveSchoolSmsSender(string $schoolName, string $fallback): string
     {
-        $sender = function_exists('iconv')
+        $asciiName = function_exists('iconv')
             ? iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $schoolName)
             : $schoolName;
-        $sender = preg_replace('/[^A-Za-z0-9]/', '', $sender !== false ? $sender : $schoolName);
-        $sender = substr($sender ?? '', 0, 11);
+        $words = preg_split('/[^A-Za-z0-9]+/', $asciiName !== false ? $asciiName : $schoolName, -1, PREG_SPLIT_NO_EMPTY);
+        $words = is_array($words) ? $words : [];
+        $sender = implode('', $words);
+
+        if (strlen($sender) > 11 && count($words) > 1) {
+            for ($suffixStart = 1; $suffixStart < count($words); $suffixStart++) {
+                $prefix = array_map(
+                    static fn (string $word): string => substr($word, 0, 1),
+                    array_slice($words, 0, $suffixStart)
+                );
+                $candidate = implode('', array_merge($prefix, array_slice($words, $suffixStart)));
+                if (strlen($candidate) <= 11) {
+                    $sender = $candidate;
+                    break;
+                }
+            }
+
+            if (strlen($sender) > 11) {
+                $prefix = array_map(
+                    static fn (string $word): string => substr($word, 0, 1),
+                    array_slice($words, 0, -1)
+                );
+                $lastWordLength = max(0, 11 - strlen(implode('', $prefix)));
+                $sender = implode('', $prefix) . substr((string) end($words), 0, $lastWordLength);
+            }
+        }
+
+        $sender = substr($sender, 0, 11);
 
         return $sender !== '' ? $sender : (trim($fallback) !== '' ? trim($fallback) : 'InfoSMS');
     }
