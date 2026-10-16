@@ -218,13 +218,17 @@ class PaymentParentNotifier
 
         $payload = [
             'messages' => [[
-                'from' => $this->resolveSchoolSmsSender($schoolName, $from !== '' ? $from : 'InfoSMS'),
-                'to' => ltrim($phone, '+'),
-                'text' => $message,
+                'destinations' => [[
+                    'to' => ltrim($phone, '+'),
+                ]],
+                'sender' => $this->resolveSchoolSmsSender($schoolName, $from),
+                'content' => [
+                    'text' => $message,
+                ],
             ]],
         ];
 
-        return $this->sendJsonRequest($baseUrl . '/sms/2/text/advanced', $payload, $apiKey, 'sms', true);
+        return $this->sendJsonRequest($baseUrl . '/sms/3/messages', $payload, $apiKey, 'sms', true);
     }
 
     private function sendInfobipWhatsapp(string $phone, string $message): array
@@ -259,7 +263,7 @@ class PaymentParentNotifier
         $sender = preg_replace('/[^A-Za-z0-9]/', '', $sender !== false ? $sender : $schoolName);
         $sender = substr($sender ?? '', 0, 11);
 
-        return $sender !== '' ? $sender : $fallback;
+        return $sender !== '' ? $sender : (trim($fallback) !== '' ? trim($fallback) : 'InfoSMS');
     }
 
     private function sendTwilioSms(string $phone, string $message): array
