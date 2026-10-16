@@ -13,7 +13,7 @@ const DB_DSN = 'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb
 // Provider supported: 'infobip', 'twilio' or 'generic'
 // Channel supported: 'whatsapp', 'sms', 'both'
 const PAYMENT_PROVIDER = 'infobip';
-const PAYMENT_CHANNEL = 'whatsapp';
+const PAYMENT_CHANNEL = 'both';
 const PAYMENT_SMS_API_URL = '';
 const PAYMENT_SMS_API_TOKEN = '';
 const PAYMENT_SMS_SENDER = '';

@@ -108,11 +108,13 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
 
               <div class="mb-3">
                 <label class="form-label">Motif / Frais</label>
-                <select name="frais_id" id="fraisSelect" class="form-select" required>
+                <select name="frais_id" id="fraisSelect" class="form-select" required <?= empty($eleve) ? 'disabled' : '' ?> data-initial-fee-id="<?= (int) ($oldInput['frais_id'] ?? 0) ?>" data-initial-student-id="<?= $oldStudent ? (int) $oldStudent['id'] : 0 ?>" data-preserve-amount="<?= !empty($oldInput['montant']) ? '1' : '0' ?>">
                   <option value="">-- Sélectionner le motif --</option>
-                  <?php foreach (($fees ?? []) as $f): ?>
-                    <option value="<?= (int) $f['id'] ?>" data-amount="<?= htmlspecialchars($f['montant_total'] ?? '') ?>" data-remaining="<?= htmlspecialchars($f['remaining'] ?? '') ?>" data-devise="<?= htmlspecialchars($f['devise'] ?? 'USD') ?>" <?= ((int) ($oldInput['frais_id'] ?? 0) === (int) $f['id']) ? 'selected' : '' ?>><?= htmlspecialchars($f['type_frais'] . ' - ' . ($f['nom_classe'] ?? '') ) ?> (<?= htmlspecialchars($f['devise'] ?? '') ?>)</option>
-                  <?php endforeach; ?>
+                  <?php if (!empty($eleve)): ?>
+                    <?php foreach (($fees ?? []) as $f): ?>
+                      <option value="<?= (int) $f['id'] ?>" data-amount="<?= htmlspecialchars($f['montant_total'] ?? '') ?>" data-remaining="<?= htmlspecialchars($f['remaining'] ?? '') ?>" data-devise="<?= htmlspecialchars($f['devise'] ?? 'USD') ?>" <?= ((int) ($oldInput['frais_id'] ?? 0) === (int) $f['id']) ? 'selected' : '' ?>><?= htmlspecialchars($f['type_frais'] . ' - ' . ($f['nom_classe'] ?? '') ) ?> (<?= htmlspecialchars($f['devise'] ?? '') ?>)</option>
+                    <?php endforeach; ?>
+                  <?php endif; ?>
                 </select>
               </div>
 
@@ -189,10 +191,13 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
     const studentDebtByCurrency = document.getElementById('studentDebtByCurrency');
     const studentDebtFees = document.getElementById('studentDebtFees');
     const fraisSelect = document.getElementById('fraisSelect');
+    let lastSelectedFeeId = fraisSelect?.value || '';
+    let lastGeneratedFeeLabel = '';
+    let restoreInitialFee = true;
     function updateStudentFees(student) {
       if (!studentSearch || !fraisSelect) return;
-      const previousFeeId = fraisSelect.value;
       fraisSelect.replaceChildren(new Option('-- Sélectionner le motif --', ''));
+      let restoredFee = false;
       (student?.feeDebts || []).forEach((fee) => {
         const remaining = Number(fee.montant_restant || 0);
         if (remaining <= 0) return;
@@ -204,13 +209,25 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
           }).format(remaining)}`,
           String(fee.frais_id)
         );
+        option.dataset.label = fee.type_frais;
         option.dataset.amount = String(fee.montant_total || remaining);
         option.dataset.remaining = String(remaining);
         option.dataset.devise = currency;
         fraisSelect.appendChild(option);
+        if (
+          restoreInitialFee
+          && Number(student.id) === Number(fraisSelect.dataset.initialStudentId)
+          && Number(fee.frais_id) === Number(fraisSelect.dataset.initialFeeId)
+        ) {
+          option.selected = true;
+          restoredFee = true;
+        }
       });
-      if (Array.from(fraisSelect.options).some((option) => option.value === previousFeeId && previousFeeId !== '')) {
-        fraisSelect.value = previousFeeId;
+      restoreInitialFee = false;
+      fraisSelect.dataset.initialFeeId = '0';
+      fraisSelect.disabled = fraisSelect.options.length <= 1;
+      if (restoredFee) {
+        lastSelectedFeeId = fraisSelect.value;
       }
       fraisSelect.dispatchEvent(new Event('change', { bubbles: true }));
     }
@@ -400,7 +417,7 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
 
     function updateMontantHint() {
       const opt = fraisSelect.selectedOptions[0];
-      if (!opt) {
+      if (!opt || !opt.value) {
         montantHint.textContent = 'Veuillez saisir le montant du paiement. Si un motif est sélectionné, le montant doit respecter les limites du frais.';
         montantHint.classList.add('text-muted');
         montantHint.classList.remove('text-danger');
@@ -455,22 +472,33 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
       fraisSelect.dispatchEvent(event);
     }
 
-    let lastSelectedFeeId = fraisSelect.value;
-    let lastGeneratedFeeLabel = '';
     fraisSelect.addEventListener('change', function () {
       const opt = fraisSelect.selectedOptions[0];
       if (!opt) return;
+      if (!opt.value) {
+        if (lastSelectedFeeId && montantInput) {
+          montantInput.value = '';
+        }
+        if (libelleInput && libelleInput.value === lastGeneratedFeeLabel) {
+          libelleInput.value = '';
+        }
+        lastSelectedFeeId = '';
+        lastGeneratedFeeLabel = '';
+        updateMontantHint();
+        return;
+      }
       const amount = parseFloat(opt.dataset.amount || '0');
       const remaining = parseFloat(opt.dataset.remaining || '0');
       const feeChanged = opt.value !== lastSelectedFeeId;
-      if (feeChanged && montantInput) {
+      if (feeChanged && montantInput && fraisSelect.dataset.preserveAmount !== '1') {
         montantInput.value = remaining > 0 ? remaining.toFixed(2) : amount.toFixed(2);
       }
       if (libelleInput && (libelleInput.value.trim() === '' || libelleInput.value === lastGeneratedFeeLabel)) {
-        libelleInput.value = opt.textContent.trim();
+        libelleInput.value = opt.dataset.label || opt.textContent.trim();
         lastGeneratedFeeLabel = libelleInput.value;
       }
       lastSelectedFeeId = opt.value;
+      fraisSelect.dataset.preserveAmount = '0';
       updateMontantHint();
     });
 

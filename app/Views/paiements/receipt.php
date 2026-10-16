@@ -29,10 +29,35 @@ unset($_SESSION['payment_notification_status']);
     <div class="row justify-content-center">
       <div class="col-md-6">
         <?php if (!empty($notificationStatus)): ?>
-          <div class="alert <?= !empty($notificationStatus['sent']) ? 'alert-success' : 'alert-danger' ?> alert-dismissible fade show" role="alert">
-            <strong><?= !empty($notificationStatus['sent']) ? 'Notification envoyée' : 'Notification non envoyée' ?></strong><br>
+          <?php
+            $notificationClass = match ($notificationStatus['status'] ?? '') {
+              'success' => 'alert-success',
+              'partial' => 'alert-warning',
+              default => 'alert-danger',
+            };
+            $notificationTitle = match ($notificationStatus['status'] ?? '') {
+              'success' => 'Notification envoyée',
+              'partial' => 'Notification partiellement envoyée',
+              default => 'Notification non envoyée',
+            };
+          ?>
+          <div class="alert <?= $notificationClass ?> alert-dismissible fade show" role="alert">
+            <strong><?= htmlspecialchars($notificationTitle, ENT_QUOTES, 'UTF-8') ?></strong><br>
             <?= htmlspecialchars($notificationStatus['message'] ?? 'Statut de notification indisponible.') ?>
-            <?php if (!empty($notificationStatus['details'])): ?>
+            <?php if (!empty($notificationStatus['attempts']) && is_array($notificationStatus['attempts'])): ?>
+              <ul class="mt-1 mb-0 small">
+                <?php foreach ($notificationStatus['attempts'] as $attempt): ?>
+                  <?php $channelLabel = ($attempt['channel'] ?? '') === 'sms' ? 'SMS' : 'WhatsApp'; ?>
+                  <li>
+                    <strong><?= htmlspecialchars($channelLabel, ENT_QUOTES, 'UTF-8') ?> :</strong>
+                    <?= !empty($attempt['sent']) ? 'envoyé' : 'échec' ?>
+                    <?php if (!empty($attempt['details'])): ?>
+                      — <?= htmlspecialchars($attempt['details'], ENT_QUOTES, 'UTF-8') ?>
+                    <?php endif; ?>
+                  </li>
+                <?php endforeach; ?>
+              </ul>
+            <?php elseif (!empty($notificationStatus['details'])): ?>
               <div class="mt-1 small"><?= htmlspecialchars($notificationStatus['details']) ?></div>
             <?php endif; ?>
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
