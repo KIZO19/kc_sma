@@ -3,13 +3,24 @@
   .student-kpi .card-body { padding: 1rem 1.25rem; }
   .student-kpi strong { font-size: 1.35rem; }
   .student-kpi-icon { display: inline-grid; width: 2.75rem; height: 2.75rem; place-items: center; border-radius: .85rem; font-size: 1.25rem; }
-  .student-grid { min-width: 1050px; }
-  .student-grid thead th { white-space: nowrap; background: var(--surface-muted); color: var(--text-muted); font-size: .76rem; text-transform: uppercase; letter-spacing: .035em; }
+  .student-grid-wrap { max-height: min(68vh, 720px); overflow: auto; border: 1px solid var(--border); border-radius: .55rem; }
+  .student-grid { min-width: 1360px; border-collapse: separate; border-spacing: 0; }
+  .student-grid thead th { position: sticky; top: 0; z-index: 2; padding: .85rem .75rem; white-space: nowrap; background: var(--surface-muted); color: var(--text-muted); border-bottom: 1px solid var(--border); font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0; }
   .student-grid th[data-sort-type] { cursor: pointer; user-select: none; }
   .student-grid th[aria-sort="ascending"]::after { content: " ▲"; }
   .student-grid th[aria-sort="descending"]::after { content: " ▼"; }
+  .student-grid tbody td { padding: .78rem .75rem; border-color: var(--border); color: var(--text); }
+  .student-grid tbody tr:nth-child(even) > * { --bs-table-bg: var(--surface-muted); }
+  .student-grid tbody tr:hover > * { --bs-table-bg: color-mix(in srgb, var(--sidebar-active) 7%, var(--surface)); }
+  .student-grid .row-number { width: 3rem; color: var(--text-muted); font-size: .8rem; }
   .student-grid .student-name { color: var(--text); font-weight: 600; text-decoration: none; }
+  .student-grid .student-name { display: inline-block; max-width: 210px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; white-space: nowrap; }
   .student-grid .student-name:hover { color: var(--sidebar-active); }
+  .student-grid .btn-group .btn { min-width: 2rem; }
+  @media (max-width: 575.98px) {
+    .student-grid-wrap { max-height: 62vh; }
+    .student-grid tbody td { padding: .7rem .6rem; }
+  }
 </style>
       <section class="content-header">
         <div class="container-fluid">
@@ -152,7 +163,7 @@
                 <span class="small text-muted" id="studentCount" aria-live="polite"></span>
                 <span class="small text-muted">Astuce : cliquez sur un en-tête pour trier.</span>
               </div>
-              <div class="table-responsive">
+              <div class="table-responsive student-grid-wrap">
                 <table id="studentsDataGrid" class="table table-hover align-middle student-grid mb-0">
                   <thead>
                     <tr>
@@ -192,7 +203,7 @@
                         <td class="row-number"></td>
                         <td data-sort-value="<?= $e($student['matricule'] ?? '') ?>"><?= $e($student['matricule'] ?? '—') ?></td>
                         <td data-sort-value="<?= $e($fullName) ?>">
-                          <a class="student-name" href="<?= BASE_URL ?>/eleves/show?id=<?= (int) $student['id'] ?>"><?= $e($fullName ?: '—') ?></a>
+                          <a class="student-name" href="<?= BASE_URL ?>/eleves/show?id=<?= (int) $student['id'] ?>" title="<?= $e($fullName) ?>"><?= $e($fullName ?: '—') ?></a>
                           <div class="small text-muted">ID <?= (int) $student['id'] ?></div>
                         </td>
                         <td><?= $e($gender ?: '—') ?></td>

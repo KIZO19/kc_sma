@@ -28,6 +28,48 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
         <a href="<?= BASE_URL ?><?= !empty($eleve) ? '/eleves/show?id=' . (int) $eleve['id'] : '/paiements' ?>" class="btn-close" aria-label="Fermer"></a>
       </div>
       <div class="modal-body">
+        <?php if (!empty($paymentSuccess)): ?>
+          <div class="alert alert-success" role="status">
+            <?= htmlspecialchars($paymentSuccess, ENT_QUOTES, 'UTF-8') ?>
+            <?php if (!empty($paymentReceiptId)): ?>
+              <div class="mt-2"><a href="<?= BASE_URL ?>/paiements/receipt?id=<?= (int) $paymentReceiptId ?>" class="alert-link">Consulter ou imprimer le reçu</a></div>
+            <?php endif; ?>
+          </div>
+        <?php endif; ?>
+        <?php if (!empty($notificationStatus)): ?>
+          <?php
+            $notificationClass = match ($notificationStatus['status'] ?? '') {
+              'success' => 'alert-success',
+              'partial' => 'alert-warning',
+              default => 'alert-danger',
+            };
+            $notificationTitle = match ($notificationStatus['status'] ?? '') {
+              'success' => 'Demande acceptée par le fournisseur',
+              'partial' => 'Demande partiellement acceptée',
+              default => 'Notification au parent non envoyée',
+            };
+          ?>
+          <div class="alert <?= $notificationClass ?> alert-dismissible fade show" role="status">
+            <strong><?= htmlspecialchars($notificationTitle, ENT_QUOTES, 'UTF-8') ?></strong><br>
+            <?= htmlspecialchars($notificationStatus['message'] ?? 'Statut de notification indisponible.', ENT_QUOTES, 'UTF-8') ?>
+            <?php if (!empty($notificationStatus['attempts']) && is_array($notificationStatus['attempts'])): ?>
+              <ul class="mt-1 mb-0 small">
+                <?php foreach ($notificationStatus['attempts'] as $attempt): ?>
+                  <?php $channelLabel = ($attempt['channel'] ?? '') === 'sms' ? 'SMS' : 'WhatsApp'; ?>
+                  <li>
+                    <strong><?= htmlspecialchars($channelLabel, ENT_QUOTES, 'UTF-8') ?> :</strong>
+                    <?= !empty($attempt['sent']) ? 'accepté par le fournisseur — livraison SIM non confirmée' : 'échec' ?>
+                    <?php if (!empty($attempt['details'])): ?>
+                      — <?= htmlspecialchars($attempt['details'], ENT_QUOTES, 'UTF-8') ?>
+                    <?php endif; ?>
+                  </li>
+                <?php endforeach; ?>
+              </ul>
+            <?php elseif (!empty($notificationStatus['details'])): ?>
+              <div class="mt-1 small"><?= htmlspecialchars($notificationStatus['details'], ENT_QUOTES, 'UTF-8') ?></div>
+            <?php endif; ?>
+          </div>
+        <?php endif; ?>
         <?php if (!empty($errors)): ?>
           <div class="alert alert-danger alert-dismissible">
             <ul class="mb-0">

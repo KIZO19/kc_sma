@@ -10,6 +10,14 @@ $currentInscription = $currentInscription ?? [];
 $selectedClasseId = (int) ($oldInput['classe_id'] ?? ($currentInscription['classe_id'] ?? 0));
 $selectedSectionId = (int) ($oldInput['section_id'] ?? ($currentInscription['section_id'] ?? 0));
 $selectedOptionId = (int) ($oldInput['option_id'] ?? ($currentInscription['option_id'] ?? 0));
+$selectedParentId = (int) ($oldInput['parent_id'] ?? ($student['parent_id'] ?? 0));
+$selectedParent = null;
+foreach ($parents as $parent) {
+  if ((int) ($parent['id'] ?? 0) === $selectedParentId) {
+    $selectedParent = $parent;
+    break;
+  }
+}
 ?>
       <section class="content-header">
         <div class="container-fluid">
@@ -69,7 +77,7 @@ $selectedOptionId = (int) ($oldInput['option_id'] ?? ($currentInscription['optio
                         <label class="form-label">Postnom</label>
                         <input type="text" name="postnom" class="form-control" required value="<?= htmlspecialchars($oldInput['postnom'] ?? $student['postnom']) ?>">
                       </div>
-                    </div>
+                    </fieldset>
 
                     <div class="row">
                       <div class="col-md-6 mb-3">
@@ -134,16 +142,39 @@ $selectedOptionId = (int) ($oldInput['option_id'] ?? ($currentInscription['optio
 
                     <div class="mb-3">
                       <label class="form-label">Parent lié</label>
-                      <select name="parent_id" class="form-select">
+                      <select id="edit-parent-select" name="parent_id" class="form-select">
                         <option value="">Aucun parent lié</option>
                         <?php foreach ($parents as $parent): ?>
-                          <option value="<?= (int) $parent['id'] ?>" <?= ((int) ($oldInput['parent_id'] ?? $student['parent_id']) === (int) $parent['id']) ? 'selected' : '' ?> >
+                          <option
+                            value="<?= (int) $parent['id'] ?>"
+                            data-parent-name="<?= htmlspecialchars($parent['nom_responsable'], ENT_QUOTES, 'UTF-8') ?>"
+                            data-parent-phone="<?= htmlspecialchars($parent['telephone'], ENT_QUOTES, 'UTF-8') ?>"
+                            data-parent-email="<?= htmlspecialchars($parent['email'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                            <?= $selectedParentId === (int) $parent['id'] ? 'selected' : '' ?>>
                             <?= htmlspecialchars($parent['nom_responsable']) ?> - <?= htmlspecialchars($parent['telephone']) ?>
                           </option>
                         <?php endforeach; ?>
                       </select>
-                      <small class="form-text text-muted">Sélectionnez un parent existant pour lier l’élève.</small>
+                      <small class="form-text text-muted">Choisissez la fiche parent à rattacher. Les changements ci-dessous s’appliqueront à tous les enfants liés à cette fiche.</small>
                     </div>
+                    <fieldset id="edit-parent-details" class="border rounded p-3 mb-3" <?= $selectedParentId <= 0 ? 'disabled' : '' ?>>
+                      <legend class="float-none w-auto px-2 fs-6">Coordonnées du parent/tuteur</legend>
+                      <div class="row">
+                        <div class="col-md-4 mb-2">
+                          <label for="edit-parent-name" class="form-label">Nom complet <span class="text-danger">*</span></label>
+                          <input id="edit-parent-name" type="text" name="parent_nom_responsable" class="form-control" maxlength="150" required value="<?= htmlspecialchars($oldInput['parent_nom_responsable'] ?? ($selectedParent['nom_responsable'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                        </div>
+                        <div class="col-md-4 mb-2">
+                          <label for="edit-parent-phone" class="form-label">Téléphone <span class="text-danger">*</span></label>
+                          <input id="edit-parent-phone" type="tel" name="parent_telephone" class="form-control" maxlength="25" required value="<?= htmlspecialchars($oldInput['parent_telephone'] ?? ($selectedParent['telephone'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                        </div>
+                        <div class="col-md-4 mb-2">
+                          <label for="edit-parent-email" class="form-label">Email</label>
+                          <input id="edit-parent-email" type="email" name="parent_email" class="form-control" maxlength="100" value="<?= htmlspecialchars($oldInput['parent_email'] ?? ($selectedParent['email'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                        </div>
+                      </div>
+                      <small class="form-text text-muted">L’email est facultatif. Le téléphone doit être valide et unique dans l’école.</small>
+                    </fieldset>
 
                     <div class="row">
                       <div class="col-md-6 mb-3">
@@ -223,6 +254,28 @@ $selectedOptionId = (int) ($oldInput['option_id'] ?? ($currentInscription['optio
       </section>
       <script>
         document.addEventListener('DOMContentLoaded', function () {
+          const parentSelect = document.getElementById('edit-parent-select');
+          const parentDetails = document.getElementById('edit-parent-details');
+          const parentName = document.getElementById('edit-parent-name');
+          const parentPhone = document.getElementById('edit-parent-phone');
+          const parentEmail = document.getElementById('edit-parent-email');
+          if (parentSelect && parentDetails) {
+            parentSelect.addEventListener('change', function () {
+              const selected = parentSelect.options[parentSelect.selectedIndex];
+              const hasParent = Boolean(parentSelect.value);
+              parentDetails.disabled = !hasParent;
+              if (hasParent) {
+                parentName.value = selected.dataset.parentName || '';
+                parentPhone.value = selected.dataset.parentPhone || '';
+                parentEmail.value = selected.dataset.parentEmail || '';
+              } else {
+                parentName.value = '';
+                parentPhone.value = '';
+                parentEmail.value = '';
+              }
+            });
+          }
+
           const sectionSelect = document.getElementById('edit-section-select');
           const optionSelect = document.getElementById('edit-option-select');
           const classSelect = document.getElementById('edit-classe-select');

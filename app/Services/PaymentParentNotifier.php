@@ -99,34 +99,61 @@ class PaymentParentNotifier
         ], static fn ($value) => trim((string) $value) !== '')));
 
         $paymentLabel = trim($libelle) !== '' ? $libelle : 'paiement scolaire';
-        $currency = trim($devise) !== '' ? strtoupper($devise) : 'USD';
         $schoolName = trim((string) ($eleve['school_name'] ?? ''));
         if ($schoolName === '') {
             $schoolName = 'Établissement scolaire';
         }
         $parentName = trim((string) ($eleve['parent_nom_responsable'] ?? ''));
         $parentName = $parentName !== '' ? $parentName : 'Parent/tuteur';
+        $currency = strtoupper(trim($devise)) ?: 'USD';
+        $paymentCurrencyStmt = $db->prepare(
+            'SELECT COALESCE(NULLIF(UPPER(TRIM(devise)), \'\'), :devise) AS devise
+             FROM dettes_eleves
+             WHERE eleve_id = :eleve_id AND frais_id = :frais_id
+             ORDER BY id ASC
+             LIMIT 1'
+        );
+        $paymentCurrencyStmt->execute([
+            ':devise' => $currency,
+            ':eleve_id' => $eleveId,
+            ':frais_id' => $fraisId,
+        ]);
+        $currency = strtoupper(trim((string) ($paymentCurrencyStmt->fetchColumn() ?: $currency))) ?: $currency;
         $remainingStmt = $db->prepare(
-            'SELECT COALESCE(SUM(montant_restant), 0) AS montant_restant,
-                    COALESCE(MAX(devise), :devise) AS devise
+            'SELECT COALESCE(NULLIF(UPPER(TRIM(devise)), \'\'), :devise) AS devise,
+                    SUM(montant_restant) AS montant_restant
              FROM dettes_eleves
              WHERE eleve_id = :eleve_id AND frais_id = :frais_id'
+             . ' GROUP BY devise ORDER BY devise'
         );
         $remainingStmt->execute([
             ':devise' => $currency,
             ':eleve_id' => $eleveId,
             ':frais_id' => $fraisId,
         ]);
-        $remainingDebt = $remainingStmt->fetch(PDO::FETCH_ASSOC) ?: [];
-        $remainingAmount = max(0.0, (float) ($remainingDebt['montant_restant'] ?? 0));
-        $remainingCurrency = strtoupper(trim((string) ($remainingDebt['devise'] ?? $currency))) ?: $currency;
+        $remainingDebts = $remainingStmt->fetchAll(PDO::FETCH_ASSOC);
+        $remainingAmountsByCurrency = [];
+        foreach ($remainingDebts as $remainingDebt) {
+            $remainingCurrency = strtoupper(trim((string) ($remainingDebt['devise'] ?? $currency))) ?: $currency;
+            $remainingAmountsByCurrency[$remainingCurrency] = ($remainingAmountsByCurrency[$remainingCurrency] ?? 0.0)
+                + max(0.0, (float) ($remainingDebt['montant_restant'] ?? 0));
+        }
+        if ($remainingAmountsByCurrency === []) {
+            $remainingByCurrency[] = '0,00 ' . $currency;
+        } else {
+            $remainingByCurrency = [];
+            foreach ($remainingAmountsByCurrency as $remainingCurrency => $remainingAmount) {
+                $remainingByCurrency[] = number_format($remainingAmount, 2, ',', ' ') . ' ' . $remainingCurrency;
+            }
+        }
 
         $message = '[' . $schoolName . "]\n"
             . 'Parent : ' . $parentName . "\n"
             . 'Paiement reçu pour l’élève ' . $studentName . ".\n"
             . 'Frais : ' . $paymentLabel . "\n"
+            . 'Devise : ' . $currency . "\n"
             . 'Montant payé : ' . number_format($montant, 2, ',', ' ') . ' ' . $currency . "\n"
-            . 'Reste à payer pour ce frais : ' . number_format($remainingAmount, 2, ',', ' ') . ' ' . $remainingCurrency . '.';
+            . 'Reste à payer pour ce frais : ' . implode(' / ', $remainingByCurrency) . '.';
 
         return $this->dispatchMessage(
             $phone,
@@ -242,8 +269,7 @@ class PaymentParentNotifier
         }
 
         $message = '[' . $schoolName . "]\nCOMMUNIQUÉ : " . trim($title) . "\n" . trim($body);
-        $delivered = 0;
-        $fullySent = 0;
+        $accepted = 0;
         $failureReasons = [];
         foreach ($phones as $phone) {
             $result = $this->dispatchMessage(
@@ -253,31 +279,29 @@ class PaymentParentNotifier
                 $schoolName,
                 (string) ($school['whatsapp_sender'] ?? '')
             );
-            if (!empty($result['delivered'])) {
-                $delivered++;
-            }
             if (!empty($result['sent'])) {
-                $fullySent++;
+                $accepted++;
             }
             if (empty($result['sent'])) {
                 $failureReasons[] = $result['details'] ?? $result['reason'] ?? 'Échec du fournisseur.';
             }
         }
 
-        $status = $fullySent === count($phones) ? 'success' : ($delivered > 0 ? 'partial' : 'failed');
+        $status = $accepted === count($phones) ? 'success' : ($accepted > 0 ? 'partial' : 'failed');
         return [
             'sent' => $status === 'success',
             'status' => $status,
-            'reason' => $status === 'success' ? '' : ($status === 'partial' ? 'partial_delivery' : 'all_deliveries_failed'),
+            'reason' => $status === 'success' ? '' : ($status === 'partial' ? 'partial_provider_acceptance' : 'all_provider_requests_failed'),
             'message' => $status === 'success'
-                ? 'Communiqué envoyé à tous les parents concernés.'
-                : ($status === 'partial' ? 'Communiqué envoyé partiellement; certains envois ont échoué.' : 'Le communiqué n’a pu être envoyé à aucun parent.'),
-            'details' => $fullySent . ' envoi(s) complet(s) sur ' . count($phones) . '; '
-                . $delivered . ' parent(s) ont reçu au moins un canal.'
+                ? 'Les demandes de communiqué ont été acceptées par le fournisseur.'
+                : ($status === 'partial' ? 'Certaines demandes ont été acceptées par le fournisseur, d’autres ont échoué.' : 'Le fournisseur a refusé toutes les demandes de communiqué.'),
+            'details' => $accepted . ' demande(s) acceptée(s) sur ' . count($phones)
+                . '; livraison finale aux téléphones non confirmée.'
                 . ($failureReasons !== [] ? ' Détail du premier échec : ' . $failureReasons[0] : ''),
             'recipients_total' => count($phones),
-            'recipients_delivered' => $delivered,
-            'recipients_failed' => count($phones) - $delivered,
+            'recipients_accepted' => $accepted,
+            'recipients_delivered' => 0,
+            'recipients_failed' => count($phones) - $accepted,
         ];
     }
 
@@ -337,7 +361,7 @@ class PaymentParentNotifier
         $successes = array_filter($attempts, static fn ($attempt) => !empty($attempt['sent']));
         $attemptDetails = array_map(static function (array $attempt): string {
             $channel = ($attempt['channel'] ?? '') === 'sms' ? 'SMS' : 'WhatsApp';
-            $result = !empty($attempt['sent']) ? 'envoyé' : 'échec';
+            $result = !empty($attempt['sent']) ? 'accepté par le fournisseur (livraison non confirmée)' : 'échec';
             $details = trim((string) ($attempt['details'] ?? ''));
             return $channel . ' : ' . $result . ($details !== '' ? ' — ' . $details : '');
         }, $attempts);
@@ -353,10 +377,10 @@ class PaymentParentNotifier
         if (count($successes) === count($attempts)) {
             return [
                 'sent' => true,
-                'delivered' => true,
+                'delivered' => false,
                 'status' => 'success',
                 'reason' => '',
-                'message' => 'Notification envoyée par ' . implode(' et ', $channelLabels) . '.',
+                'message' => 'La demande de notification a été acceptée par le fournisseur (' . implode(' et ', $channelLabels) . '). Livraison au téléphone non confirmée.',
                 'details' => implode("\n", $attemptDetails),
                 'channel' => implode(',', $attemptChannels),
                 'attempts' => $attempts,
@@ -366,11 +390,11 @@ class PaymentParentNotifier
         $status = $successes ? 'partial' : 'failed';
         return [
             'sent' => false,
-            'delivered' => $successes !== [],
+            'delivered' => false,
             'status' => $status,
-            'reason' => $status === 'partial' ? 'partial_delivery' : 'all_channels_failed',
+            'reason' => $status === 'partial' ? 'partial_provider_acceptance' : 'all_channels_failed',
             'message' => $status === 'partial'
-                ? 'Notification partiellement envoyée. Un canal a échoué.'
+                ? 'La demande a été acceptée par certains canaux, mais pas tous. Livraison au téléphone non confirmée.'
                 : 'Échec de l’envoi sur tous les canaux.',
             'details' => implode("\n", $attemptDetails),
             'channel' => implode(',', $attemptChannels),
@@ -438,9 +462,9 @@ class PaymentParentNotifier
     {
         $apiKey = trim($this->infobipApiKey);
         $baseUrl = trim($this->infobipBaseUrl);
-        $from = $this->normalizePhone($schoolSender);
+        $from = $this->normalizePhone($this->infobipWhatsappFrom);
         if ($from === '') {
-            $from = $this->normalizePhone($this->infobipWhatsappFrom);
+            $from = $this->normalizePhone($schoolSender);
         }
 
         if ($apiKey === '' || $baseUrl === '') {
@@ -580,7 +604,7 @@ class PaymentParentNotifier
                 $error = $errorNo !== 0 ? curl_error($ch) : null;
                 curl_close($ch);
 
-                if ($response === false || $errorNo !== 0 || ($statusCode >= 400 && $statusCode !== 401 && $statusCode !== 402)) {
+                if ($response === false || $errorNo !== 0 || $statusCode >= 400) {
                     $providerError = is_string($response) ? $this->parseProviderResponse($response, $infobipMode, $channel) : null;
                     $details = $error ?: ($providerError['details'] ?? 'Erreur HTTP ' . $statusCode);
                     $reason = $errorNo === CURLE_OPERATION_TIMEDOUT ? 'provider_timeout' : 'provider_http_error';
@@ -595,7 +619,7 @@ class PaymentParentNotifier
                     return $parsed;
                 }
 
-                return ['sent' => true, 'channel' => $channel, 'reason' => '', 'message' => 'Message envoyé.', 'details' => 'La notification a bien été envoyée avec succès.'];
+                return ['sent' => true, 'channel' => $channel, 'reason' => '', 'message' => 'Demande acceptée par le fournisseur.', 'details' => 'Réponse positive du fournisseur; livraison au téléphone non confirmée.'];
             }
 
             $context = stream_context_create([
@@ -604,6 +628,7 @@ class PaymentParentNotifier
                     'header' => implode("\r\n", $headers),
                     'content' => $json,
                     'timeout' => 15,
+                    'ignore_errors' => true,
                 ],
             ]);
 
@@ -612,12 +637,24 @@ class PaymentParentNotifier
                 return ['sent' => false, 'channel' => $channel, 'reason' => 'stream_context_failed', 'message' => 'Échec de l’envoi de message au parent.', 'details' => 'Le contexte HTTP local n’a pas pu envoyer la requête.'];
             }
 
+            $statusLine = $http_response_header[0] ?? '';
+            if (preg_match('/\s(\d{3})(?:\s|$)/', $statusLine, $matches) && (int) $matches[1] >= 400) {
+                $providerError = $this->parseProviderResponse($response, $infobipMode, $channel);
+                return [
+                    'sent' => false,
+                    'channel' => $channel,
+                    'reason' => 'provider_http_error',
+                    'message' => 'Échec de l’envoi de message au parent.',
+                    'details' => $providerError['details'] ?? 'Erreur HTTP ' . (int) $matches[1],
+                ];
+            }
+
             $parsed = $this->parseProviderResponse($response, $infobipMode, $channel);
             if ($parsed !== null) {
                 return $parsed;
             }
 
-            return ['sent' => true, 'channel' => $channel, 'reason' => '', 'message' => 'Message envoyé.', 'details' => 'La notification a bien été envoyée avec succès.'];
+            return ['sent' => true, 'channel' => $channel, 'reason' => '', 'message' => 'Demande acceptée par le fournisseur.', 'details' => 'Réponse positive du fournisseur; livraison au téléphone non confirmée.'];
         } catch (\Throwable $e) {
             $message = $e->getMessage();
             error_log('PaymentParentNotifier::sendJsonRequest failed: ' . $message);
@@ -659,7 +696,7 @@ class PaymentParentNotifier
                     return $parsed;
                 }
 
-                return ['sent' => true, 'channel' => $channel, 'reason' => '', 'message' => 'Message envoyé.', 'details' => 'La notification a bien été envoyée avec succès.'];
+                return ['sent' => true, 'channel' => $channel, 'reason' => '', 'message' => 'Demande acceptée par le fournisseur.', 'details' => 'Réponse positive du fournisseur; livraison au téléphone non confirmée.'];
             }
 
             $context = stream_context_create([
@@ -676,7 +713,7 @@ class PaymentParentNotifier
                 return ['sent' => false, 'channel' => $channel, 'reason' => 'stream_context_failed', 'message' => 'Échec de l’envoi de message au parent.', 'details' => 'Le contexte HTTP local n’a pas pu envoyer la requête.'];
             }
 
-            return ['sent' => true, 'channel' => $channel, 'reason' => '', 'message' => 'Message envoyé.', 'details' => 'La notification a bien été envoyée avec succès.'];
+            return ['sent' => true, 'channel' => $channel, 'reason' => '', 'message' => 'Demande acceptée par le fournisseur.', 'details' => 'Réponse positive du fournisseur; livraison au téléphone non confirmée.'];
         } catch (\Throwable $e) {
             $message = $e->getMessage();
             error_log('PaymentParentNotifier::sendFormRequest failed: ' . $message);
@@ -713,7 +750,12 @@ class PaymentParentNotifier
                         return ['sent' => false, 'channel' => $channel, 'reason' => 'infobip_send_failed', 'message' => 'Échec de l’envoi de message au parent.', 'details' => trim((string) ($description ?? $groupName ?? 'La plateforme Infobip a refusé l’envoi.'))];
                     }
                     if ($groupId !== null && (int) $groupId === 1) {
-                        return ['sent' => true, 'channel' => $channel, 'reason' => '', 'message' => 'Message envoyé.', 'details' => 'La notification a bien été envoyée avec succès.'];
+                        $messageId = trim((string) ($messages[0]['messageId'] ?? ''));
+                        $details = 'Demande acceptée par Infobip; livraison au téléphone non confirmée.';
+                        if ($messageId !== '') {
+                            $details .= ' Référence fournisseur : ' . $messageId . '.';
+                        }
+                        return ['sent' => true, 'channel' => $channel, 'reason' => '', 'message' => 'Demande acceptée par le fournisseur.', 'details' => $details, 'provider_message_id' => $messageId];
                     }
                 }
             }

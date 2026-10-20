@@ -87,16 +87,7 @@ class InscriptionsController extends Controller
                 : Option::findById($optionId);
         }
 
-        $classes = [];
-        if ($ecoleId > 0) {
-            if ($selectedSection && $selectedOption) {
-                $classes = Classe::getAllBySchoolSectionAndOption($ecoleId, $selectedSection['id'], $selectedOption['id']);
-            } elseif ($selectedSection) {
-                $classes = Classe::getAllBySchoolAndSection($ecoleId, $selectedSection['id']);
-            } else {
-                $classes = Classe::getAllBySchool($ecoleId);
-            }
-        }
+        $classes = $ecoleId > 0 ? Classe::getAllBySchool($ecoleId) : [];
         $oldInput = $_SESSION['inscriptions_old'] ?? [];
         unset($_SESSION['inscriptions_old']);
 
@@ -601,6 +592,57 @@ class InscriptionsController extends Controller
                 $errors[] = 'Élève introuvable ou n’appartenant pas à votre école.';
             }
 
+            $parentUpdateData = null;
+            if ($parentId > 0) {
+                $parent = ParentModel::findByIdAndSchool($parentId, $ecoleId);
+                if (!$parent) {
+                    $errors[] = 'Le parent sélectionné n’appartient pas à votre école.';
+                } else {
+                    $parentName = trim($_POST['parent_nom_responsable'] ?? '');
+                    $parentTelephone = trim($_POST['parent_telephone'] ?? '');
+                    $parentEmail = trim($_POST['parent_email'] ?? '');
+                    if ($parentName === '') {
+                        $errors[] = 'Le nom du parent/tuteur est requis.';
+                    }
+                    if ($parentTelephone === '') {
+                        $errors[] = 'Le téléphone du parent/tuteur est requis.';
+                    } elseif (!preg_match('/^[0-9+() .-]{7,25}$/', $parentTelephone)) {
+                        $errors[] = 'Le téléphone du parent contient des caractères invalides.';
+                    }
+                    if ($parentEmail !== '' && !filter_var($parentEmail, FILTER_VALIDATE_EMAIL)) {
+                        $errors[] = 'L’adresse email du parent est invalide.';
+                    }
+                    if (strlen($parentName) > 150 || strlen($parentEmail) > 100) {
+                        $errors[] = 'Le nom ou l’email du parent dépasse la longueur autorisée.';
+                    }
+                    $contactConflict = $parentName !== ''
+                        && $parentTelephone !== ''
+                        && ParentModel::hasContactConflict(
+                            $parentId,
+                            $ecoleId,
+                            $parentTelephone,
+                            $parentEmail !== '' ? $parentEmail : null
+                        );
+                    if (
+                        $parentName !== ''
+                        && $parentTelephone !== ''
+                        && !$contactConflict
+                    ) {
+                        $parentUpdateData = [
+                            'nom_responsable' => $parentName,
+                            'telephone' => $parentTelephone,
+                            'email' => $parentEmail !== '' ? $parentEmail : null,
+                        ];
+                    } elseif (
+                        $parentName !== ''
+                        && $parentTelephone !== ''
+                        && $contactConflict
+                    ) {
+                        $errors[] = 'Ce numéro de téléphone ou cette adresse email est déjà utilisé par un autre parent.';
+                    }
+                }
+            }
+
             $selectedClass = $classeId > 0 ? Classe::findById($classeId) : null;
             if (!$selectedClass || (int) ($selectedClass['ecole_id'] ?? 0) !== $ecoleId) {
                 $errors[] = 'La classe sélectionnée est invalide ou n’appartient pas à votre école.';
@@ -684,11 +726,32 @@ class InscriptionsController extends Controller
                 }
 
                 try {
+                    $db->beginTransaction();
+                    if ($parentUpdateData !== null && !ParentModel::updateForSchool($parentId, $ecoleId, $parentUpdateData)) {
+                        throw new \RuntimeException('Impossible de mettre à jour la fiche du parent sélectionné.');
+                    }
                     Eleve::update($eleveId, $updateData);
+                    $db->commit();
                     unset($_SESSION['inscriptions_old']);
-                    $_SESSION['inscriptions_success'] = 'Les informations de l’inscription ont été mises à jour.';
+                    $_SESSION['inscriptions_success'] = $parentUpdateData !== null
+                        ? 'Les informations de l’inscription et du parent ont été mises à jour.'
+                        : 'Les informations de l’inscription ont été mises à jour.';
                     $this->redirect('/inscriptions');
                 } catch (\InvalidArgumentException $e) {
+                    if ($db->inTransaction()) {
+                        $db->rollBack();
+                    }
+                    $errors[] = $e->getMessage();
+                } catch (\PDOException $e) {
+                    if ($db->inTransaction()) {
+                        $db->rollBack();
+                    }
+                    error_log('InscriptionsController::update parent/student error: ' . $e->getMessage());
+                    $errors[] = 'La mise à jour a échoué. Vérifiez que le téléphone et l’email du parent ne sont pas déjà utilisés.';
+                } catch (\RuntimeException $e) {
+                    if ($db->inTransaction()) {
+                        $db->rollBack();
+                    }
                     $errors[] = $e->getMessage();
                 }
             }
@@ -826,8 +889,14 @@ class InscriptionsController extends Controller
                     } elseif (Eleve::approve($eleveId)) {
                         $_SESSION['inscriptions_success'] = 'Inscription validée par le personnel autorisé.';
                         try {
-                            $_SESSION['inscriptions_notification'] = (new PaymentParentNotifier())
-                                ->notifyAfterRegistration($eleveId);
+                            $notification = (new PaymentParentNotifier())->notifyAfterRegistration($eleveId);
+                            $_SESSION['inscriptions_notification'] = $notification;
+                            if (empty($notification['sent'])) {
+                                error_log(
+                                    'InscriptionsController::approve notification was not sent for student ID '
+                                    . $eleveId . ': ' . ($notification['reason'] ?? 'unknown')
+                                );
+                            }
                         } catch (\Throwable $e) {
                             error_log('InscriptionsController::approve notification failed: ' . $e->getMessage());
                             $_SESSION['inscriptions_notification'] = [

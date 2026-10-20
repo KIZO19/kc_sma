@@ -194,7 +194,7 @@ STYLE;
                         </div>
                         <div class="col-md-6 mb-3">
                           <label class="form-label">Option <span class="text-danger">*</span></label>
-                          <select id="registration-option-select" name="option_id" class="form-select" required>
+                          <select id="registration-option-select" name="option_id" class="form-select" required disabled>
                             <option value="">Sélectionnez une option</option>
                             <?php foreach ($options as $option): ?>
                               <?php $optionValue = (int) ($oldInput['option_id'] ?? ($selectedOption['id'] ?? 0)); ?>
@@ -204,7 +204,7 @@ STYLE;
                         </div>
                       </div>
                       <label class="form-label">Classe</label>
-                      <select id="registration-classe-select" name="classe_id" class="form-select" required <?= empty($classes) ? 'disabled' : '' ?>>
+                      <select id="registration-classe-select" name="classe_id" class="form-select" required disabled>
                         <option value="">Sélectionnez une classe</option>
                         <?php if (!empty($classes)): ?>
                           <?php foreach ($classes as $classe): ?>
@@ -218,11 +218,9 @@ STYLE;
                               <?php endif; ?>
                             </option>
                           <?php endforeach; ?>
-                        <?php else: ?>
-                          <option value="">Aucune classe disponible</option>
                         <?php endif; ?>
                       </select>
-                      <small class="form-text text-muted">Sélectionnez la classe où l’élève doit être inscrit.</small>
+                      <small id="registration-class-help" class="form-text text-muted">Sélectionnez d’abord une section et une option.</small>
                     </div>
                     </section>
 
@@ -382,6 +380,7 @@ STYLE;
           const sectionSelect = document.getElementById('registration-section-select');
           const optionSelect = document.getElementById('registration-option-select');
           const classSelect = document.getElementById('registration-classe-select');
+          const classHelp = document.getElementById('registration-class-help');
           if (!sectionSelect || !optionSelect || !classSelect) return;
 
           const options = Array.from(optionSelect.options).slice(1).map((item) => ({
@@ -399,6 +398,7 @@ STYLE;
           function refreshOptions() {
             const sectionId = sectionSelect.value;
             const currentValue = optionSelect.value;
+            optionSelect.disabled = !sectionId;
             optionSelect.innerHTML = '<option value="">Sélectionnez une option</option>';
             options.filter((item) => !sectionId || item.sectionId === sectionId).forEach((item) => {
               const option = document.createElement('option');
@@ -406,8 +406,11 @@ STYLE;
               option.textContent = item.label;
               optionSelect.appendChild(option);
             });
-            if (options.some((item) => item.value === currentValue && (!sectionId || item.sectionId === sectionId))) {
+            const currentOptionIsValid = options.some((item) => item.value === currentValue && item.sectionId === sectionId);
+            if (currentOptionIsValid) {
               optionSelect.value = currentValue;
+            } else {
+              optionSelect.value = '';
             }
           }
 
@@ -416,17 +419,26 @@ STYLE;
             const optionId = optionSelect.value;
             const currentValue = classSelect.value;
             classSelect.innerHTML = '<option value="">Sélectionnez une classe</option>';
-            classes.filter((item) => {
-              if (!sectionId) return true;
-              if (!optionId) return item.sectionId === sectionId;
-              return item.sectionId === sectionId && item.optionId === optionId;
-            }).forEach((item) => {
+            const matchingClasses = sectionId && optionId
+              ? classes.filter((item) => item.sectionId === sectionId && item.optionId === optionId)
+              : [];
+            matchingClasses.forEach((item) => {
               const option = document.createElement('option');
               option.value = item.value;
               option.textContent = item.label;
               classSelect.appendChild(option);
             });
-            if (classes.some((item) => item.value === currentValue)) classSelect.value = currentValue;
+            const currentClassIsValid = matchingClasses.some((item) => item.value === currentValue);
+            classSelect.value = currentClassIsValid ? currentValue : '';
+            classSelect.disabled = matchingClasses.length === 0;
+
+            if (classHelp) {
+              classHelp.textContent = !sectionId || !optionId
+                ? 'Sélectionnez d’abord une section et une option.'
+                : matchingClasses.length === 0
+                  ? 'Aucune classe n’est disponible pour cette section et cette option.'
+                  : 'Sélectionnez la classe où l’élève doit être inscrit.';
+            }
           }
 
           sectionSelect.addEventListener('change', function () { refreshOptions(); refreshClasses(); });

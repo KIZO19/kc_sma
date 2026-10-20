@@ -50,14 +50,15 @@
             </div>
             <div class="mb-3">
               <label for="section_id" class="form-label">Section</label>
-              <select name="section_id" id="section_id" class="form-select" required <?= !empty($usage['classes']) ? 'disabled' : '' ?>>
+              <select name="section_id" id="section_id" class="form-select" <?= $option['section_id'] !== null ? 'required' : '' ?> <?= (!empty($usage['classes']) || !empty($usage['frais'])) ? 'disabled' : '' ?>>
+                <option value="" <?= (int) ($oldInput['section_id'] ?? $option['section_id'] ?? 0) === 0 ? 'selected' : '' ?>>Aucune section / choisir une section</option>
                 <?php foreach ($sections as $section): ?>
                   <option value="<?= (int) $section['id'] ?>" <?= (int) ($oldInput['section_id'] ?? $option['section_id'] ?? 0) === (int) $section['id'] ? 'selected' : '' ?>>
                     <?= htmlspecialchars($section['nom_section']) ?>
                   </option>
                 <?php endforeach; ?>
               </select>
-              <?php if (!empty($usage['classes'])): ?>
+              <?php if (!empty($usage['classes']) || !empty($usage['frais'])): ?>
                 <input type="hidden" name="section_id" value="<?= (int) $option['section_id'] ?>">
               <?php endif; ?>
             </div>

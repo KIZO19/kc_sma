@@ -85,15 +85,20 @@ class Option
         return (bool) $stmt->fetchColumn();
     }
 
-    public static function nameExists(int $ecoleId, int $sectionId, string $name, ?int $excludeId = null): bool
+    public static function nameExists(int $ecoleId, ?int $sectionId, string $name, ?int $excludeId = null): bool
     {
         $db = Database::getConnection();
-        $sql = 'SELECT 1 FROM options WHERE ecole_id = :ecole_id AND section_id = :section_id AND nom_option = :nom_option';
+        $sql = 'SELECT 1 FROM options WHERE ecole_id = :ecole_id AND nom_option = :nom_option';
         $params = [
             ':ecole_id' => $ecoleId,
-            ':section_id' => $sectionId,
             ':nom_option' => $name,
         ];
+        if ($sectionId === null) {
+            $sql .= ' AND section_id IS NULL';
+        } else {
+            $sql .= ' AND section_id = :section_id';
+            $params[':section_id'] = $sectionId;
+        }
         if ($excludeId !== null) {
             $sql .= ' AND id <> :exclude_id';
             $params[':exclude_id'] = $excludeId;

@@ -44,6 +44,56 @@ class ParentModel
         return $parent ?: null;
     }
 
+    public static function hasContactConflict(int $id, int $ecoleId, string $telephone, ?string $email): bool
+    {
+        $db = Database::getConnection();
+        $sql = 'SELECT id FROM parents
+                WHERE id <> :id
+                  AND (ecole_id = :ecole_id AND telephone = :telephone)';
+        $params = [
+            ':id' => $id,
+            ':ecole_id' => $ecoleId,
+            ':telephone' => $telephone,
+        ];
+        if ($email !== null) {
+            $sql = 'SELECT id FROM parents
+                    WHERE id <> :id
+                      AND ((ecole_id = :ecole_id AND telephone = :telephone) OR email = :email)';
+            $params[':email'] = $email;
+        }
+        $stmt = $db->prepare($sql . ' LIMIT 1');
+        $stmt->execute($params);
+
+        return (bool) $stmt->fetchColumn();
+    }
+
+    public static function updateForSchool(int $id, int $ecoleId, array $data): bool
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            'UPDATE parents
+             SET nom_responsable = :nom_responsable, telephone = :telephone, email = :email
+             WHERE id = :id AND ecole_id = :ecole_id'
+        );
+
+        $updated = $stmt->execute([
+            ':nom_responsable' => $data['nom_responsable'],
+            ':telephone' => $data['telephone'],
+            ':email' => $data['email'] ?? null,
+            ':id' => $id,
+            ':ecole_id' => $ecoleId,
+        ]);
+
+        if ($updated) {
+            $parent = self::findByIdAndSchool($id, $ecoleId);
+            if ($parent) {
+                self::syncInfobipContact($parent, 'update');
+            }
+        }
+
+        return $updated;
+    }
+
     public static function getChildren(int $parentId): array
     {
         $db = Database::getConnection();
@@ -128,6 +178,8 @@ class ParentModel
             } catch (\Throwable $e) {
                 error_log('ParentModel::create user account error: ' . $e->getMessage());
             }
+
+            self::syncInfobipContact($created, 'create');
         }
 
         return $created;
@@ -155,5 +207,15 @@ class ParentModel
             'mot_de_passe' => $password,
             'nom_complet' => $parent['nom_responsable'] ?? $identifiant,
         ]);
+    }
+
+    private static function syncInfobipContact(array $parent, string $operation): void
+    {
+        $result = \App\Services\InfobipPeopleSync::syncParent($parent);
+        if (empty($result['synced']) && empty($result['skipped'])) {
+            $reason = trim((string) ($result['reason'] ?? 'Unknown Infobip synchronization error.'));
+            error_log('ParentModel::' . $operation . ' Infobip contact sync failed for parent '
+                . (int) ($parent['id'] ?? 0) . ': ' . $reason);
+        }
     }
 }

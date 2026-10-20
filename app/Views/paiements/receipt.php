@@ -36,8 +36,8 @@ unset($_SESSION['payment_notification_status']);
               default => 'alert-danger',
             };
             $notificationTitle = match ($notificationStatus['status'] ?? '') {
-              'success' => 'Notification envoyée',
-              'partial' => 'Notification partiellement envoyée',
+              'success' => 'Demande acceptée par le fournisseur',
+              'partial' => 'Demande partiellement acceptée',
               default => 'Notification non envoyée',
             };
           ?>
@@ -50,7 +50,7 @@ unset($_SESSION['payment_notification_status']);
                   <?php $channelLabel = ($attempt['channel'] ?? '') === 'sms' ? 'SMS' : 'WhatsApp'; ?>
                   <li>
                     <strong><?= htmlspecialchars($channelLabel, ENT_QUOTES, 'UTF-8') ?> :</strong>
-                    <?= !empty($attempt['sent']) ? 'envoyé' : 'échec' ?>
+                    <?= !empty($attempt['sent']) ? 'accepté par le fournisseur — livraison SIM non confirmée' : 'échec' ?>
                     <?php if (!empty($attempt['details'])): ?>
                       — <?= htmlspecialchars($attempt['details'], ENT_QUOTES, 'UTF-8') ?>
                     <?php endif; ?>

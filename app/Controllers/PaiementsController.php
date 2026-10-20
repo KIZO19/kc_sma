@@ -580,6 +580,10 @@ class PaiementsController extends Controller
             header('Location: ' . BASE_URL . '/paiements');
             exit;
         }
+        $paymentSuccess = $_SESSION['paiements_success'] ?? null;
+        $paymentReceiptId = (int) ($_SESSION['payment_receipt_id'] ?? 0);
+        $notificationStatus = $_SESSION['payment_notification_status'] ?? null;
+        unset($_SESSION['paiements_success'], $_SESSION['payment_receipt_id'], $_SESSION['payment_notification_status']);
         $eleve = null;
         $students = [];
         $feeDebtDetails = [];
@@ -728,6 +732,9 @@ class PaiementsController extends Controller
             'paymentRecorderName' => trim((string) ($user['nom_complet'] ?? '')),
             'paymentFormToken' => $paymentFormToken,
             'authorizedFeeIds' => $authorizedFeeIds,
+            'paymentSuccess' => $paymentSuccess,
+            'paymentReceiptId' => $paymentReceiptId,
+            'notificationStatus' => $notificationStatus,
         ]);
     }
 
@@ -912,7 +919,15 @@ class PaiementsController extends Controller
             error_log('PaiementsController::store notification failed: ' . $e->getMessage());
         }
 
-        header('Location: ' . BASE_URL . '/paiements/receipt?id=' . $ecritureId);
+        unset($_SESSION['paiements_old']);
+        $_SESSION['paiements_success'] = 'Paiement enregistré. Le formulaire a été actualisé pour un nouvel enregistrement.';
+        $_SESSION['payment_receipt_id'] = $ecritureId;
+        $redirectUrl = BASE_URL . '/paiements/create';
+        if ($eleveId > 0) {
+            $redirectUrl .= '?eleve_id=' . urlencode((string) $eleveId)
+                . '&frais_id=' . urlencode((string) $fraisId);
+        }
+        header('Location: ' . $redirectUrl);
         exit;
     }
 

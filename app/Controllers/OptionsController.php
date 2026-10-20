@@ -201,7 +201,11 @@ class OptionsController extends Controller
         $id = (int) ($_POST['id'] ?? 0);
         $nomOption = trim($_POST['nom_option'] ?? '');
         $sectionId = (int) ($_POST['section_id'] ?? 0);
-        $errors = $this->validateOptionData($ecoleId, $nomOption, $sectionId);
+        $option = $id > 0 && $ecoleId > 0 ? Option::findByIdForSchool($id, $ecoleId) : null;
+        $keepLegacyNullSection = $option !== null
+            && $option['section_id'] === null
+            && $sectionId <= 0;
+        $errors = $this->validateOptionData($ecoleId, $nomOption, $sectionId, $keepLegacyNullSection);
 
         if ($id <= 0) {
             $errors[] = 'Identifiant invalide.';
@@ -214,13 +218,18 @@ class OptionsController extends Controller
             return;
         }
 
-        $option = $ecoleId > 0 ? Option::findByIdForSchool($id, $ecoleId) : null;
         if (!$option || !$this->canManage($role)) {
             $_SESSION['options_errors'] = ['Cette option n’existe pas dans votre école ou vous n’êtes pas autorisé(e) à la modifier.'];
             $this->redirect('/options');
             return;
         }
-        if (Option::nameExists($ecoleId, $sectionId, $nomOption, $id)) {
+        $sectionIdForStorage = $sectionId > 0 ? $sectionId : null;
+        $nameOrSectionChanged = $nomOption !== (string) $option['nom_option']
+            || $sectionIdForStorage !== ($option['section_id'] === null ? null : (int) $option['section_id']);
+        if (
+            $nameOrSectionChanged
+            && Option::nameExists($ecoleId, $sectionIdForStorage, $nomOption, $id)
+        ) {
             $_SESSION['options_errors'] = ['Une option portant ce nom existe déjà dans cette section.'];
             $_SESSION['option_old'] = $_POST;
             $this->redirect('/options/edit?id=' . $id);
@@ -228,8 +237,11 @@ class OptionsController extends Controller
         }
 
         $usage = Option::getUsage($id);
-        if ((int) $option['section_id'] !== $sectionId && (int) $usage['classes'] > 0) {
-            $_SESSION['options_errors'] = ['La section de cette option ne peut pas être modifiée tant qu’elle est utilisée par une classe.'];
+        if (
+            (int) $option['section_id'] !== $sectionId
+            && ((int) $usage['classes'] > 0 || (int) $usage['frais'] > 0)
+        ) {
+            $_SESSION['options_errors'] = ['La section de cette option ne peut pas être modifiée tant qu’elle est utilisée par une classe ou un frais scolaire.'];
             $_SESSION['option_old'] = $_POST;
             $this->redirect('/options/edit?id=' . $id);
             return;
@@ -239,7 +251,7 @@ class OptionsController extends Controller
             if (!Option::update($id, [
                 'ecole_id' => $ecoleId,
                 'nom_option' => $nomOption,
-                'section_id' => $sectionId,
+                'section_id' => $sectionIdForStorage,
             ])) {
                 throw new \RuntimeException('Database refused option update.');
             }
@@ -304,7 +316,7 @@ class OptionsController extends Controller
         $this->redirect('/options');
     }
 
-    private function validateOptionData(int $ecoleId, string $nomOption, int $sectionId): array
+    private function validateOptionData(int $ecoleId, string $nomOption, int $sectionId, bool $allowNullSection = false): array
     {
         $errors = [];
         if ($ecoleId <= 0) {
@@ -312,10 +324,12 @@ class OptionsController extends Controller
         }
         if ($nomOption === '') {
             $errors[] = 'Le nom de l’option est requis.';
-        } elseif (strlen($nomOption) > 100) {
+        } elseif (mb_strlen($nomOption, 'UTF-8') > 100) {
             $errors[] = 'Le nom de l’option ne peut pas dépasser 100 caractères.';
         }
-        if ($sectionId <= 0 || !Section::findById($sectionId)) {
+        if ($sectionId <= 0 && !$allowNullSection) {
+            $errors[] = 'La section sélectionnée est invalide.';
+        } elseif ($sectionId > 0 && !Section::findById($sectionId)) {
             $errors[] = 'La section sélectionnée est invalide.';
         }
 

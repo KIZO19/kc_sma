@@ -283,7 +283,7 @@ class ClassesController extends Controller
         }
         if ($nomClasse === '') {
             $errors[] = 'Le nom de la classe est requis.';
-        } elseif (strlen($nomClasse) > 100) {
+        } elseif (mb_strlen($nomClasse, 'UTF-8') > 100) {
             $errors[] = 'Le nom de la classe ne peut pas dépasser 100 caractères.';
         }
         if ($sectionId <= 0 || !Section::findById($sectionId)) {
