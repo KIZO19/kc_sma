@@ -87,9 +87,9 @@ $devises = $devises ?? [];
               </div>
 
               <div class="mb-3">
-                <label class="form-label">Taux de change vers USD</label>
+                <label class="form-label">Taux de change</label>
                 <input type="number" name="taux" id="deviseRate" class="form-control" step="0.000001" min="0" required placeholder="1.000000">
-                <div class="form-text">Le taux est utilisé pour convertir vers la devise de référence USD.</div>
+                <div class="form-text">Pour le CDF, indiquez le nombre de CDF pour 1 USD (ex. 2 500) ; les montants CDF sont divisés par ce taux. Pour les autres devises, indiquez l’équivalent USD d’une unité.</div>
               </div>
 
               <div class="mb-3 form-check">
@@ -115,7 +115,7 @@ $devises = $devises ?? [];
                 <tr>
                   <th>Code</th>
                   <th>Libellé</th>
-                  <th>Taux (USD)</th>
+                  <th>Taux de change</th>
                   <th>Actif</th>
                   <th>Actions</th>
                 </tr>

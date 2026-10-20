@@ -389,6 +389,20 @@ class InscriptionsController extends Controller
                                     ':agent' => $agentId,
                                 ]);
 
+                                $debtStmt = $db->prepare(
+                                    'INSERT INTO dettes_eleves
+                                        (eleve_id, frais_id, annee_scolaire_id, montant_initial, montant_restant, devise)
+                                     VALUES (:eleve_id, :frais_id, :year_id, :initial, :remaining, :devise)'
+                                );
+                                $debtStmt->execute([
+                                    ':eleve_id' => $studentId,
+                                    ':frais_id' => (int) $f['id'],
+                                    ':year_id' => (int) $yearId,
+                                    ':initial' => $montant,
+                                    ':remaining' => $montant,
+                                    ':devise' => strtoupper(trim((string) ($f['devise'] ?? 'USD'))) ?: 'USD',
+                                ]);
+
                                 $currentBalance += $montant;
                                 $appliedFees[] = [
                                     'id' => $f['id'] ?? null,

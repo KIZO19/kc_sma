@@ -114,6 +114,10 @@ class Devise
             return round($amount, 2);
         }
 
+        if ($currency === 'CDF' && $rate >= 1) {
+            return round($amount / $rate, 2);
+        }
+
         return round($amount * $rate, 2);
     }
 

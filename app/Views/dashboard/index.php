@@ -55,6 +55,24 @@ $pageStyles = <<<'CSS'
     border-color: #2876a5;
     transform: translateY(-1px);
   }
+  .accounting-dashboard .accounting-section-filter {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    height: 100%;
+    padding: .9rem;
+    color: inherit;
+    text-decoration: none;
+    border: 1px solid rgba(20, 45, 70, .1);
+    border-radius: .75rem;
+    transition: border-color .15s ease, background-color .15s ease;
+  }
+  .accounting-dashboard .accounting-section-filter:hover,
+  .accounting-dashboard .accounting-section-filter:focus-visible {
+    border-color: #2876a5;
+    background: #f6fafc;
+  }
   .accounting-dashboard .accounting-action i {
     display: grid;
     width: 2.5rem;
@@ -78,6 +96,9 @@ $pageStyles = <<<'CSS'
   [data-theme="dark"] .accounting-dashboard .accounting-panel { border-color: rgba(255,255,255,.1); }
   [data-theme="dark"] .accounting-dashboard .accounting-panel > .card-header { border-color: rgba(255,255,255,.1); }
   [data-theme="dark"] .accounting-dashboard .accounting-action { border-color: rgba(255,255,255,.14); }
+  [data-theme="dark"] .accounting-dashboard .accounting-section-filter { border-color: rgba(255,255,255,.14); }
+  [data-theme="dark"] .accounting-dashboard .accounting-section-filter:hover,
+  [data-theme="dark"] .accounting-dashboard .accounting-section-filter:focus-visible { background: rgba(255,255,255,.05); }
   [data-theme="dark"] .accounting-dashboard .accounting-action i { color: #b8e3f4; background: rgba(49,130,170,.2); }
   [data-theme="dark"] .accounting-dashboard .table thead th { color: #cbd5e1; background: rgba(255,255,255,.04); }
   .school-admin-dashboard .school-admin-intro {
@@ -674,22 +695,67 @@ require __DIR__ . '/../partials/app_header.php';
               <?php endforeach; ?>
             </div>
 
+            <div class="card accounting-panel mb-4">
+              <div class="card-header d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2">
+                <div>
+                  <h2 class="h6 fw-bold mb-1">Filtrer les recouvrements par section</h2>
+                  <span class="small text-muted">Choisir une section pour afficher ses dettes</span>
+                </div>
+                <a href="<?= BASE_URL ?>/recouvrements" class="btn btn-sm btn-outline-secondary">Toutes les sections</a>
+              </div>
+              <div class="card-body py-2">
+                <div class="row g-0">
+                  <?php foreach ($dashboardData['accounting']['sectionStats'] ?? [] as $index => $sectionStat): ?>
+                    <?php
+                      $sectionTones = [
+                        ['icon' => 'bi-house-heart', 'color' => 'text-warning'],
+                        ['icon' => 'bi-book', 'color' => 'text-success'],
+                        ['icon' => 'bi-mortarboard', 'color' => 'text-primary'],
+                      ];
+                      $sectionTone = $sectionTones[$index % count($sectionTones)];
+                    ?>
+                    <div class="col-12 col-sm-4">
+                      <a class="accounting-section-filter" href="<?= BASE_URL ?>/recouvrements?section_id=<?= (int) ($sectionStat['id'] ?? 0) ?>" aria-label="Filtrer les recouvrements par <?= htmlspecialchars($sectionStat['nom_section'] ?? 'section', ENT_QUOTES, 'UTF-8') ?>">
+                        <span class="d-flex align-items-center gap-3">
+                          <span class="kpi-icon <?= $sectionTone['color'] ?> bg-light"><i class="bi <?= $sectionTone['icon'] ?>"></i></span>
+                          <span>
+                            <span class="small text-muted fw-semibold d-block"><?= htmlspecialchars($sectionStat['nom_section'] ?? 'Section') ?></span>
+                            <span class="h4 fw-bold mb-0 d-block"><?= number_format((int) ($sectionStat['total_eleves'] ?? 0), 0, ',', ' ') ?></span>
+                            <span class="small text-muted">élève(s) inscrit(s)</span>
+                          </span>
+                        </span>
+                        <i class="bi bi-funnel text-primary" aria-hidden="true"></i>
+                      </a>
+                    </div>
+                  <?php endforeach; ?>
+                  <?php if (empty($dashboardData['accounting']['sectionStats'])): ?>
+                    <div class="col-12 py-3 text-center small text-muted">Aucune inscription pour l’année scolaire active.</div>
+                  <?php endif; ?>
+                </div>
+              </div>
+            </div>
+
             <div class="row g-3 mb-4">
               <div class="col-xl-8">
                 <div class="card accounting-panel h-100 mb-0">
                   <div class="card-header d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2">
                     <div>
                       <h2 class="h6 fw-bold mb-1"><?= htmlspecialchars($dashboardData['chart']['title'] ?? 'Évolution des encaissements') ?></h2>
-                      <span class="small text-muted">Évolution mensuelle sur les six derniers mois</span>
+                      <span class="small text-muted">Encaissements quotidiens depuis lundi</span>
                     </div>
                     <?php if (!empty($dashboardData['chart']['datasets'])): ?>
-                      <div class="btn-group btn-group-sm" role="group" aria-label="Type de graphique">
-                        <button type="button" class="btn btn-outline-primary active" data-chart-type="line" aria-pressed="true">
-                          <i class="bi bi-graph-up me-1"></i>Courbe
-                        </button>
-                        <button type="button" class="btn btn-outline-primary" data-chart-type="bar" aria-pressed="false">
-                          <i class="bi bi-bar-chart me-1"></i>Barres
-                        </button>
+                      <div class="d-flex flex-wrap align-items-center gap-2">
+                        <label class="visually-hidden" for="paymentSectionFilter">Section du graphique</label>
+                        <select id="paymentSectionFilter" class="form-select form-select-sm" aria-label="Filtrer par section" style="width: auto;">
+                          <option value="">Toutes les sections</option>
+                          <?php foreach ($dashboardData['chart']['datasets'] as $dataset): ?>
+                            <option value="<?= htmlspecialchars($dataset['label'] ?? '', ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($dataset['label'] ?? 'Section') ?></option>
+                          <?php endforeach; ?>
+                        </select>
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Type de graphique">
+                          <button type="button" class="btn btn-outline-primary active" data-chart-type="line" aria-pressed="true" title="Courbe"><i class="bi bi-graph-up"></i></button>
+                          <button type="button" class="btn btn-outline-primary" data-chart-type="bar" aria-pressed="false" title="Barres"><i class="bi bi-bar-chart"></i></button>
+                        </div>
                       </div>
                     <?php endif; ?>
                   </div>
@@ -899,6 +965,38 @@ require __DIR__ . '/../partials/app_header.php';
                     </tbody>
                   </table>
                 </div>
+              </div>
+            </div>
+
+            <div class="card accounting-panel mb-4">
+              <div class="card-header d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2">
+                <div>
+                  <h2 class="h6 fw-bold mb-1">Dettes restantes par section</h2>
+                  <span class="small text-muted">Comparer les soldes dans une même devise</span>
+                </div>
+                <?php if (!empty($dashboardData['accounting']['debtBySectionChart']['datasets'])): ?>
+                  <div class="d-flex flex-wrap align-items-center gap-2">
+                    <label class="visually-hidden" for="debtChartCurrency">Devise du graphique</label>
+                    <select id="debtChartCurrency" class="form-select form-select-sm" aria-label="Devise du graphique" style="width: auto;">
+                      <?php foreach ($dashboardData['accounting']['debtBySectionChart']['currencies'] as $currency): ?>
+                        <option value="<?= htmlspecialchars($currency, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($currency) ?></option>
+                      <?php endforeach; ?>
+                    </select>
+                    <div class="btn-group btn-group-sm" role="group" aria-label="Type de graphique des dettes">
+                      <button type="button" class="btn btn-outline-primary active" data-debt-chart-type="bar" aria-pressed="true" title="Barres"><i class="bi bi-bar-chart"></i></button>
+                      <button type="button" class="btn btn-outline-primary" data-debt-chart-type="doughnut" aria-pressed="false" title="Anneau"><i class="bi bi-pie-chart"></i></button>
+                    </div>
+                  </div>
+                <?php endif; ?>
+              </div>
+              <div class="card-body">
+                <?php if (!empty($dashboardData['accounting']['debtBySectionChart']['datasets'])): ?>
+                  <div style="position: relative; height: 290px;">
+                    <canvas id="debtSectionChart" aria-label="Dettes restantes par section et devise" role="img"></canvas>
+                  </div>
+                <?php else: ?>
+                  <div class="text-center text-muted py-5">Aucune dette à représenter.</div>
+                <?php endif; ?>
               </div>
             </div>
           </div>

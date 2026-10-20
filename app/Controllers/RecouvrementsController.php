@@ -33,6 +33,8 @@ class RecouvrementsController extends Controller
             'feeColumns' => $feeColumns,
             'filters' => $filters,
             'classes' => $this->fetchClasses($user),
+            'sections' => $this->fetchSections($user),
+            'fees' => $this->fetchActiveFees($user),
         ]);
     }
 
@@ -100,7 +102,9 @@ class RecouvrementsController extends Controller
 
         return [
             'q' => trim((string) ($_GET['q'] ?? '')),
-            'classe' => trim((string) ($_GET['classe'] ?? '')),
+            'section_id' => ctype_digit(trim((string) ($_GET['section_id'] ?? ''))) ? (int) $_GET['section_id'] : 0,
+            'classe' => ctype_digit(trim((string) ($_GET['classe'] ?? ''))) ? (int) $_GET['classe'] : 0,
+            'frais_id' => ctype_digit(trim((string) ($_GET['frais_id'] ?? ''))) ? (int) $_GET['frais_id'] : 0,
             'devise' => strtoupper(trim((string) ($_GET['devise'] ?? ''))),
             'montant_min' => is_numeric($min) ? max(0, (float) $min) : null,
             'montant_max' => is_numeric($max) ? max(0, (float) $max) : null,
@@ -110,13 +114,62 @@ class RecouvrementsController extends Controller
     private function fetchClasses(array $user): array
     {
         $db = Database::getConnection();
-        $sql = 'SELECT DISTINCT c.id, c.nom_classe FROM classes c';
+        $sql = 'SELECT DISTINCT c.id, c.nom_classe,
+                   CASE WHEN sec.nom_section = \'Secondaire\' THEN COALESCE(o.nom_option, \'Option non définie\') ELSE NULL END AS nom_option
+            FROM classes c
+            LEFT JOIN sections sec ON sec.id = c.section_id
+            LEFT JOIN options o ON o.id = c.option_id';
         $params = [];
         if (($user['role'] ?? '') !== 'super_admin' && (int) ($user['ecole_id'] ?? 0) > 0) {
             $sql .= ' WHERE c.ecole_id = :ecole_id';
             $params[':ecole_id'] = (int) $user['ecole_id'];
         }
-        $sql .= ' ORDER BY c.nom_classe ASC';
+        $sql .= ' ORDER BY c.nom_classe ASC, o.nom_option ASC';
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+
+    private function fetchSections(array $user): array
+    {
+        $db = Database::getConnection();
+        $sql = 'SELECT DISTINCT s.id, s.nom_section
+                FROM sections s
+                INNER JOIN classes c ON c.section_id = s.id
+                INNER JOIN annees_scolaires a ON a.ecole_id = c.ecole_id AND a.est_active = 1
+                INNER JOIN inscriptions i ON i.classe_id = c.id AND i.annee_scolaire_id = a.id
+                WHERE 1 = 1';
+        $params = [];
+        if (($user['role'] ?? '') !== 'super_admin' && (int) ($user['ecole_id'] ?? 0) > 0) {
+            $sql .= ' AND c.ecole_id = :ecole_id';
+            $params[':ecole_id'] = (int) $user['ecole_id'];
+        }
+        $sql .= ' ORDER BY s.id ASC';
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+
+    private function fetchActiveFees(array $user): array
+    {
+        $db = Database::getConnection();
+        $sql = 'SELECT DISTINCT fs.id, fs.type_frais, fs.devise, fs.scope
+                FROM frais_scolaires fs
+                INNER JOIN annees_scolaires s ON s.id = fs.annee_scolaire_id AND s.est_active = 1
+                WHERE 1 = 1';
+        $params = [];
+        if (($user['role'] ?? '') !== 'super_admin' && (int) ($user['ecole_id'] ?? 0) > 0) {
+            $sql .= ' AND (fs.ecole_id = :ecole_id OR EXISTS (
+                         SELECT 1 FROM classes c WHERE c.ecole_id = :class_ecole_id AND (
+                           fs.classe_id = c.id
+                           OR (fs.scope = \'option\' AND fs.scope_id = c.option_id)
+                           OR (fs.scope = \'section\' AND fs.scope_id = c.section_id)
+                         )
+                     ))';
+            $params[':ecole_id'] = (int) $user['ecole_id'];
+            $params[':class_ecole_id'] = (int) $user['ecole_id'];
+        }
+        $sql .= ' ORDER BY fs.type_frais ASC, fs.devise ASC';
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
         return $stmt->fetchAll();
@@ -134,33 +187,126 @@ class RecouvrementsController extends Controller
                        d.devise, MAX(d.date_creation) AS date_creation,
                        e.matricule, e.nom, e.postnom, e.prenom,
                        fs.type_frais, s.annee AS annee_scolaire,
-                       COALESCE((SELECT c.nom_classe FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id WHERE i.eleve_id = e.id ORDER BY i.date_inscription DESC, i.id DESC LIMIT 1), \'Classe non définie\') AS nom_classe
+                       sec.nom_section, c.id AS classe_id, c.nom_classe,
+                       CASE WHEN sec.nom_section = \'Secondaire\' THEN COALESCE(o.nom_option, \'Option non définie\') ELSE NULL END AS nom_option
                 FROM dettes_eleves d
                 INNER JOIN eleves e ON e.id = d.eleve_id
                 INNER JOIN frais_scolaires fs ON fs.id = d.frais_id
-                LEFT JOIN annees_scolaires s ON s.id = d.annee_scolaire_id
+                  INNER JOIN annees_scolaires s ON s.id = d.annee_scolaire_id AND s.est_active = 1
+                  INNER JOIN inscriptions i ON i.eleve_id = e.id AND i.annee_scolaire_id = s.id
+                  INNER JOIN classes c ON c.id = i.classe_id AND c.ecole_id = e.ecole_id
+                  LEFT JOIN sections sec ON sec.id = c.section_id
+                  LEFT JOIN options o ON o.id = c.option_id
                 WHERE 1 = 1';
         $params = [];
+            $sql .= ' AND ' . $this->getApplicableFeeScopeSql('fs', 'c');
 
         if (($user['role'] ?? '') !== 'super_admin' && (int) ($user['ecole_id'] ?? 0) > 0) {
             $sql .= ' AND e.ecole_id = :ecole_id';
             $params[':ecole_id'] = (int) $user['ecole_id'];
         }
+        if (!empty($filters['section_id'])) {
+            $sql .= ' AND c.section_id = :section_id';
+            $params[':section_id'] = $filters['section_id'];
+        }
+        $sql .= ' AND i.id = (SELECT latest.id FROM inscriptions latest
+                              WHERE latest.eleve_id = e.id AND latest.annee_scolaire_id = s.id
+                              ORDER BY latest.date_inscription DESC, latest.id DESC LIMIT 1)';
         if (!empty($filters['q'])) {
             $sql .= ' AND CONCAT_WS(\' \', e.nom, e.postnom, e.prenom, e.matricule, fs.type_frais) LIKE :search';
             $params[':search'] = '%' . $filters['q'] . '%';
         }
         if (!empty($filters['classe'])) {
-            $sql .= ' AND EXISTS (SELECT 1 FROM inscriptions fi INNER JOIN classes fc ON fc.id = fi.classe_id WHERE fi.eleve_id = e.id AND fc.nom_classe = :classe)';
-            $params[':classe'] = $filters['classe'];
+            $sql .= ' AND c.id = :classe_id';
+            $params[':classe_id'] = $filters['classe'];
+        }
+        if (!empty($filters['frais_id'])) {
+            $sql .= ' AND d.frais_id = :frais_id';
+            $params[':frais_id'] = $filters['frais_id'];
         }
         if (!empty($filters['devise'])) {
             $sql .= ' AND UPPER(d.devise) = :devise';
             $params[':devise'] = $filters['devise'];
         }
 
-        $sql .= ' GROUP BY d.eleve_id, d.frais_id, d.devise, e.matricule, e.nom, e.postnom, e.prenom, fs.type_frais, s.annee
-                  HAVING montant_restant > 0';
+        $sql .= ' GROUP BY d.eleve_id, d.frais_id, d.devise, e.matricule, e.nom, e.postnom, e.prenom, fs.type_frais, s.annee, c.id, c.nom_classe, sec.nom_section, o.nom_option';
+        $having = [];
+        if ($filters['montant_min'] !== null && $filters['montant_min'] !== '') {
+            $having[] = 'montant_restant >= :montant_min';
+            $params[':montant_min'] = $filters['montant_min'];
+        }
+        if ($filters['montant_max'] !== null && $filters['montant_max'] !== '') {
+            $having[] = 'montant_restant <= :montant_max';
+            $params[':montant_max'] = $filters['montant_max'];
+        }
+        if ($having) {
+            $sql .= ' HAVING ' . implode(' AND ', $having);
+        }
+        $sql .= ' ORDER BY nom_classe ASC, e.nom ASC, e.postnom ASC, e.prenom ASC, montant_restant DESC';
+
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        return array_merge($stmt->fetchAll(), $this->fetchApplicableFeesWithoutDebtRows($user, $filters));
+    }
+
+    private function fetchApplicableFeesWithoutDebtRows(array $user, array $filters): array
+    {
+        $db = Database::getConnection();
+        $sql = 'SELECT * FROM (
+                    SELECT i.eleve_id, fs.id AS frais_id, fs.montant_total AS montant_initial,
+                           GREATEST(0, fs.montant_total - GREATEST(
+                             COALESCE((SELECT SUM(ece.montant) FROM ecritures_comptables_eleves ece
+                                       INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
+                                       WHERE ce.eleve_id = i.eleve_id AND ece.frais_id = fs.id
+                                         AND ece.type_mouvement = \'CREDIT\'), 0),
+                             COALESCE((SELECT SUM(pe.montant_paye) FROM paiements_eleves pe
+                                       WHERE pe.eleve_id = i.eleve_id AND pe.frais_id = fs.id), 0)
+                           )) AS montant_restant,
+                           COALESCE(fs.devise, \'USD\') AS devise, i.date_inscription AS date_creation,
+                           e.matricule, e.nom, e.postnom, e.prenom, fs.type_frais,
+                           s.annee AS annee_scolaire, sec.nom_section, c.section_id AS section_id, i.classe_id AS classe_id, c.nom_classe,
+                           CASE WHEN sec.nom_section = \'Secondaire\' THEN COALESCE(o.nom_option, \'Option non définie\') ELSE NULL END AS nom_option
+                    FROM inscriptions i
+                    INNER JOIN classes c ON c.id = i.classe_id
+                    LEFT JOIN sections sec ON sec.id = c.section_id
+                    LEFT JOIN options o ON o.id = c.option_id
+                    INNER JOIN eleves e ON e.id = i.eleve_id
+                    INNER JOIN annees_scolaires s ON s.id = i.annee_scolaire_id AND s.est_active = 1
+                    INNER JOIN frais_scolaires fs ON fs.annee_scolaire_id = s.id AND ' . $this->getApplicableFeeScopeSql('fs', 'c') . '
+                    WHERE i.id = (SELECT latest.id FROM inscriptions latest
+                                  WHERE latest.eleve_id = e.id AND latest.annee_scolaire_id = s.id
+                                  ORDER BY latest.date_inscription DESC, latest.id DESC LIMIT 1)
+                      AND c.ecole_id = e.ecole_id
+                      AND NOT EXISTS (SELECT 1 FROM dettes_eleves d
+                                      WHERE d.eleve_id = i.eleve_id AND d.frais_id = fs.id
+                                        AND d.annee_scolaire_id = s.id)';
+        $params = [];
+        if (($user['role'] ?? '') !== 'super_admin' && (int) ($user['ecole_id'] ?? 0) > 0) {
+            $sql .= ' AND e.ecole_id = :ecole_id';
+            $params[':ecole_id'] = (int) $user['ecole_id'];
+        }
+        if (!empty($filters['section_id'])) {
+            $sql .= ' AND c.section_id = :section_id';
+            $params[':section_id'] = $filters['section_id'];
+        }
+        $sql .= ') applicable_debts WHERE 1 = 1';
+
+        if (!empty($filters['q'])) {
+            $sql .= ' AND CONCAT_WS(\' \', nom, postnom, prenom, matricule, type_frais) LIKE :search';
+            $params[':search'] = '%' . $filters['q'] . '%';
+        }
+        if (!empty($filters['classe'])) {
+            $sql .= ' AND classe_id = :classe_id';
+            $params[':classe_id'] = $filters['classe'];
+        }
+        if (!empty($filters['frais_id'])) {
+            $sql .= ' AND frais_id = :frais_id';
+            $params[':frais_id'] = $filters['frais_id'];
+        }
+        if (!empty($filters['devise'])) {
+            $sql .= ' AND UPPER(devise) = :devise';
+            $params[':devise'] = $filters['devise'];
+        }
         if ($filters['montant_min'] !== null && $filters['montant_min'] !== '') {
             $sql .= ' AND montant_restant >= :montant_min';
             $params[':montant_min'] = $filters['montant_min'];
@@ -169,11 +315,22 @@ class RecouvrementsController extends Controller
             $sql .= ' AND montant_restant <= :montant_max';
             $params[':montant_max'] = $filters['montant_max'];
         }
-        $sql .= ' ORDER BY nom_classe ASC, e.nom ASC, e.postnom ASC, e.prenom ASC, montant_restant DESC';
+        $sql .= ' ORDER BY nom_classe ASC, nom ASC, postnom ASC, prenom ASC, montant_restant DESC';
 
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
         return $stmt->fetchAll();
+    }
+
+    private function getApplicableFeeScopeSql(string $feeAlias, string $classAlias): string
+    {
+        return '(' . $feeAlias . '.ecole_id = ' . $classAlias . '.ecole_id AND ('
+            . 'COALESCE(' . $feeAlias . '.scope, \'class\') = \'school\' OR '
+            . '(COALESCE(' . $feeAlias . '.scope, \'class\') = \'class\' AND ('
+            . $feeAlias . '.classe_id = ' . $classAlias . '.id OR ' . $feeAlias . '.scope_id = ' . $classAlias . '.id)) OR '
+            . '(COALESCE(' . $feeAlias . '.scope, \'class\') = \'section\' AND ' . $feeAlias . '.scope_id = ' . $classAlias . '.section_id) OR '
+            . '(COALESCE(' . $feeAlias . '.scope, \'class\') = \'option\' AND ' . $feeAlias . '.scope_id = ' . $classAlias . '.option_id)'
+            . '))';
     }
 
     private function getExportColumns(): array
@@ -196,7 +353,8 @@ class RecouvrementsController extends Controller
     private function getExportRow(array $debt, array $columns): array
     {
         $values = [
-            'classe' => $debt['nom_classe'] ?? 'Classe non définie',
+            'classe' => ($debt['nom_classe'] ?? 'Classe non définie')
+                . (!empty($debt['nom_option']) ? ' - ' . $debt['nom_option'] : ''),
             'eleve' => trim(($debt['nom'] ?? '') . ' ' . ($debt['postnom'] ?? '') . ' ' . ($debt['prenom'] ?? '')),
             'matricule' => $debt['matricule'] ?? '',
             'frais' => $debt['frais_details_liste'] ?? ($debt['frais_liste'] ?? ''),
@@ -220,7 +378,11 @@ class RecouvrementsController extends Controller
                     'nom' => $debt['nom'] ?? '',
                     'postnom' => $debt['postnom'] ?? '',
                     'prenom' => $debt['prenom'] ?? '',
+                    'nom_section' => $debt['nom_section'] ?? 'Section non définie',
+                    'section_id' => (int) ($debt['section_id'] ?? 0),
+                    'classe_id' => (int) ($debt['classe_id'] ?? 0),
                     'nom_classe' => $debt['nom_classe'] ?? 'Classe non définie',
+                    'nom_option' => $debt['nom_option'] ?? null,
                     'frais' => [],
                     'frais_details' => [],
                     'initial_by_currency' => [],
@@ -286,7 +448,7 @@ class RecouvrementsController extends Controller
     private function buildSummary(array $debts): array
     {
         $summary = [
-            'records' => count($debts),
+            'records' => 0,
             'students' => [],
             'initial' => [],
             'remaining' => [],
@@ -294,6 +456,7 @@ class RecouvrementsController extends Controller
 
         foreach ($debts as $debt) {
             $summary['students'][(int) $debt['eleve_id']] = true;
+            $summary['records'] += count($debt['frais_details'] ?? []);
             foreach (($debt['initial_by_currency'] ?? []) as $currency => $amount) {
                 $summary['initial'][$currency] = ($summary['initial'][$currency] ?? 0) + (float) $amount;
             }

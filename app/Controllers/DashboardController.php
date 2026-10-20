@@ -219,13 +219,84 @@ class DashboardController extends Controller
             $topDebtors = [];
         }
 
+        $debtBreakdown = $this->getDebtBreakdown($ecole);
+
         return [
             'totalOutstanding' => $totalOutstanding,
             'payments30d' => $payments30d,
             'recentPayments' => $recentPayments,
             'topDebtors' => $topDebtors,
-            'debtBreakdown' => $this->getDebtBreakdown($ecole),
+            'debtBreakdown' => $debtBreakdown,
+            'debtBySectionChart' => $this->buildDebtBySectionChart($debtBreakdown),
+            'sectionStats' => $this->getEnrolledStudentsBySection($ecole),
         ];
+    }
+
+    private function buildDebtBySectionChart(array $breakdown): array
+    {
+        $sections = [];
+        $currencies = [];
+        $totals = [];
+
+        foreach ($breakdown as $row) {
+            $section = trim((string) ($row['nom_section'] ?? 'Section non définie')) ?: 'Section non définie';
+            $currency = strtoupper(trim((string) ($row['devise'] ?? 'USD'))) ?: 'USD';
+            $sections[$section] = true;
+            $currencies[$currency] = true;
+            $totals[$currency][$section] = ($totals[$currency][$section] ?? 0.0) + (float) ($row['dette_restante'] ?? 0);
+        }
+
+        $sectionLabels = array_keys($sections);
+        $currencyCodes = array_keys($currencies);
+        $palette = ['#0d6efd', '#198754', '#d08a00', '#dc3545', '#20c997', '#fd7e14'];
+        $datasets = [];
+        foreach ($currencyCodes as $index => $currency) {
+            $datasets[] = [
+                'label' => $currency,
+                'data' => array_map(static fn (string $section): float => (float) ($totals[$currency][$section] ?? 0), $sectionLabels),
+                'backgroundColor' => $palette[$index % count($palette)],
+                'borderColor' => $palette[$index % count($palette)],
+            ];
+        }
+
+        return [
+            'labels' => $sectionLabels,
+            'currencies' => $currencyCodes,
+            'datasets' => $datasets,
+        ];
+    }
+
+    private function getEnrolledStudentsBySection(int $schoolId): array
+    {
+        if ($schoolId <= 0) {
+            return [];
+        }
+
+        try {
+            $db = Database::getConnection();
+            $stmt = $db->prepare(
+                'SELECT s.id, s.nom_section, COUNT(DISTINCT i.eleve_id) AS total_eleves
+                 FROM sections s
+                 LEFT JOIN classes c ON c.section_id = s.id AND c.ecole_id = :classes_school
+                 LEFT JOIN annees_scolaires a ON a.ecole_id = :years_school AND a.est_active = 1
+                 LEFT JOIN inscriptions i ON i.classe_id = c.id AND i.annee_scolaire_id = a.id
+                      AND i.id = (
+                          SELECT latest.id FROM inscriptions latest
+                          WHERE latest.eleve_id = i.eleve_id AND latest.annee_scolaire_id = a.id
+                          ORDER BY latest.date_inscription DESC, latest.id DESC LIMIT 1
+                      )
+                 GROUP BY s.id, s.nom_section
+                 ORDER BY s.id ASC'
+            );
+            $stmt->execute([
+                ':classes_school' => $schoolId,
+                ':years_school' => $schoolId,
+            ]);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {
+            error_log('DashboardController::getEnrolledStudentsBySection failed: ' . $e->getMessage());
+            return [];
+        }
     }
 
     private function getDebtBreakdown(int $schoolId): array
@@ -356,14 +427,17 @@ class DashboardController extends Controller
     private function getPaymentEvolutionBySection(array $user): array
     {
         $schoolId = (int) ($user['ecole_id'] ?? 0);
-        $months = [];
-        for ($i = 5; $i >= 0; $i--) {
-            $months[] = date('Y-m-01 00:00:00', strtotime('-' . $i . ' months'));
-        }
-        $monthNames = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+        $weekStart = new \DateTimeImmutable('monday this week');
+        $today = new \DateTimeImmutable('today');
+        $dayNames = ['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'];
+        $days = [];
         $labels = [];
-        foreach ($months as $monthStart) {
-            $labels[] = $monthNames[(int) date('n', strtotime($monthStart)) - 1] . ' ' . date('y', strtotime($monthStart));
+        for ($day = $weekStart; $day <= $today; $day = $day->modify('+1 day')) {
+            $days[] = [
+                'from' => $day->format('Y-m-d 00:00:00'),
+                'to' => $day->format('Y-m-d 23:59:59'),
+            ];
+            $labels[] = $dayNames[(int) $day->format('N') - 1] . ' ' . $day->format('d/m');
         }
 
         if ($schoolId > 0) {
@@ -381,7 +455,7 @@ class DashboardController extends Controller
             $sections = \App\Models\Section::getAll();
         }
         if (empty($sections)) {
-            return ['title' => 'Flux financier', 'label' => 'Paiements par section', 'labels' => $labels, 'datasets' => []];
+            return ['title' => 'Flux financier par section', 'label' => 'Paiements quotidiens', 'labels' => $labels, 'datasets' => []];
         }
 
         $palette = ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6f42c1', '#20c997', '#fd7e14'];
@@ -391,9 +465,8 @@ class DashboardController extends Controller
             $sectionId = (int) ($section['id'] ?? 0);
             $values = [];
 
-            foreach ($months as $monthStart) {
-                $monthEnd = date('Y-m-t 23:59:59', strtotime($monthStart));
-                $values[] = $this->sumPaymentsBySectionAndPeriod($schoolId, $sectionId, $monthStart, $monthEnd);
+            foreach ($days as $period) {
+                $values[] = $this->sumPaymentsBySectionAndPeriod($schoolId, $sectionId, $period['from'], $period['to']);
             }
 
             $datasets[] = [
@@ -408,7 +481,7 @@ class DashboardController extends Controller
 
         return [
             'title' => 'Flux financier par section',
-            'label' => 'Paiements',
+            'label' => 'Paiements quotidiens',
             'labels' => $labels,
             'datasets' => $datasets,
         ];
