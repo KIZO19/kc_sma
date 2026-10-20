@@ -741,24 +741,50 @@ require __DIR__ . '/../partials/app_header.php';
                   <div class="card-header d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2">
                     <div>
                       <h2 class="h6 fw-bold mb-1"><?= htmlspecialchars($dashboardData['chart']['title'] ?? 'Évolution des encaissements') ?></h2>
-                      <span class="small text-muted">Encaissements quotidiens depuis lundi</span>
+                      <span class="small text-muted">Encaissements du <?= date('d/m/Y', strtotime($dashboardData['chart']['from'] ?? 'today')) ?> au <?= date('d/m/Y', strtotime($dashboardData['chart']['to'] ?? 'today')) ?></span>
                     </div>
-                    <?php if (!empty($dashboardData['chart']['datasets'])): ?>
-                      <div class="d-flex flex-wrap align-items-center gap-2">
-                        <label class="visually-hidden" for="paymentSectionFilter">Section du graphique</label>
-                        <select id="paymentSectionFilter" class="form-select form-select-sm" aria-label="Filtrer par section" style="width: auto;">
-                          <option value="">Toutes les sections</option>
-                          <?php foreach ($dashboardData['chart']['datasets'] as $dataset): ?>
-                            <option value="<?= htmlspecialchars($dataset['label'] ?? '', ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($dataset['label'] ?? 'Section') ?></option>
-                          <?php endforeach; ?>
-                        </select>
-                        <div class="btn-group btn-group-sm" role="group" aria-label="Type de graphique">
-                          <button type="button" class="btn btn-outline-primary active" data-chart-type="line" aria-pressed="true" title="Courbe"><i class="bi bi-graph-up"></i></button>
-                          <button type="button" class="btn btn-outline-primary" data-chart-type="bar" aria-pressed="false" title="Barres"><i class="bi bi-bar-chart"></i></button>
+                    <div class="d-flex flex-column flex-xl-row flex-wrap align-items-xl-center gap-2">
+                      <form method="get" action="<?= BASE_URL ?>/dashboard" class="d-flex flex-wrap align-items-end gap-2">
+                        <div>
+                          <label for="paymentDateFrom" class="form-label small mb-1">Du</label>
+                          <input id="paymentDateFrom" class="form-control form-control-sm" type="date" name="payment_from" value="<?= htmlspecialchars($dashboardData['chart']['from'] ?? '') ?>" required>
                         </div>
-                      </div>
-                    <?php endif; ?>
+                        <div>
+                          <label for="paymentDateTo" class="form-label small mb-1">Au</label>
+                          <input id="paymentDateTo" class="form-control form-control-sm" type="date" name="payment_to" value="<?= htmlspecialchars($dashboardData['chart']['to'] ?? '') ?>" required>
+                        </div>
+                        <?php if (!empty($dashboardData['chart']['currencies'])): ?>
+                          <div>
+                            <label for="paymentCurrency" class="form-label small mb-1">Devise</label>
+                            <select id="paymentCurrency" name="payment_currency" class="form-select form-select-sm">
+                              <?php foreach ($dashboardData['chart']['currencies'] as $currency): ?>
+                                <option value="<?= htmlspecialchars($currency, ENT_QUOTES, 'UTF-8') ?>" <?= ($dashboardData['chart']['currency'] ?? '') === $currency ? 'selected' : '' ?>><?= htmlspecialchars($currency) ?></option>
+                              <?php endforeach; ?>
+                            </select>
+                          </div>
+                        <?php endif; ?>
+                        <button class="btn btn-sm btn-primary" type="submit" title="Afficher la période"><i class="bi bi-filter me-1"></i>Afficher</button>
+                      </form>
+                      <?php if (!empty($dashboardData['chart']['datasets'])): ?>
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                          <label class="visually-hidden" for="paymentSectionFilter">Section du graphique</label>
+                          <select id="paymentSectionFilter" class="form-select form-select-sm" aria-label="Filtrer par section" style="width: auto;">
+                            <option value="">Toutes les sections</option>
+                            <?php foreach ($dashboardData['chart']['datasets'] as $dataset): ?>
+                              <option value="<?= htmlspecialchars($dataset['label'] ?? '', ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($dataset['label'] ?? 'Section') ?></option>
+                            <?php endforeach; ?>
+                          </select>
+                          <div class="btn-group btn-group-sm" role="group" aria-label="Type de graphique">
+                            <button type="button" class="btn btn-outline-primary active" data-chart-type="line" aria-pressed="true" title="Courbe"><i class="bi bi-graph-up"></i></button>
+                            <button type="button" class="btn btn-outline-primary" data-chart-type="bar" aria-pressed="false" title="Barres"><i class="bi bi-bar-chart"></i></button>
+                          </div>
+                        </div>
+                      <?php endif; ?>
+                    </div>
                   </div>
+                  <?php if (!empty($dashboardData['chart']['rangeError'])): ?>
+                    <div class="px-3 pt-2"><div class="alert alert-warning py-2 mb-0 small"><?= htmlspecialchars($dashboardData['chart']['rangeError']) ?></div></div>
+                  <?php endif; ?>
                   <div class="card-body">
                     <?php if (!empty($dashboardData['chart']['datasets'])): ?>
                       <canvas id="dashboardChart" height="115" aria-label="Évolution des paiements par section" role="img"></canvas>
@@ -890,7 +916,7 @@ require __DIR__ . '/../partials/app_header.php';
                         <?php foreach ($dashboardData['accounting']['recentPayments'] ?? [] as $p): ?>
                           <tr>
                             <td class="ps-3 fw-semibold"><?= htmlspecialchars($p['reference_recu'] ?? '—') ?></td>
-                            <td><?= htmlspecialchars(trim(($p['prenom'] ?? '') . ' ' . ($p['nom'] ?? '') . ' ' . ($p['postnom'] ?? ''))) ?></td>
+                            <td><?= htmlspecialchars(\App\Core\PersonName::format($p)) ?></td>
                             <td><?= htmlspecialchars($p['nom_compte'] ?? '—') ?></td>
                             <td><?= htmlspecialchars(formatDate($p['date_operation'] ?? null)) ?></td>
                             <td class="text-end pe-3 fw-semibold"><?= number_format((float) ($p['montant'] ?? 0), 2, ',', ' ') ?></td>
@@ -918,7 +944,7 @@ require __DIR__ . '/../partials/app_header.php';
                         <tbody>
                         <?php foreach ($dashboardData['accounting']['topDebtors'] ?? [] as $d): ?>
                           <tr>
-                            <td class="ps-3"><?= htmlspecialchars(trim(($d['prenom'] ?? '') . ' ' . ($d['nom'] ?? '') . ' ' . ($d['postnom'] ?? ''))) ?></td>
+                            <td class="ps-3"><?= htmlspecialchars(\App\Core\PersonName::format($d)) ?></td>
                             <td class="text-end pe-3 fw-semibold text-danger"><?= number_format((float) ($d['debt'] ?? 0), 2, ',', ' ') ?></td>
                           </tr>
                         <?php endforeach; ?>
@@ -1009,7 +1035,7 @@ require __DIR__ . '/../partials/app_header.php';
   document.addEventListener('DOMContentLoaded', function () {
     const chartCtx = document.getElementById('dashboardChart');
     if (chartCtx) {
-      const chartData = <?= json_encode($dashboardData['chart'] ?? [], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+      const chartData = __DASHBOARD_CHART_DATA__;
       const datasets = chartData.datasets && chartData.datasets.length
         ? chartData.datasets
         : [{
@@ -1048,6 +1074,16 @@ require __DIR__ . '/../partials/app_header.php';
         }
       });
 
+      const paymentSectionFilter = document.getElementById('paymentSectionFilter');
+      if (paymentSectionFilter) {
+        paymentSectionFilter.addEventListener('change', function () {
+          chart.data.datasets.forEach(function (dataset, index) {
+            chart.setDatasetVisibility(index, !this.value || dataset.label === this.value);
+          }, this);
+          chart.update();
+        });
+      }
+
       document.querySelectorAll('[data-chart-type]').forEach(function (button) {
         button.addEventListener('click', function () {
           chart.config.type = button.dataset.chartType;
@@ -1060,6 +1096,88 @@ require __DIR__ . '/../partials/app_header.php';
           });
         });
       });
+    }
+
+    const debtChartCanvas = document.getElementById('debtSectionChart');
+    const debtCurrencyFilter = document.getElementById('debtChartCurrency');
+    if (debtChartCanvas && debtCurrencyFilter) {
+      const debtChartData = __DASHBOARD_DEBT_CHART_DATA__;
+      const sectionPalette = ['#0d6efd', '#198754', '#d08a00', '#dc3545', '#20c997', '#fd7e14', '#6f42c1'];
+      const currencyPalette = ['#1769aa', '#138a57', '#b56b00', '#ba3342', '#178e82', '#c85b12'];
+      let debtChartType = 'bar';
+      const selectedCurrency = debtCurrencyFilter.value;
+      const debtDatasets = (debtChartData.datasets || []).map(function (dataset, index) {
+        return {
+          ...dataset,
+          hidden: dataset.label !== selectedCurrency,
+          backgroundColor: sectionPalette.slice(0, (debtChartData.labels || []).length),
+          borderColor: '#ffffff',
+          borderWidth: 1
+        };
+      });
+      const debtChart = new Chart(debtChartCanvas, {
+        type: debtChartType,
+        data: {
+          labels: debtChartData.labels || [],
+          datasets: debtDatasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          indexAxis: 'y',
+          plugins: {
+            legend: { display: false, position: 'bottom' },
+            tooltip: {
+              callbacks: {
+                label: function (context) {
+                  const amount = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(context.raw || 0);
+                  return `${amount} ${context.dataset.label}`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              beginAtZero: true,
+              ticks: {
+                callback: function (value) {
+                  return new Intl.NumberFormat('fr-FR', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
+                }
+              }
+            },
+            y: { grid: { display: false } }
+          }
+        }
+      });
+
+      const updateDebtChart = function () {
+        debtChart.data.datasets.forEach(function (dataset, index) {
+          const currencyIndex = debtChartData.currencies.indexOf(dataset.label);
+          debtChart.setDatasetVisibility(index, dataset.label === debtCurrencyFilter.value);
+          dataset.backgroundColor = debtChartType === 'doughnut'
+            ? sectionPalette.slice(0, debtChartData.labels.length)
+            : currencyPalette[currencyIndex % currencyPalette.length];
+          dataset.borderColor = debtChartType === 'doughnut' ? '#ffffff' : dataset.backgroundColor;
+        });
+        debtChart.config.type = debtChartType;
+        debtChart.options.indexAxis = debtChartType === 'bar' ? 'y' : 'x';
+        debtChart.options.plugins.legend.display = debtChartType === 'doughnut';
+        debtChart.update();
+      };
+
+      debtCurrencyFilter.addEventListener('change', updateDebtChart);
+      document.querySelectorAll('[data-debt-chart-type]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          debtChartType = button.dataset.debtChartType;
+          document.querySelectorAll('[data-debt-chart-type]').forEach(function (typeButton) {
+            const isActive = typeButton === button;
+            typeButton.classList.toggle('active', isActive);
+            typeButton.setAttribute('aria-pressed', String(isActive));
+          });
+          updateDebtChart();
+        });
+      });
+      updateDebtChart();
     }
 
     const searchToggle = document.getElementById('navbarSearchToggle');
@@ -1084,5 +1202,13 @@ require __DIR__ . '/../partials/app_header.php';
   });
 </script>
 SCRIPT;
+$pageScripts = str_replace(
+  ['__DASHBOARD_CHART_DATA__', '__DASHBOARD_DEBT_CHART_DATA__'],
+  [
+    json_encode($dashboardData['chart'] ?? [], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT),
+    json_encode($dashboardData['accounting']['debtBySectionChart'] ?? [], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT),
+  ],
+  $pageScripts
+);
 ?>
 <?php require __DIR__ . '/../partials/app_footer.php'; ?>

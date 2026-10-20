@@ -47,7 +47,8 @@ class DashboardController extends Controller
         }
 
         $modules = $this->getModulesForRole($role);
-        $dashboardData = $this->buildDashboardData($user, $role);
+        $paymentChartRange = $role === 'comptable_école' ? $this->getPaymentChartRange() : [];
+        $dashboardData = $this->buildDashboardData($user, $role, $paymentChartRange);
         $adminRoleList = $role === 'ecole_admin' ? AdministrationAutorisation::allRoles() : [];
         $adminModules = $role === 'ecole_admin' ? AdministrationAutorisation::allModules() : [];
         $adminRoleModules = $role === 'ecole_admin' ? AdministrationAutorisation::getRoleModules() : [];
@@ -69,14 +70,14 @@ class DashboardController extends Controller
         ]);
     }
 
-    private function buildDashboardData(array $user, string $role): array
+    private function buildDashboardData(array $user, string $role, array $paymentChartRange = []): array
     {
         if ($role === 'super_admin') {
             return ['schoolManagement' => $this->getSchoolManagementData()];
         }
 
         $stats = $this->getStatsForRole($role, $user);
-        $chart = $role === 'comptable_école' ? $this->getChartSeries($user) : [];
+        $chart = $role === 'comptable_école' ? $this->getChartSeries($user, $paymentChartRange) : [];
 
         $data = [
             'stats' => $stats,
@@ -419,56 +420,117 @@ class DashboardController extends Controller
         };
     }
 
-    private function getChartSeries(array $user): array
+    private function getPaymentChartRange(): array
     {
-        return $this->getPaymentEvolutionBySection($user);
+        $today = new \DateTimeImmutable('today');
+        $defaultFrom = new \DateTimeImmutable('monday this week');
+        $parseDate = static function (string $value): ?\DateTimeImmutable {
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+                return null;
+            }
+            $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+            return $date && $date->format('Y-m-d') === $value ? $date : null;
+        };
+
+        $from = $parseDate(trim((string) ($_GET['payment_from'] ?? ''))) ?? $defaultFrom;
+        $to = $parseDate(trim((string) ($_GET['payment_to'] ?? ''))) ?? $today;
+        $error = '';
+        if ($from > $to) {
+            $from = $defaultFrom;
+            $to = $today;
+            $error = 'La date de début doit précéder la date de fin.';
+        }
+
+        return [
+            'from' => $from->format('Y-m-d'),
+            'to' => $to->format('Y-m-d'),
+            'currency' => strtoupper(trim((string) ($_GET['payment_currency'] ?? ''))),
+            'error' => $error,
+        ];
     }
 
-    private function getPaymentEvolutionBySection(array $user): array
+    private function getChartSeries(array $user, array $range): array
     {
         $schoolId = (int) ($user['ecole_id'] ?? 0);
-        $weekStart = new \DateTimeImmutable('monday this week');
-        $today = new \DateTimeImmutable('today');
+        $from = new \DateTimeImmutable($range['from']);
+        $to = new \DateTimeImmutable($range['to']);
         $dayNames = ['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'];
-        $days = [];
         $labels = [];
-        for ($day = $weekStart; $day <= $today; $day = $day->modify('+1 day')) {
-            $days[] = [
-                'from' => $day->format('Y-m-d 00:00:00'),
-                'to' => $day->format('Y-m-d 23:59:59'),
-            ];
+        $dates = [];
+        for ($day = $from; $day <= $to; $day = $day->modify('+1 day')) {
+            $date = $day->format('Y-m-d');
+            $dates[] = $date;
             $labels[] = $dayNames[(int) $day->format('N') - 1] . ' ' . $day->format('d/m');
         }
 
-        if ($schoolId > 0) {
-            $sectionStmt = Database::getConnection()->prepare(
-                'SELECT DISTINCT s.id, s.nom_section
-                 FROM sections s
-                 INNER JOIN classes c ON c.section_id = s.id
-                 WHERE c.ecole_id = :ecole
-                 ORDER BY s.id ASC'
-            );
-            $sectionStmt->bindValue(':ecole', $schoolId, PDO::PARAM_INT);
-            $sectionStmt->execute();
-            $sections = $sectionStmt->fetchAll(PDO::FETCH_ASSOC);
-        } else {
-            $sections = \App\Models\Section::getAll();
+        $db = Database::getConnection();
+        $sectionStmt = $db->prepare(
+            'SELECT DISTINCT s.id, s.nom_section FROM sections s
+             INNER JOIN classes c ON c.section_id = s.id
+             WHERE c.ecole_id = :ecole ORDER BY s.id ASC'
+        );
+        $sectionStmt->execute([':ecole' => $schoolId]);
+        $sections = $sectionStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $currencyStmt = $db->prepare(
+            'SELECT DISTINCT UPPER(COALESCE(fs.devise, \'USD\')) AS code
+             FROM frais_scolaires fs
+             WHERE fs.ecole_id = :fee_school OR EXISTS (
+                 SELECT 1 FROM classes c WHERE c.ecole_id = :class_school AND (
+                     fs.classe_id = c.id
+                     OR (fs.scope = \'option\' AND fs.scope_id = c.option_id)
+                     OR (fs.scope = \'section\' AND fs.scope_id = c.section_id)
+                 )
+             ) ORDER BY code ASC'
+        );
+        $currencyStmt->execute([':fee_school' => $schoolId, ':class_school' => $schoolId]);
+        $currencies = array_map('strval', $currencyStmt->fetchAll(PDO::FETCH_COLUMN));
+        if (!$currencies) {
+            $currencies = ['USD'];
         }
-        if (empty($sections)) {
-            return ['title' => 'Flux financier par section', 'label' => 'Paiements quotidiens', 'labels' => $labels, 'datasets' => []];
-        }
+        $currency = in_array($range['currency'], $currencies, true)
+            ? $range['currency']
+            : (in_array('USD', $currencies, true) ? 'USD' : $currencies[0]);
 
-        $palette = ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6f42c1', '#20c997', '#fd7e14'];
-        $datasets = [];
-
-        foreach ($sections as $index => $section) {
-            $sectionId = (int) ($section['id'] ?? 0);
-            $values = [];
-
-            foreach ($days as $period) {
-                $values[] = $this->sumPaymentsBySectionAndPeriod($schoolId, $sectionId, $period['from'], $period['to']);
+        $paymentsByDayAndSection = [];
+        if ($schoolId > 0 && $sections) {
+            $sql = 'SELECT DATE(ece.date_operation) AS payment_day, c.section_id,
+                           COALESCE(SUM(ece.montant), 0) AS total_paye
+                    FROM ecritures_comptables_eleves ece
+                    INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
+                    INNER JOIN eleves el ON el.id = ce.eleve_id
+                    INNER JOIN frais_scolaires fs ON fs.id = ece.frais_id
+                    INNER JOIN inscriptions i ON i.id = (
+                        SELECT latest.id FROM inscriptions latest
+                        WHERE latest.eleve_id = el.id AND latest.annee_scolaire_id = ce.annee_scolaire_id
+                        ORDER BY latest.date_inscription DESC, latest.id DESC LIMIT 1
+                    )
+                    INNER JOIN classes c ON c.id = i.classe_id AND c.ecole_id = :school_id
+                    WHERE ece.type_mouvement = \'CREDIT\'
+                      AND UPPER(COALESCE(fs.devise, \'USD\')) = :currency
+                      AND ece.date_operation >= :date_from
+                      AND ece.date_operation < :date_to_exclusive
+                    GROUP BY DATE(ece.date_operation), c.section_id';
+            $paymentsStmt = $db->prepare($sql);
+            $paymentsStmt->execute([
+                ':school_id' => $schoolId,
+                ':currency' => $currency,
+                ':date_from' => $from->format('Y-m-d 00:00:00'),
+                ':date_to_exclusive' => $to->modify('+1 day')->format('Y-m-d 00:00:00'),
+            ]);
+            foreach ($paymentsStmt->fetchAll(PDO::FETCH_ASSOC) as $payment) {
+                $paymentsByDayAndSection[$payment['payment_day']][(int) $payment['section_id']] = (float) $payment['total_paye'];
             }
+        }
 
+        $palette = ['#0d6efd', '#198754', '#d08a00', '#dc3545', '#20c997', '#fd7e14', '#6f42c1'];
+        $datasets = [];
+        foreach ($sections as $index => $section) {
+            $sectionId = (int) $section['id'];
+            $values = array_map(
+                static fn (string $date): float => $paymentsByDayAndSection[$date][$sectionId] ?? 0.0,
+                $dates
+            );
             $datasets[] = [
                 'label' => $section['nom_section'] ?? 'Section',
                 'data' => $values,
@@ -484,40 +546,12 @@ class DashboardController extends Controller
             'label' => 'Paiements quotidiens',
             'labels' => $labels,
             'datasets' => $datasets,
+            'from' => $from->format('Y-m-d'),
+            'to' => $to->format('Y-m-d'),
+            'currency' => $currency,
+            'currencies' => $currencies,
+            'rangeError' => $range['error'] ?? '',
         ];
-    }
-
-    private function sumPaymentsBySectionAndPeriod(int $schoolId, int $sectionId, string $from, string $to): float
-    {
-        try {
-            $db = Database::getConnection();
-            $sql = 'SELECT COALESCE(SUM(m.montant), 0) FROM (
-                SELECT DISTINCT ece.id, ece.montant
-                FROM ecritures_comptables_eleves ece
-                INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
-                INNER JOIN eleves el ON el.id = ce.eleve_id
-                INNER JOIN inscriptions i ON i.eleve_id = el.id
-                INNER JOIN classes c ON c.id = i.classe_id
-                WHERE ece.type_mouvement = :type
-                  AND c.section_id = :section_id
-                  AND ece.date_operation BETWEEN :from AND :to
-                  AND (el.ecole_id = :ecole_eleve OR c.ecole_id = :ecole_classe)
-            ) AS m';
-
-            $stmt = $db->prepare($sql);
-            $stmt->bindValue(':type', 'CREDIT', PDO::PARAM_STR);
-            $stmt->bindValue(':section_id', $sectionId, PDO::PARAM_INT);
-            $stmt->bindValue(':from', $from, PDO::PARAM_STR);
-            $stmt->bindValue(':to', $to, PDO::PARAM_STR);
-            $stmt->bindValue(':ecole_eleve', $schoolId, PDO::PARAM_INT);
-            $stmt->bindValue(':ecole_classe', $schoolId, PDO::PARAM_INT);
-            $stmt->execute();
-
-            return (float) ($stmt->fetchColumn() ?: 0);
-        } catch (\Throwable $e) {
-            error_log('DashboardController::sumPaymentsBySectionAndPeriod failed: ' . $e->getMessage());
-            throw $e;
-        }
     }
 
     private function getOverviewSummary(string $role, array $user): array

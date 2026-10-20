@@ -186,10 +186,7 @@ class PaymentParentNotifier
         }
 
         $schoolName = trim((string) ($student['school_name'] ?? '')) ?: 'Établissement scolaire';
-        $studentName = trim(implode(' ', array_filter(
-            [$student['nom'] ?? '', $student['postnom'] ?? '', $student['prenom'] ?? ''],
-            static fn ($value): bool => trim((string) $value) !== ''
-        )));
+        $studentName = \App\Core\PersonName::format($student);
         $parentName = trim((string) ($student['parent_nom_responsable'] ?? ''));
         $greeting = $parentName !== '' ? 'Bonjour ' . $parentName . ',' : 'Bonjour,';
         $matricule = trim((string) ($student['matricule'] ?? ''));

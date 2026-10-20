@@ -32,7 +32,7 @@
                 <tbody>
                 <?php foreach ($accounts as $a): ?>
                   <tr>
-                    <td><?= htmlspecialchars(trim(($a['prenom'] ?? '') . ' ' . ($a['nom'] ?? '') . ' ' . ($a['postnom'] ?? ''))) ?></td>
+                    <td><?= htmlspecialchars(\App\Core\PersonName::format($a)) ?></td>
                     <td><?= number_format((float) ($a['solde'] ?? 0), 2) ?></td>
                     <td>
                       <a href="<?= BASE_URL ?>/eleves/view?id=<?= urlencode($a['eleve_id'] ?? '') ?>" class="btn btn-sm btn-secondary">Voir élève</a>

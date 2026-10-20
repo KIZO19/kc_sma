@@ -44,7 +44,7 @@
                   </thead>
                   <tbody>
                     <?php foreach ($children as $child): ?>
-                      <?php $childName = trim(($child['nom'] ?? '') . ' ' . ($child['postnom'] ?? '') . ' ' . ($child['prenom'] ?? '')); ?>
+                      <?php $childName = \App\Core\PersonName::format($child); ?>
                       <?php $financialSummary = $childrenFinancialSummaries[(int) ($child['id'] ?? 0)] ?? ['paid' => [], 'debt' => []]; ?>
                       <tr>
                         <td><?= htmlspecialchars($childName !== '' ? $childName : '-') ?></td>

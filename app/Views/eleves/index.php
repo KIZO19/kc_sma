@@ -197,11 +197,7 @@ require __DIR__ . '/../partials/app_header.php';
                       <?php
                       $status = (string) ($student['statut_eleve'] ?? '');
                       $gender = (string) ($student['genre'] ?? '');
-                      $fullName = trim(implode(' ', array_filter([
-                          $student['nom'] ?? '',
-                          $student['postnom'] ?? '',
-                          $student['prenom'] ?? '',
-                      ])));
+                        $fullName = \App\Core\PersonName::format($student);
                       ?>
                       <tr
                         data-status="<?= $e(strtolower($status)) ?>"

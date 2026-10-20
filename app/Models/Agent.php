@@ -77,7 +77,7 @@ class Agent
             'reference_id' => $agent['id'],
             'identifiant' => $identifiant,
             'mot_de_passe' => $password,
-            'nom_complet' => trim(($agent['nom'] ?? '') . ' ' . ($agent['postnom'] ?? '') . ' ' . ($agent['prenom'] ?? '')),
+            'nom_complet' => \App\Core\PersonName::format($agent),
             'statut' => 'Inactif',
         ]);
     }

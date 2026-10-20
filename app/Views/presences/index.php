@@ -134,7 +134,7 @@ $recordedCount = count(array_filter($students, static fn (array $student): bool 
                   </thead>
                   <tbody>
                     <?php foreach ($students as $index => $student): ?>
-                      <?php $fullName = trim(implode(' ', array_filter([$student['nom'] ?? '', $student['postnom'] ?? '', $student['prenom'] ?? '']))); ?>
+                      <?php $fullName = \App\Core\PersonName::format($student); ?>
                       <tr>
                         <td class="ps-3 text-muted"><?= $index + 1 ?></td>
                         <td class="font-monospace"><?= $e($student['matricule'] ?: '—') ?></td>

@@ -27,7 +27,7 @@
           <div class="card-body">
             <div class="mb-3">
               <label class="form-label">Élève</label>
-              <input class="form-control" value="<?= htmlspecialchars(trim(($payment['prenom'] ?? '') . ' ' . ($payment['nom'] ?? '') . ' ' . ($payment['postnom'] ?? ''))) ?>" readonly>
+              <input class="form-control" value="<?= htmlspecialchars(\App\Core\PersonName::format($payment)) ?>" readonly>
             </div>
             <div class="mb-3">
               <label class="form-label">Frais</label>

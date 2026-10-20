@@ -7,11 +7,17 @@ $fees = $fees ?? [];
 $debts = $debts ?? [];
 $summary = $summary ?? [];
 $feeColumns = $feeColumns ?? [];
+$thresholds = $thresholds ?? [];
+$currencies = array_values(array_unique(array_merge(
+  $currencies ?? [],
+  array_keys($summary['initial'] ?? []),
+  array_keys($summary['remaining'] ?? []),
+  array_keys($summary['exonerated'] ?? [])
+)));
 $formatAmount = static fn ($amount) => number_format((float) $amount, 2, ',', ' ');
-$currencies = array_unique(array_merge(array_keys($summary['initial'] ?? []), array_keys($summary['remaining'] ?? [])));
 $exportColumns = [
   'classe' => 'Classe', 'eleve' => 'Élève', 'matricule' => 'Matricule',
-  'frais' => 'Frais', 'initial' => 'Montant initial',
+  'frais' => 'Frais', 'initial' => 'Montant initial', 'exonere' => 'Montant exonéré',
   'paye' => 'Montant déjà payé', 'restant' => 'Dette restante',
 ];
 $exportQuery = static function (string $format, array $columns) use ($filters): string {
@@ -73,19 +79,19 @@ $exportQuery = static function (string $format, array $columns) use ($filters): 
 <section class="content">
   <div class="container-fluid">
     <div class="row g-3 mb-3">
-      <div class="col-12 col-md-4">
+      <div class="col-12 col-sm-6 col-xl-3">
         <div class="small-box bg-primary mb-0 h-100">
           <div class="inner"><h3><?= (int) ($summary['students'] ?? 0) ?></h3><p>Élèves concernés</p></div>
           <div class="icon"><i class="bi bi-people"></i></div>
         </div>
       </div>
-      <div class="col-12 col-md-4">
+      <div class="col-12 col-sm-6 col-xl-3">
         <div class="small-box bg-warning mb-0 h-100">
           <div class="inner"><h3><?= (int) ($summary['records'] ?? 0) ?></h3><p>Dettes enregistrées</p></div>
           <div class="icon"><i class="bi bi-file-earmark-text"></i></div>
         </div>
       </div>
-      <div class="col-12 col-md-4">
+      <div class="col-12 col-sm-6 col-xl-3">
         <div class="small-box bg-danger mb-0 h-100">
           <div class="inner">
             <?php foreach ($currencies as $currency): ?>
@@ -97,7 +103,46 @@ $exportQuery = static function (string $format, array $columns) use ($filters): 
           <div class="icon"><i class="bi bi-cash-stack"></i></div>
         </div>
       </div>
+      <div class="col-12 col-sm-6 col-xl-3">
+        <div class="small-box bg-info mb-0 h-100">
+          <div class="inner">
+            <?php foreach ($currencies as $currency): ?>
+              <h3 class="mb-0"><?= $formatAmount($summary['exonerated'][$currency] ?? 0) ?> <small><?= htmlspecialchars($currency) ?></small></h3>
+            <?php endforeach; ?>
+            <?php if (!$currencies): ?><h3>0,00</h3><?php endif; ?>
+            <p>Montant exonéré</p>
+          </div>
+          <div class="icon"><i class="bi bi-shield-check"></i></div>
+        </div>
+      </div>
     </div>
+
+    <?php if (!empty($_SESSION['recouvrements_success'])): ?>
+      <div class="alert alert-success"><?= htmlspecialchars($_SESSION['recouvrements_success']) ?></div>
+      <?php unset($_SESSION['recouvrements_success']); ?>
+    <?php endif; ?>
+    <?php if (!empty($_SESSION['recouvrements_error'])): ?>
+      <div class="alert alert-danger"><?= htmlspecialchars($_SESSION['recouvrements_error']) ?></div>
+      <?php unset($_SESSION['recouvrements_error']); ?>
+    <?php endif; ?>
+
+    <?php if (!empty($currencies) && in_array(($role ?? ''), ['ecole_admin', 'comptable_école'], true)): ?>
+      <div class="card card-outline card-secondary mb-3">
+        <div class="card-header"><h3 class="card-title mb-0">Seuil d’orientation du recouvrement</h3></div>
+        <div class="card-body">
+          <p class="small text-muted mb-3">Le seuil s’applique par élève et par devise. Le dépassement propose une orientation ; seule une autorité scolaire décide du renvoi.</p>
+          <form method="post" action="<?= BASE_URL ?>/recouvrements/saveThresholds" class="row g-3 align-items-end">
+            <?php foreach ($currencies as $currency): ?>
+              <div class="col-6 col-md-3 col-xl-2">
+                <label class="form-label small mb-1" for="threshold-<?= htmlspecialchars($currency, ENT_QUOTES, 'UTF-8') ?>">Seuil <?= htmlspecialchars($currency) ?></label>
+                <input id="threshold-<?= htmlspecialchars($currency, ENT_QUOTES, 'UTF-8') ?>" class="form-control" type="number" min="0" step="0.01" name="thresholds[<?= htmlspecialchars($currency, ENT_QUOTES, 'UTF-8') ?>]" value="<?= isset($thresholds[$currency]) ? htmlspecialchars((string) $thresholds[$currency]) : '' ?>" placeholder="Non défini">
+              </div>
+            <?php endforeach; ?>
+            <div class="col-12 col-xl-auto"><button type="submit" class="btn btn-primary"><i class="bi bi-sliders me-1"></i>Enregistrer les seuils</button></div>
+          </form>
+        </div>
+      </div>
+    <?php endif; ?>
 
     <div class="card card-outline card-primary">
       <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
@@ -159,8 +204,10 @@ $exportQuery = static function (string $format, array $columns) use ($filters): 
                   <th class="text-center grid-sortable" data-sort-key="fees">Frais <i class="bi bi-arrow-down-up small"></i></th>
                   <th class="text-end">Montant initial</th>
                   <th class="text-end">Déjà payé</th>
+                  <th class="text-end">Exonéré</th>
                   <th class="text-end">Reste à payer</th>
                   <th class="text-center grid-sortable" data-sort-key="status">Statut <i class="bi bi-arrow-down-up small"></i></th>
+                  <th class="text-center">Orientation</th>
                   <th class="text-end">Actions</th>
                 </tr>
               </thead>
@@ -169,11 +216,12 @@ $exportQuery = static function (string $format, array $columns) use ($filters): 
                   <?php
                     $initialAmounts = $debt['initial_by_currency'] ?? [];
                     $paidAmounts = $debt['paid_by_currency'] ?? [];
+                    $exoneratedAmounts = $debt['exonerated_by_currency'] ?? [];
                     $remainingAmounts = $debt['remaining_by_currency'] ?? [];
                     $hasRemaining = (bool) array_filter($remainingAmounts, static fn ($amount) => (float) $amount > 0.005);
                     $hasPaid = (bool) array_filter($paidAmounts, static fn ($amount) => (float) $amount > 0.005);
                     $status = !$hasRemaining ? 'regle' : ($hasPaid ? 'partiel' : 'impaye');
-                    $name = trim(($debt['nom'] ?? '') . ' ' . ($debt['postnom'] ?? '') . ' ' . ($debt['prenom'] ?? ''));
+                    $name = \App\Core\PersonName::format($debt);
                     $studentSection = trim((string) ($debt['nom_section'] ?? 'Section non définie')) ?: 'Section non définie';
                     $studentClass = trim((string) ($debt['nom_classe'] ?? 'Classe non définie')) ?: 'Classe non définie';
                     $classLabel = $studentClass . (!empty($debt['nom_option']) ? ' · ' . $debt['nom_option'] : '');
@@ -186,7 +234,7 @@ $exportQuery = static function (string $format, array $columns) use ($filters): 
                       return $values ? '<div class="rec-money-stack">' . implode('', $values) . '</div>' : '<span class="text-muted">—</span>';
                     };
                   ?>
-                  <tr class="recouvrements-grid-row" data-section="<?= htmlspecialchars(strtolower($studentSection), ENT_QUOTES, 'UTF-8') ?>" data-section-label="<?= htmlspecialchars($studentSection, ENT_QUOTES, 'UTF-8') ?>" data-class="<?= htmlspecialchars(strtolower($classLabel), ENT_QUOTES, 'UTF-8') ?>" data-eleve="<?= htmlspecialchars(strtolower($name), ENT_QUOTES, 'UTF-8') ?>" data-fees="<?= count($debt['frais_details'] ?? []) ?>" data-status="<?= $status ?>" data-search="<?= htmlspecialchars(strtolower($studentSection . ' ' . $classLabel . ' ' . $name . ' ' . ($debt['matricule'] ?? '') . ' ' . ($debt['frais_liste'] ?? '')), ENT_QUOTES, 'UTF-8') ?>" data-detail-id="<?= $detailsId ?>">
+                  <tr class="recouvrements-grid-row" data-section="<?= htmlspecialchars(strtolower($studentSection), ENT_QUOTES, 'UTF-8') ?>" data-section-label="<?= htmlspecialchars($studentSection, ENT_QUOTES, 'UTF-8') ?>" data-class="<?= htmlspecialchars(strtolower($classLabel), ENT_QUOTES, 'UTF-8') ?>" data-eleve="<?= htmlspecialchars(strtolower($name), ENT_QUOTES, 'UTF-8') ?>" data-fees="<?= count($debt['frais_details'] ?? []) ?>" data-status="<?= $status ?>" data-orientation="<?= htmlspecialchars(strtolower(str_replace(' ', '-', $debt['collection_status'] ?? '')), ENT_QUOTES, 'UTF-8') ?>" data-search="<?= htmlspecialchars(strtolower($studentSection . ' ' . $classLabel . ' ' . $name . ' ' . ($debt['matricule'] ?? '') . ' ' . ($debt['frais_liste'] ?? '')), ENT_QUOTES, 'UTF-8') ?>" data-detail-id="<?= $detailsId ?>">
                     <td><?= htmlspecialchars($studentSection) ?></td>
                     <td><span class="fw-semibold"><?= htmlspecialchars($classLabel) ?></span></td>
                     <td>
@@ -196,19 +244,25 @@ $exportQuery = static function (string $format, array $columns) use ($filters): 
                     <td class="text-center"><span class="badge text-bg-light border"><?= count($debt['frais_details'] ?? []) ?></span></td>
                     <td class="text-end"><?= $formatAmounts($initialAmounts) ?></td>
                     <td class="text-end text-success fw-semibold"><?= $formatAmounts($paidAmounts) ?></td>
+                    <td class="text-end text-primary"><?= $formatAmounts($exoneratedAmounts) ?></td>
                     <td class="text-end fw-semibold <?= $hasRemaining ? 'text-danger' : 'text-muted' ?>"><?= $formatAmounts($remainingAmounts) ?></td>
                     <td class="text-center">
                       <?php if ($status === 'regle'): ?><span class="badge rounded-pill text-bg-success rec-status">Réglé</span>
                       <?php elseif ($status === 'partiel'): ?><span class="badge rounded-pill text-bg-warning rec-status">Partiel</span>
                       <?php else: ?><span class="badge rounded-pill text-bg-danger rec-status">Impayé</span><?php endif; ?>
                     </td>
+                    <td class="text-center">
+                      <span class="badge rounded-pill text-bg-<?= htmlspecialchars($debt['collection_level'] ?? 'secondary') ?>" title="<?= htmlspecialchars($debt['collection_reason'] ?? '') ?>"><?= htmlspecialchars($debt['collection_status'] ?? 'Seuil à configurer') ?></span>
+                      <?php if (!empty($debt['derogation'])): ?><a class="d-block small mt-1" href="<?= BASE_URL ?>/derogations">Voir la dérogation</a><?php endif; ?>
+                    </td>
                     <td class="text-end text-nowrap">
                       <a class="btn btn-sm btn-outline-primary" href="<?= BASE_URL ?>/paiements?eleve_id=<?= (int) $debt['eleve_id'] ?>" title="Voir les paiements" aria-label="Voir les paiements de <?= htmlspecialchars($name, ENT_QUOTES, 'UTF-8') ?>"><i class="bi bi-wallet2"></i></a>
+                      <a class="btn btn-sm btn-outline-secondary" href="<?= BASE_URL ?>/derogations" title="Voir ou valider les dérogations" aria-label="Voir les dérogations de <?= htmlspecialchars($name, ENT_QUOTES, 'UTF-8') ?>"><i class="bi bi-file-earmark-check"></i></a>
                       <button class="btn btn-sm btn-outline-secondary" type="button" data-detail-toggle aria-controls="<?= $detailsId ?>" aria-expanded="false" title="Détail des frais" aria-label="Détail des frais de <?= htmlspecialchars($name, ENT_QUOTES, 'UTF-8') ?>"><i class="bi bi-list-ul"></i></button>
                     </td>
                   </tr>
                   <tr id="<?= $detailsId ?>" class="rec-fee-detail" hidden>
-                    <td colspan="9">
+                    <td colspan="11">
                       <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
                         <div><strong>Détail des frais</strong><span class="text-muted small ms-2"><?= htmlspecialchars($name) ?></span></div>
                         <details class="text-start">
@@ -225,13 +279,14 @@ $exportQuery = static function (string $format, array $columns) use ($filters): 
                       </div>
                       <div class="table-responsive">
                         <table class="table table-sm table-bordered bg-white mb-0 rec-fee-table">
-                          <thead><tr><th>Frais</th><th class="text-end">Montant prévu</th><th class="text-end">Déjà payé</th><th class="text-end">Reste dû</th></tr></thead>
+                          <thead><tr><th>Frais</th><th class="text-end">Montant prévu</th><th class="text-end">Déjà payé</th><th class="text-end">Exonéré</th><th class="text-end">Reste dû</th></tr></thead>
                           <tbody>
                             <?php foreach (($debt['frais_details'] ?? []) as $feeName => $feeAmounts): ?>
                               <tr>
                                 <td><?= htmlspecialchars($feeName) ?></td>
                                 <td class="text-end"><?= $formatAmounts($feeAmounts['initial_by_currency'] ?? []) ?></td>
                                 <td class="text-end text-success"><?= $formatAmounts($feeAmounts['paid_by_currency'] ?? []) ?></td>
+                                <td class="text-end text-primary"><?= $formatAmounts($feeAmounts['exonerated_by_currency'] ?? []) ?></td>
                                 <td class="text-end fw-semibold"><?= $formatAmounts($feeAmounts['remaining_by_currency'] ?? []) ?></td>
                               </tr>
                             <?php endforeach; ?>

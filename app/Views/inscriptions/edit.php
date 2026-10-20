@@ -63,7 +63,7 @@ foreach ($parents as $parent) {
             <div class="col-lg-8">
               <div class="card card-outline card-primary">
                 <div class="card-header">
-                  <h3 class="card-title">Modifier l’inscription de <?= htmlspecialchars($student['nom'] . ' ' . ($student['prenom'] ?? '')) ?></h3>
+                  <h3 class="card-title">Modifier l’inscription de <?= htmlspecialchars(\App\Core\PersonName::format($student)) ?></h3>
                 </div>
                 <div class="card-body">
                   <form method="post" action="<?= BASE_URL ?>/inscriptions/update" autocomplete="off" enctype="multipart/form-data">

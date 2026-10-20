@@ -9,7 +9,7 @@ $entryTotalsByCurrency = $entryTotalsByCurrency ?? [];
           <div class="row mb-2">
             <div class="col-sm-6">
               <h1>Fiche élève</h1>
-              <p class="text-muted"><?php echo htmlspecialchars(($eleve['nom'] ?? '') . ' ' . ($eleve['postnom'] ?? '') . ' ' . ($eleve['prenom'] ?? '')); ?></p>
+              <p class="text-muted"><?= htmlspecialchars(\App\Core\PersonName::format($eleve)) ?></p>
             </div>
             <div class="col-sm-6">
               <ol class="breadcrumb float-sm-end">

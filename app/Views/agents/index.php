@@ -53,7 +53,7 @@
               <?php foreach ($agents as $agent): ?>
                 <tr>
                   <td><?= (int) $agent['id'] ?></td>
-                  <td><?= htmlspecialchars(trim(($agent['nom'] ?? '') . ' ' . ($agent['postnom'] ?? '') . ' ' . ($agent['prenom'] ?? ''))) ?></td>
+                  <td><?= htmlspecialchars(\App\Core\PersonName::format($agent)) ?></td>
                   <td><?= htmlspecialchars($agent['telephone'] ?? '') ?></td>
                   <td><?= htmlspecialchars($agent['email'] ?? '') ?></td>
                   <td>

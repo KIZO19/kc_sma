@@ -80,12 +80,7 @@ unset($_SESSION['payment_notification_status']);
               </div>
 
               <?php
-                $parts = array_filter([
-                  $ecriture['nom'] ?? '',
-                  $ecriture['postnom'] ?? '',
-                  $ecriture['prenom'] ?? '',
-                ], fn($value) => $value !== null && trim((string) $value) !== '');
-                $eleveName = implode(' ', array_map('trim', $parts));
+                $eleveName = \App\Core\PersonName::format($ecriture);
                 $solde = isset($compte['solde_debiteur']) ? (float) $compte['solde_debiteur'] : 0.0;
                 $dette = $solde > 0 ? $solde : 0.0;
                 $reste = isset($reste_a_payer) ? $reste_a_payer : null;

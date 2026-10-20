@@ -22,7 +22,7 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
         <div>
           <h1 class="modal-title fs-5" id="paymentCreateModalLabel">Enregistrer un paiement</h1>
           <?php if (!empty($eleve)): ?>
-            <div class="text-muted small"><?= htmlspecialchars(trim(($eleve['nom'] ?? '') . ' ' . ($eleve['postnom'] ?? '') . ' ' . ($eleve['prenom'] ?? '')), ENT_QUOTES, 'UTF-8') ?></div>
+            <div class="text-muted small"><?= htmlspecialchars(\App\Core\PersonName::format($eleve), ENT_QUOTES, 'UTF-8') ?></div>
           <?php endif; ?>
         </div>
         <a href="<?= BASE_URL ?><?= !empty($eleve) ? '/eleves/show?id=' . (int) $eleve['id'] : '/paiements' ?>" class="btn-close" aria-label="Fermer"></a>
@@ -94,13 +94,13 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
                 <div class="mb-3">
                   <label class="form-label">Élève</label>
                   <input type="hidden" name="eleve_id" id="studentId" value="<?= $oldStudent ? (int) $oldStudent['id'] : '' ?>">
-                  <input type="search" id="studentSearch" class="form-control" autocomplete="off" placeholder="Tapez le nom ou le postnom de l’élève" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="studentSearchResults" value="<?= htmlspecialchars(trim(($oldStudent['nom'] ?? '') . ' ' . ($oldStudent['postnom'] ?? '') . ' ' . ($oldStudent['prenom'] ?? '')), ENT_QUOTES, 'UTF-8') ?>">
+                  <input type="search" id="studentSearch" class="form-control" autocomplete="off" placeholder="Tapez le nom ou le postnom de l’élève" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="studentSearchResults" value="<?= htmlspecialchars(\App\Core\PersonName::format($oldStudent), ENT_QUOTES, 'UTF-8') ?>">
                   <div id="studentSearchResults" class="list-group position-absolute shadow w-100" role="listbox" hidden style="z-index:1080; max-height:16rem; overflow-y:auto"></div>
                   <div id="studentDebtStatus" class="form-text" aria-live="polite"></div>
                   <script type="application/json" id="studentData"><?= json_encode(array_map(static function (array $student): array {
                       return [
                           'id' => (int) ($student['id'] ?? 0),
-                          'name' => trim((string) (($student['nom'] ?? '') . ' ' . ($student['postnom'] ?? '') . ' ' . ($student['prenom'] ?? ''))),
+                          'name' => \App\Core\PersonName::format($student),
                           'settled' => !empty($student['is_settled']),
                           'debtByCurrency' => $student['remaining_debt_by_currency'] ?? [],
                           'feeDebts' => $student['outstanding_fee_details'] ?? [],

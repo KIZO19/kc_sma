@@ -63,15 +63,18 @@ class Derogation
             'UPDATE derogations
              SET statut = :statut, commentaire = :commentaire,
                  validateur_id = :validateur_id, decided_at = NOW()
-             WHERE id = :id AND ecole_id = :ecole_id AND statut = :pending'
+                         WHERE id = :id AND ecole_id = :ecole_id AND statut = :pending
+                             AND demandeur_id <> :demandeur_exclu'
         );
-        return $stmt->execute([
+        $stmt->execute([
             ':statut' => $status,
             ':commentaire' => $commentaire !== '' ? $commentaire : null,
             ':validateur_id' => $validateurId,
+            ':demandeur_exclu' => $validateurId,
             ':id' => $id,
             ':ecole_id' => $ecoleId,
             ':pending' => 'En_attente',
         ]);
+        return $stmt->rowCount() > 0;
     }
 }

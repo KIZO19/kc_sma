@@ -113,7 +113,7 @@ class PaiementsController extends Controller
             $out = fopen('php://output', 'w');
             fputcsv($out, ['Réf reçu', 'Élève', 'Date', 'Montant', 'Perçu par', 'Fonction', 'Libellé']);
             foreach ($payments as $p) {
-                $name = trim(($p['prenom'] ?? '') . ' ' . ($p['nom'] ?? '') . ' ' . ($p['postnom'] ?? ''));
+                $name = \App\Core\PersonName::format($p);
                 fputcsv($out, [
                     $p['reference_recu'] ?? '',
                     $name,

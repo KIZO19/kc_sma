@@ -13,6 +13,7 @@ class DerogationsController extends Controller
 {
     private const REQUEST_ROLES = ['comptable_école', 'préfet_école'];
     private const VALIDATION_ROLES = [
+        'comptable_école',
         'promoteur_école',
         'préfet_école',
         'sec_école',

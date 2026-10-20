@@ -28,7 +28,7 @@
               <select class="form-select" id="derogationEleve" name="eleve_id" required>
                 <option value="">Sélectionner un élève</option>
                 <?php foreach (($students ?? []) as $student): ?>
-                  <option value="<?= (int) $student['id'] ?>"><?= htmlspecialchars(trim(($student['nom'] ?? '') . ' ' . ($student['postnom'] ?? '') . ' ' . ($student['prenom'] ?? ''))) ?> (<?= htmlspecialchars($student['matricule'] ?? 'sans matricule') ?>)</option>
+                  <option value="<?= (int) $student['id'] ?>"><?= htmlspecialchars(\App\Core\PersonName::format($student)) ?> (<?= htmlspecialchars($student['matricule'] ?? 'sans matricule') ?>)</option>
                 <?php endforeach; ?>
               </select>
             </div>

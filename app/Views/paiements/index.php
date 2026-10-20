@@ -33,7 +33,7 @@
         <select id="eleveFilter" class="form-select">
           <option value="">Tous les élèves</option>
           <?php foreach (($students ?? []) as $student): ?>
-            <option value="<?= (int) $student['id'] ?>" <?= (!empty($eleveId) && (int) $eleveId === (int) $student['id']) ? 'selected' : '' ?>><?= htmlspecialchars(trim(($student['prenom'] ?? '') . ' ' . ($student['nom'] ?? '') . ' ' . ($student['postnom'] ?? ''))) ?></option>
+            <option value="<?= (int) $student['id'] ?>" <?= (!empty($eleveId) && (int) $eleveId === (int) $student['id']) ? 'selected' : '' ?>><?= htmlspecialchars(\App\Core\PersonName::format($student)) ?></option>
           <?php endforeach; ?>
         </select>
       </div>
@@ -62,7 +62,7 @@
     </div>
     <?php if (!empty($eleveFilter)): ?>
       <div class="alert alert-info py-2">
-        Affichage des paiements pour l'élève <strong><?= htmlspecialchars(($eleveFilter['prenom'] ?? '') . ' ' . ($eleveFilter['nom'] ?? '') . ' ' . ($eleveFilter['postnom'] ?? '')) ?></strong>.
+        Affichage des paiements pour l'élève <strong><?= htmlspecialchars(\App\Core\PersonName::format($eleveFilter)) ?></strong>.
         <?php if (!empty($totalPaidByCurrency)): ?>
           <br><strong>Totaux déjà payés par devise :</strong>
           <?php foreach ($totalPaidByCurrency as $currency => $amount): ?>
@@ -104,7 +104,7 @@
                     <tr>
                       <td><?= $i + 1 ?></td>
                       <td data-key="reference_recu"><?= htmlspecialchars($p['reference_recu'] ?? '-') ?></td>
-                      <td data-key="eleve"><?= htmlspecialchars(trim(($p['prenom'] ?? '') . ' ' . ($p['nom'] ?? '') . ' ' . ($p['postnom'] ?? ''))) ?></td>
+                      <td data-key="eleve"><?= htmlspecialchars(\App\Core\PersonName::format($p)) ?></td>
                       <td data-key="libelle"><?= htmlspecialchars($p['libelle'] ?? '-') ?></td>
                       <td data-key="date_operation"><?= htmlspecialchars(formatDate($p['date_operation'] ?? null)) ?></td>
                       <td data-key="montant"><?= htmlspecialchars($p['montant_affiche'] ?? number_format((float) ($p['montant'] ?? 0), 2)) ?></td>
@@ -315,7 +315,7 @@
               tr.innerHTML = `
                 <td>${idx+1}</td>
                 <td data-key="reference_recu">${(p.reference_recu||'-')}</td>
-                <td data-key="eleve">${((p.prenom||'') + ' ' + (p.nom||'') + ' ' + (p.postnom||'')).trim()}</td>
+                <td data-key="eleve">${[p.nom, p.postnom, p.prenom].filter(Boolean).join(' ')}</td>
                 <td data-key="libelle">${p.libelle || '-'}</td>
                 <td data-key="date_operation">${p.date_operation || ''}</td>
                 <td data-key="montant">${p.montant_affiche || Number(p.montant||0).toFixed(2)}</td>

@@ -5,6 +5,8 @@ namespace App\Controllers;
 use App\Core\Auth;
 use App\Core\Controller;
 use App\Core\Database;
+use App\Models\Derogation;
+use App\Models\SeuilRecouvrement;
 use App\Models\User;
 
 class RecouvrementsController extends Controller
@@ -18,7 +20,16 @@ class RecouvrementsController extends Controller
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
         $filters = $this->getFilters();
+        $fees = $this->fetchActiveFees($user);
+        $currencies = array_values(array_unique(array_map(
+            static fn (array $fee): string => strtoupper(trim((string) ($fee['devise'] ?? 'USD'))) ?: 'USD',
+            $fees
+        )));
+        $thresholds = (int) ($user['ecole_id'] ?? 0) > 0
+            ? SeuilRecouvrement::getBySchool((int) $user['ecole_id'])
+            : [];
         $debts = $this->aggregateByStudent($this->fetchOutstandingDebts($user, $filters));
+        $this->applyCollectionOrientation($debts, $thresholds, $this->fetchStudentProtection($user));
         $summary = $this->buildSummary($debts);
         $feeColumns = $this->getFeeColumns($debts);
 
@@ -34,8 +45,49 @@ class RecouvrementsController extends Controller
             'filters' => $filters,
             'classes' => $this->fetchClasses($user),
             'sections' => $this->fetchSections($user),
-            'fees' => $this->fetchActiveFees($user),
+            'fees' => $fees,
+            'currencies' => $currencies,
+            'thresholds' => $thresholds,
         ]);
+    }
+
+    public function saveThresholds(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['ecole_admin', 'comptable_école']);
+        $user = Auth::refresh() ?: Auth::user();
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        if ($ecoleId <= 0 || $_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->redirect('/recouvrements');
+        }
+
+        $allowedCurrencies = array_values(array_unique(array_map(
+            static fn (array $fee): string => strtoupper(trim((string) ($fee['devise'] ?? 'USD'))) ?: 'USD',
+            $this->fetchActiveFees($user)
+        )));
+        $submitted = is_array($_POST['thresholds'] ?? null) ? $_POST['thresholds'] : [];
+        foreach ($allowedCurrencies as $currency) {
+            $value = trim((string) ($submitted[$currency] ?? ''));
+            if ($value !== '' && (!is_numeric($value) || (float) $value < 0)) {
+                $_SESSION['recouvrements_error'] = 'Chaque seuil doit être un montant positif ou nul.';
+                $this->redirect('/recouvrements');
+            }
+        }
+
+        foreach ($allowedCurrencies as $currency) {
+            $value = trim((string) ($submitted[$currency] ?? ''));
+            if ($value === '') {
+                SeuilRecouvrement::delete($ecoleId, $currency);
+                continue;
+            }
+            if (!SeuilRecouvrement::save($ecoleId, $currency, (float) $value, (int) ($user['id'] ?? 0))) {
+                $_SESSION['recouvrements_error'] = 'Impossible d’enregistrer les seuils de recouvrement.';
+                $this->redirect('/recouvrements');
+            }
+        }
+
+        $_SESSION['recouvrements_success'] = 'Les seuils de recouvrement ont été enregistrés.';
+        $this->redirect('/recouvrements');
     }
 
     public function export(): void
@@ -130,6 +182,90 @@ class RecouvrementsController extends Controller
         return $stmt->fetchAll();
     }
 
+    private function fetchStudentProtection(array $user): array
+    {
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        if ($ecoleId <= 0) {
+            return [];
+        }
+
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            "SELECT eleve_id, statut, date_fin, motif
+             FROM derogations
+             WHERE ecole_id = :ecole_id
+               AND (statut = 'En_attente' OR (statut = 'Approuvee' AND date_fin >= CURDATE()))
+             ORDER BY CASE WHEN statut = 'Approuvee' THEN 0 ELSE 1 END, created_at DESC, id DESC"
+        );
+        $stmt->execute([':ecole_id' => $ecoleId]);
+
+        $protectionByStudent = [];
+        foreach ($stmt->fetchAll() as $request) {
+            $studentId = (int) $request['eleve_id'];
+            $protectionByStudent[$studentId] ??= $request;
+        }
+        return $protectionByStudent;
+    }
+
+    private function applyCollectionOrientation(array &$debts, array $thresholds, array $protectionByStudent): void
+    {
+        foreach ($debts as &$debt) {
+            $studentId = (int) ($debt['eleve_id'] ?? 0);
+            $remainingAmounts = $debt['remaining_by_currency'] ?? [];
+            $hasDebt = (bool) array_filter($remainingAmounts, static fn ($amount): bool => (float) $amount > 0.005);
+            $protection = $protectionByStudent[$studentId] ?? null;
+            $debt['derogation'] = $protection;
+
+            if (!$hasDebt) {
+                $debt['collection_status'] = 'Dette réglée';
+                $debt['collection_level'] = 'success';
+                continue;
+            }
+            if (($protection['statut'] ?? '') === 'Approuvee') {
+                $debt['collection_status'] = 'À laisser en classe';
+                $debt['collection_reason'] = 'Dérogation active jusqu’au ' . date('d/m/Y', strtotime($protection['date_fin']));
+                $debt['collection_level'] = 'success';
+                continue;
+            }
+            if (($protection['statut'] ?? '') === 'En_attente') {
+                $debt['collection_status'] = 'Décision en attente';
+                $debt['collection_reason'] = 'Une demande de dérogation attend validation.';
+                $debt['collection_level'] = 'warning';
+                continue;
+            }
+
+            $missingThreshold = false;
+            $aboveThreshold = false;
+            foreach ($remainingAmounts as $currency => $amount) {
+                if ((float) $amount <= 0.005) {
+                    continue;
+                }
+                if (!array_key_exists(strtoupper((string) $currency), $thresholds)) {
+                    $missingThreshold = true;
+                    continue;
+                }
+                if ((float) $amount > (float) $thresholds[strtoupper((string) $currency)]) {
+                    $aboveThreshold = true;
+                }
+            }
+
+            if ($aboveThreshold) {
+                $debt['collection_status'] = 'À renvoyer selon le seuil';
+                $debt['collection_reason'] = 'Orientation proposée selon les seuils configurés ; décision à confirmer par l’autorité scolaire.';
+                $debt['collection_level'] = 'danger';
+            } elseif ($missingThreshold) {
+                $debt['collection_status'] = 'Seuil à configurer';
+                $debt['collection_reason'] = 'Configurez un seuil pour chaque devise concernée.';
+                $debt['collection_level'] = 'secondary';
+            } else {
+                $debt['collection_status'] = 'À laisser en classe';
+                $debt['collection_reason'] = 'Le solde reste sous les seuils configurés.';
+                $debt['collection_level'] = 'success';
+            }
+        }
+        unset($debt);
+    }
+
     private function fetchSections(array $user): array
     {
         $db = Database::getConnection();
@@ -180,10 +316,15 @@ class RecouvrementsController extends Controller
         $db = Database::getConnection();
         $sql = 'SELECT MAX(d.id) AS id, d.eleve_id, d.frais_id,
                        MAX(d.montant_initial) AS montant_initial,
+                                             COALESCE((SELECT SUM(x.montant) FROM exonerations x
+                                                                 WHERE x.eleve_id = d.eleve_id AND x.frais_id = d.frais_id
+                                                                     AND x.statut = \'Approuvee\' AND UPPER(x.devise) = UPPER(d.devise)), 0) AS montant_exonere,
                        GREATEST(0, MAX(d.montant_initial) - GREATEST(
                          COALESCE((SELECT SUM(ece.montant) FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id WHERE ce.eleve_id = d.eleve_id AND ece.frais_id = d.frais_id AND ece.type_mouvement = \'CREDIT\'), 0),
                          COALESCE((SELECT SUM(pe.montant_paye) FROM paiements_eleves pe WHERE pe.eleve_id = d.eleve_id AND pe.frais_id = d.frais_id), 0)
-                       )) AS montant_restant,
+                                             ) - COALESCE((SELECT SUM(x.montant) FROM exonerations x
+                                                                         WHERE x.eleve_id = d.eleve_id AND x.frais_id = d.frais_id
+                                                                             AND x.statut = \'Approuvee\' AND UPPER(x.devise) = UPPER(d.devise)), 0)) AS montant_restant,
                        d.devise, MAX(d.date_creation) AS date_creation,
                        e.matricule, e.nom, e.postnom, e.prenom,
                        fs.type_frais, s.annee AS annee_scolaire,
@@ -253,7 +394,10 @@ class RecouvrementsController extends Controller
     {
         $db = Database::getConnection();
         $sql = 'SELECT * FROM (
-                    SELECT i.eleve_id, fs.id AS frais_id, fs.montant_total AS montant_initial,
+                          SELECT i.eleve_id, fs.id AS frais_id, fs.montant_total AS montant_initial,
+                              COALESCE((SELECT SUM(x.montant) FROM exonerations x
+                                  WHERE x.eleve_id = i.eleve_id AND x.frais_id = fs.id
+                                    AND x.statut = \'Approuvee\' AND UPPER(x.devise) = UPPER(fs.devise)), 0) AS montant_exonere,
                            GREATEST(0, fs.montant_total - GREATEST(
                              COALESCE((SELECT SUM(ece.montant) FROM ecritures_comptables_eleves ece
                                        INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
@@ -261,7 +405,9 @@ class RecouvrementsController extends Controller
                                          AND ece.type_mouvement = \'CREDIT\'), 0),
                              COALESCE((SELECT SUM(pe.montant_paye) FROM paiements_eleves pe
                                        WHERE pe.eleve_id = i.eleve_id AND pe.frais_id = fs.id), 0)
-                           )) AS montant_restant,
+                                                     ) - COALESCE((SELECT SUM(x.montant) FROM exonerations x
+                                                                                 WHERE x.eleve_id = i.eleve_id AND x.frais_id = fs.id
+                                                                                     AND x.statut = \'Approuvee\' AND UPPER(x.devise) = UPPER(fs.devise)), 0)) AS montant_restant,
                            COALESCE(fs.devise, \'USD\') AS devise, i.date_inscription AS date_creation,
                            e.matricule, e.nom, e.postnom, e.prenom, fs.type_frais,
                            s.annee AS annee_scolaire, sec.nom_section, c.section_id AS section_id, i.classe_id AS classe_id, c.nom_classe,
@@ -335,7 +481,7 @@ class RecouvrementsController extends Controller
 
     private function getExportColumns(): array
     {
-        $allowed = ['classe', 'eleve', 'matricule', 'frais', 'initial', 'paye', 'restant'];
+        $allowed = ['classe', 'eleve', 'matricule', 'frais', 'initial', 'paye', 'exonere', 'restant'];
         $requested = array_map('trim', explode(',', (string) ($_GET['colonnes'] ?? '')));
         $columns = array_values(array_intersect($allowed, $requested));
         return $columns ?: $allowed;
@@ -346,7 +492,7 @@ class RecouvrementsController extends Controller
         return array_map(static fn (string $column): string => [
             'classe' => 'Classe', 'eleve' => 'Élève', 'matricule' => 'Matricule',
             'frais' => 'Frais', 'initial' => 'Montant initial',
-            'paye' => 'Montant déjà payé', 'restant' => 'Dette restante',
+            'paye' => 'Montant déjà payé', 'exonere' => 'Montant exonéré', 'restant' => 'Dette restante',
         ][$column], $columns);
     }
 
@@ -355,11 +501,12 @@ class RecouvrementsController extends Controller
         $values = [
             'classe' => ($debt['nom_classe'] ?? 'Classe non définie')
                 . (!empty($debt['nom_option']) ? ' - ' . $debt['nom_option'] : ''),
-            'eleve' => trim(($debt['nom'] ?? '') . ' ' . ($debt['postnom'] ?? '') . ' ' . ($debt['prenom'] ?? '')),
+            'eleve' => \App\Core\PersonName::format($debt),
             'matricule' => $debt['matricule'] ?? '',
             'frais' => $debt['frais_details_liste'] ?? ($debt['frais_liste'] ?? ''),
             'initial' => $this->formatAmountsByCurrency($debt['initial_by_currency'] ?? []),
             'paye' => $this->formatAmountsByCurrency($debt['paid_by_currency'] ?? []),
+            'exonere' => $this->formatAmountsByCurrency($debt['exonerated_by_currency'] ?? []),
             'restant' => $this->formatAmountsByCurrency($debt['remaining_by_currency'] ?? []),
         ];
         return array_map(static fn (string $column): string => $values[$column], $columns);
@@ -387,26 +534,32 @@ class RecouvrementsController extends Controller
                     'frais_details' => [],
                     'initial_by_currency' => [],
                     'paid_by_currency' => [],
+                    'exonerated_by_currency' => [],
                     'remaining_by_currency' => [],
                 ];
             }
 
             $initial = (float) ($debt['montant_initial'] ?? 0);
             $remaining = (float) ($debt['montant_restant'] ?? 0);
+            $exonerated = min($initial, max(0, (float) ($debt['montant_exonere'] ?? 0)));
+            $paid = max(0, $initial - $remaining - $exonerated);
             $feeName = trim((string) ($debt['type_frais'] ?? 'Frais scolaire')) ?: 'Frais scolaire';
             $grouped[$studentId]['frais'][] = $feeName;
             if (!isset($grouped[$studentId]['frais_details'][$feeName])) {
                 $grouped[$studentId]['frais_details'][$feeName] = [
                     'initial_by_currency' => [],
                     'paid_by_currency' => [],
+                    'exonerated_by_currency' => [],
                     'remaining_by_currency' => [],
                 ];
             }
             $grouped[$studentId]['frais_details'][$feeName]['initial_by_currency'][$currency] = ($grouped[$studentId]['frais_details'][$feeName]['initial_by_currency'][$currency] ?? 0) + $initial;
-            $grouped[$studentId]['frais_details'][$feeName]['paid_by_currency'][$currency] = ($grouped[$studentId]['frais_details'][$feeName]['paid_by_currency'][$currency] ?? 0) + max(0, $initial - $remaining);
+            $grouped[$studentId]['frais_details'][$feeName]['paid_by_currency'][$currency] = ($grouped[$studentId]['frais_details'][$feeName]['paid_by_currency'][$currency] ?? 0) + $paid;
+            $grouped[$studentId]['frais_details'][$feeName]['exonerated_by_currency'][$currency] = ($grouped[$studentId]['frais_details'][$feeName]['exonerated_by_currency'][$currency] ?? 0) + $exonerated;
             $grouped[$studentId]['frais_details'][$feeName]['remaining_by_currency'][$currency] = ($grouped[$studentId]['frais_details'][$feeName]['remaining_by_currency'][$currency] ?? 0) + $remaining;
             $grouped[$studentId]['initial_by_currency'][$currency] = ($grouped[$studentId]['initial_by_currency'][$currency] ?? 0) + $initial;
-            $grouped[$studentId]['paid_by_currency'][$currency] = ($grouped[$studentId]['paid_by_currency'][$currency] ?? 0) + max(0, $initial - $remaining);
+            $grouped[$studentId]['paid_by_currency'][$currency] = ($grouped[$studentId]['paid_by_currency'][$currency] ?? 0) + $paid;
+            $grouped[$studentId]['exonerated_by_currency'][$currency] = ($grouped[$studentId]['exonerated_by_currency'][$currency] ?? 0) + $exonerated;
             $grouped[$studentId]['remaining_by_currency'][$currency] = ($grouped[$studentId]['remaining_by_currency'][$currency] ?? 0) + $remaining;
         }
 
@@ -451,6 +604,7 @@ class RecouvrementsController extends Controller
             'records' => 0,
             'students' => [],
             'initial' => [],
+            'exonerated' => [],
             'remaining' => [],
         ];
 
@@ -462,6 +616,9 @@ class RecouvrementsController extends Controller
             }
             foreach (($debt['remaining_by_currency'] ?? []) as $currency => $amount) {
                 $summary['remaining'][$currency] = ($summary['remaining'][$currency] ?? 0) + (float) $amount;
+            }
+            foreach (($debt['exonerated_by_currency'] ?? []) as $currency => $amount) {
+                $summary['exonerated'][$currency] = ($summary['exonerated'][$currency] ?? 0) + (float) $amount;
             }
         }
 

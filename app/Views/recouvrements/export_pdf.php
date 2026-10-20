@@ -6,7 +6,7 @@ $formatAmount = static fn ($amount) => number_format((float) $amount, 2, ',', ' 
 $headers = [
     'classe' => 'Classe', 'eleve' => 'Élève', 'matricule' => 'Matricule',
   'frais' => 'Frais', 'initial' => 'Montant initial',
-    'paye' => 'Montant déjà payé', 'restant' => 'Dette restante',
+    'paye' => 'Montant déjà payé', 'exonere' => 'Montant exonéré', 'restant' => 'Dette restante',
 ];
 ?>
 <!doctype html>
@@ -44,11 +44,12 @@ $headers = [
             };
           $values = [
               'classe' => $debt['nom_classe'] ?? 'Classe non définie',
-              'eleve' => trim(($debt['nom'] ?? '') . ' ' . ($debt['postnom'] ?? '') . ' ' . ($debt['prenom'] ?? '')),
+              'eleve' => \App\Core\PersonName::format($debt),
               'matricule' => $debt['matricule'] ?? '',
               'frais' => $debt['frais_details_liste'] ?? ($debt['frais_liste'] ?? ''),
               'initial' => $formatAmounts($debt['initial_by_currency'] ?? []),
               'paye' => $formatAmounts($debt['paid_by_currency'] ?? []),
+              'exonere' => $formatAmounts($debt['exonerated_by_currency'] ?? []),
               'restant' => $formatAmounts($debt['remaining_by_currency'] ?? []),
           ];
           $studentClass = $values['classe'];

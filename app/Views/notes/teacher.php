@@ -183,7 +183,7 @@ foreach ($courses as $course) {
                       <thead><tr><th class="ps-3">Matricule</th><th>Élève</th><th class="pe-3">Note / <?= $e($selectedEvaluation['ponderation_max']) ?></th></tr></thead>
                       <tbody>
                         <?php foreach ($students as $student): ?>
-                          <?php $studentName = trim(implode(' ', array_filter([$student['nom'] ?? '', $student['postnom'] ?? '', $student['prenom'] ?? '']))); ?>
+                          <?php $studentName = \App\Core\PersonName::format($student); ?>
                           <tr>
                             <td class="ps-3 font-monospace"><?= $e($student['matricule'] ?: '—') ?></td>
                             <td class="fw-semibold"><?= $e($studentName) ?></td>

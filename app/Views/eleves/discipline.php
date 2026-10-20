@@ -1,7 +1,7 @@
 <?php
 require __DIR__ . '/../partials/app_header.php';
 $e = static fn ($value): string => htmlspecialchars((string) ($value ?? ''), ENT_QUOTES, 'UTF-8');
-$studentName = trim(implode(' ', array_filter([$eleve['nom'] ?? '', $eleve['postnom'] ?? '', $eleve['prenom'] ?? ''])));
+$studentName = \App\Core\PersonName::format($eleve);
 $totalPointsRemoved = array_sum(array_map(static fn (array $entry): int => (int) ($entry['retrait_points'] ?? 0), $discipline));
 ?>
 <style>
