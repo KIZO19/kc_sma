@@ -43,6 +43,7 @@ class ElevesController extends Controller
             'students' => $students,
             'classes' => $classes,
             'selectedClasseId' => $selectedClasseId,
+            'isTeacher' => $isTeacher,
         ]);
     }
 

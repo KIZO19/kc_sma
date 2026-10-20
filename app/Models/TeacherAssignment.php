@@ -34,13 +34,20 @@ class TeacherAssignment
         }
 
         $sql = 'SELECT DISTINCT e.id, e.matricule, e.nom, e.postnom, e.prenom,
-                       c.id AS classe_id, c.nom_classe
+                   e.statut_eleve, e.genre, e.date_naissance,
+                   c.id AS classe_id, c.nom_classe, s.nom_section, o.nom_option,
+                   a.annee AS annee_scolaire, i.date_inscription,
+                   p.id AS parent_id, p.nom_responsable AS parent_nom_responsable,
+                   p.telephone AS parent_telephone
                 FROM attribution_cours ac
                 INNER JOIN classes c ON c.id = ac.classe_id AND c.ecole_id = ac.ecole_id
                 INNER JOIN agents ag ON ag.id = ac.agent_id AND ag.ecole_id = ac.ecole_id
                 INNER JOIN annees_scolaires a ON a.id = ac.annee_scolaire_id AND a.ecole_id = ac.ecole_id AND a.est_active = 1
                 INNER JOIN inscriptions i ON i.classe_id = c.id AND i.annee_scolaire_id = a.id
                 INNER JOIN eleves e ON e.id = i.eleve_id
+            LEFT JOIN sections s ON s.id = c.section_id
+            LEFT JOIN options o ON o.id = c.option_id
+            LEFT JOIN parents p ON p.id = e.parent_id
                 WHERE ac.ecole_id = :ecole_id AND ac.agent_id = :agent_id';
         $params = [':ecole_id' => $schoolId, ':agent_id' => $agentId];
 
@@ -118,7 +125,7 @@ class TeacherAssignment
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public static function getEvaluations(int $assignmentId, int $agentId): array
+    public static function getEvaluations(int $assignmentId, int $agentId, int $periodId): array
     {
         $stmt = Database::getConnection()->prepare(
             'SELECT ev.id, ev.periode_id, ev.type_evaluation, ev.date_evaluation, ev.ponderation_max, p.nom_periode,
@@ -128,11 +135,11 @@ class TeacherAssignment
              INNER JOIN annees_scolaires a ON a.id = ac.annee_scolaire_id AND a.est_active = 1
              INNER JOIN periodes p ON p.id = ev.periode_id
              LEFT JOIN notes n ON n.evaluation_id = ev.id
-             WHERE ac.id = :attribution_id AND ac.agent_id = :agent_id
+             WHERE ac.id = :attribution_id AND ac.agent_id = :agent_id AND ev.periode_id = :period_id
              GROUP BY ev.id, ev.periode_id, ev.type_evaluation, ev.date_evaluation, ev.ponderation_max, p.nom_periode
              ORDER BY ev.date_evaluation DESC, ev.id DESC'
         );
-        $stmt->execute([':attribution_id' => $assignmentId, ':agent_id' => $agentId]);
+        $stmt->execute([':attribution_id' => $assignmentId, ':agent_id' => $agentId, ':period_id' => $periodId]);
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }

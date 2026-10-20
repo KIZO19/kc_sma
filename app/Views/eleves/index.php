@@ -31,7 +31,7 @@ require __DIR__ . '/../partials/app_header.php';
           <div class="row mb-2">
             <div class="col-sm-6">
               <h1>Élèves</h1>
-              <p class="text-muted">Liste des élèves enregistrés dans votre école.</p>
+              <p class="text-muted"><?= !empty($isTeacher) ? 'Liste des élèves inscrits dans vos classes attribuées.' : 'Liste des élèves enregistrés dans votre école.' ?></p>
             </div>
             <div class="col-sm-6">
               <ol class="breadcrumb float-sm-end">

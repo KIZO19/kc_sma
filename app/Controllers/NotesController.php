@@ -104,10 +104,15 @@ class NotesController extends Controller
             $selectedEvaluation = $evaluationId > 0
                 ? TeacherAssignment::findEvaluation($evaluationId, $agentId)
                 : null;
-            if ($selectedEvaluation && (int) $selectedEvaluation['attribution_cours_id'] !== $assignmentId) {
+            if ($selectedEvaluation && (
+                (int) $selectedEvaluation['attribution_cours_id'] !== $assignmentId
+                || (int) $selectedEvaluation['periode_id'] !== $selectedPeriodId
+            )) {
                 $selectedEvaluation = null;
             }
-            $evaluations = $assignmentId > 0 ? TeacherAssignment::getEvaluations($assignmentId, $agentId) : [];
+            $evaluations = $assignmentId > 0 && $selectedPeriodId > 0
+                ? TeacherAssignment::getEvaluations($assignmentId, $agentId, $selectedPeriodId)
+                : [];
             $students = $selectedEvaluation
                 ? TeacherAssignment::getStudentsForEvaluation($selectedEvaluation)
                 : [];
