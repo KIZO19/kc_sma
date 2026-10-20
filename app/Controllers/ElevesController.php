@@ -7,6 +7,7 @@ use App\Core\Controller;
 use App\Models\DetteEleve;
 use App\Models\Eleve;
 use App\Models\Classe;
+use App\Models\TeacherAssignment;
 use App\Models\User;
 
 class ElevesController extends Controller
@@ -20,15 +21,18 @@ class ElevesController extends Controller
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
-        $classes = $ecoleId > 0 ? Classe::getAllBySchool($ecoleId) : [];
+        $isTeacher = $role === 'enseignant_école';
+        $classes = $isTeacher
+            ? TeacherAssignment::getClasses($ecoleId, (int) ($user['reference_id'] ?? 0))
+            : ($ecoleId > 0 ? Classe::getAllBySchool($ecoleId) : []);
         $selectedClasseId = (int) ($_GET['classe_id'] ?? 0);
         $validClasseIds = array_map(static fn (array $classe): int => (int) $classe['id'], $classes);
         if ($selectedClasseId > 0 && !in_array($selectedClasseId, $validClasseIds, true)) {
             $selectedClasseId = 0;
         }
-        $students = $ecoleId > 0
-            ? Eleve::getAllBySchool($ecoleId)
-            : Eleve::getAll();
+        $students = $isTeacher
+            ? TeacherAssignment::getStudents($ecoleId, (int) ($user['reference_id'] ?? 0), $selectedClasseId > 0 ? $selectedClasseId : null)
+            : ($ecoleId > 0 ? Eleve::getAllBySchool($ecoleId) : Eleve::getAll());
 
         $this->view('eleves/index', [
             'title' => APP_NAME . ' - Élèves',
@@ -56,8 +60,42 @@ class ElevesController extends Controller
             exit;
         }
 
+        $isTeacher = ($user['role'] ?? '') === 'enseignant_école';
+        if ($isTeacher && !TeacherAssignment::teacherCanAccessStudent($ecoleId, (int) ($user['reference_id'] ?? 0), $eleveId)) {
+            header('Location: ' . BASE_URL . '/error/accessDenied');
+            exit;
+        }
+
+        if ($isTeacher) {
+            $eleve = Eleve::findByIdAndSchool($eleveId, $ecoleId);
+            if (!$eleve) {
+                header('Location: ' . BASE_URL . '/error/notFound');
+                exit;
+            }
+            $teacherStudents = TeacherAssignment::getStudents($ecoleId, (int) ($user['reference_id'] ?? 0));
+            $teacherClass = null;
+            foreach ($teacherStudents as $teacherStudent) {
+                if ((int) $teacherStudent['id'] === $eleveId) {
+                    $teacherClass = $teacherStudent['nom_classe'] ?? null;
+                    break;
+                }
+            }
+
+            $this->view('eleves/discipline', [
+                'title' => APP_NAME . ' - Fiche de discipline',
+                'user' => $user,
+                'role' => $user['role'],
+                'roleLabel' => User::getRoleLabel($user['role']),
+                'modules' => $this->getModulesForRole($user['role']),
+                'eleve' => $eleve,
+                'currentClass' => $teacherClass,
+                'discipline' => Eleve::getDiscipline($eleveId),
+            ]);
+            return;
+        }
+
         // Ensure the eleve belongs to the same school unless super_admin
-        if (($user['role'] ?? '') !== 'super_admin' && $ecoleId > 0 && !\App\Models\Eleve::findByIdAndSchool($eleveId, $ecoleId)) {
+        if (($user['role'] ?? '') !== 'super_admin' && $ecoleId > 0 && !Eleve::findByIdAndSchool($eleveId, $ecoleId)) {
             header('Location: ' . BASE_URL . '/error/accessDenied');
             exit;
         }

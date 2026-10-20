@@ -184,10 +184,9 @@ class Controller
                 ['name' => 'Inscriptions', 'path' => '/inscriptions', 'icon' => 'bi-person-plus'],
             ],
             'enseignant_école' => [
-                ['name' => 'Mes cours', 'path' => '/mes-cours', 'icon' => 'bi-book'],
-                ['name' => 'Présences', 'path' => '/presences', 'icon' => 'bi-calendar-check'],
-                ['name' => 'Notes', 'path' => '/notes', 'icon' => 'bi-pencil-square'],
-                ['name' => 'Événements', 'path' => '/evenements', 'icon' => 'bi-calendar-event'],
+                ['name' => 'Présences des élèves', 'path' => '/presences', 'icon' => 'bi-calendar-check'],
+                ['name' => 'Notes de mes cours', 'path' => '/notes', 'icon' => 'bi-pencil-square'],
+                ['name' => 'Élèves inscrits', 'path' => '/eleves', 'icon' => 'bi-people'],
             ],
             'eleve_ecole' => [
                 ['name' => 'Mon emploi du temps', 'path' => '/mon-emploi', 'icon' => 'bi-calendar2-week'],
@@ -216,7 +215,6 @@ class Controller
             'DA_école',
             'comptable_école',
             'sec_école',
-            'enseignant_école',
             'parent_ecole',
         ], true)) {
             array_unshift($modules, [

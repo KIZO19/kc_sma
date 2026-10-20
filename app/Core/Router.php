@@ -72,6 +72,22 @@ class Router
             $actionName = 'notFound';
         }
 
+        if ((Auth::user()['role'] ?? '') === 'enseignant_école') {
+            $teacherRoutes = [
+                'App\\Controllers\\DashboardController' => ['index'],
+                'App\\Controllers\\PresencesController' => ['index'],
+                'App\\Controllers\\NotesController' => ['index'],
+                'App\\Controllers\\ElevesController' => ['index', 'show'],
+                'App\\Controllers\\ProfileController' => ['index', 'update'],
+                'App\\Controllers\\AuthController' => ['logout'],
+                'App\\Controllers\\EcolesController' => ['subscriptionrequired'],
+            ];
+            if (!in_array(strtolower($actionName), $teacherRoutes[$controllerClass] ?? [], true)) {
+                header('Location: ' . BASE_URL . '/dashboard');
+                exit;
+            }
+        }
+
         $controller->{$actionName}();
     }
 

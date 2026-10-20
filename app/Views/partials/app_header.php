@@ -274,9 +274,11 @@ if (!empty($schoolContext['logo_url'])) {
           <li class="nav-item d-none d-md-block">
             <a href="<?= BASE_URL ?>/dashboard" class="nav-link">Dashboard</a>
           </li>
-          <li class="nav-item d-none d-md-block">
-            <a href="<?= BASE_URL ?>/ecoles" class="nav-link">Écoles</a>
-          </li>
+          <?php if (($user['role'] ?? '') !== 'enseignant_école'): ?>
+            <li class="nav-item d-none d-md-block">
+              <a href="<?= BASE_URL ?>/ecoles" class="nav-link">Écoles</a>
+            </li>
+          <?php endif; ?>
         </ul>
         <ul class="navbar-nav ms-auto">
             <li class="nav-item dropdown">

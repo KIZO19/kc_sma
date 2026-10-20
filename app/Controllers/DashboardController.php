@@ -76,17 +76,11 @@ class DashboardController extends Controller
         }
 
         $stats = $this->getStatsForRole($role, $user);
-        $chart = $this->getChartSeries($role, $user);
-        $table = $this->getTableDataForRole($role);
-        $insights = $this->getRoleInsights($role, $user);
-        $overview = $this->getOverviewSummary($role, $user);
+        $chart = $role === 'comptable_école' ? $this->getChartSeries($user) : [];
 
         $data = [
             'stats' => $stats,
             'chart' => $chart,
-            'table' => $table,
-            'insights' => $insights,
-            'overview' => $overview,
         ];
 
         if (in_array($role, ['préfet_école', 'DP_école'], true)) {
@@ -95,6 +89,7 @@ class DashboardController extends Controller
                 'schoolName' => $school['nom_etablissement'] ?? 'Votre établissement',
                 'isPrefect' => $role === 'préfet_école',
             ];
+            $data['overview'] = $this->getOverviewSummary($role, $user);
         }
 
         if ($role === 'comptable_école') {
@@ -299,21 +294,31 @@ class DashboardController extends Controller
     private function getStatsForRole(string $role, array $user = []): array
     {
         $schoolId = (int) ($user['ecole_id'] ?? 0);
-        $studentCount = $schoolId > 0 ? $this->countSchoolStudents($schoolId) : $this->countTable('eleves');
-        $teacherCount = $schoolId > 0 ? $this->countSchoolUsers($schoolId, ['agent_ecole','enseignant_école','ecole_admin','comptable_école','sec_école','préfet_école','DE_école','DD_école','DP_école','DA_école']) : $this->countTable('agents');
-        $parentCount = $schoolId > 0 ? $this->countSchoolUsers($schoolId, ['parent_ecole']) : $this->countTable('parents');
-        $classCount = $schoolId > 0 ? $this->countSchoolClasses($schoolId) : $this->countTable('classes');
-        $eventCount = $schoolId > 0 ? $this->countSchoolEvents($schoolId) : $this->countTable('evenements');
-        $schoolCount = $this->countTable('ecoles');
+        $schoolRoles = ['ecole_admin', 'promoteur_école', 'DE_école', 'DD_école', 'DA_école', 'comptable_école', 'sec_école', 'préfet_école', 'DP_école'];
+        if ($schoolId <= 0 || !in_array($role, $schoolRoles, true)) {
+            return [];
+        }
+
+        $studentCount = $this->countSchoolStudents($schoolId);
+        $teacherCount = $this->countSchoolUsers($schoolId, ['enseignant_école']);
+        $parentCount = $this->countSchoolUsers($schoolId, ['parent_ecole']);
+        $classCount = $this->countSchoolClasses($schoolId);
+        $eventCount = $this->countSchoolEvents($schoolId);
         $debtTotal = $this->sumOutstandingDebt($schoolId);
         $payments30d = $this->sumPaymentsLast30Days($schoolId);
 
         return match ($role) {
-            'super_admin', 'ecole_admin' => [
+            'ecole_admin' => [
                 ['title' => 'Élèves inscrits', 'value' => $studentCount, 'icon' => 'bi-people-fill', 'bg' => 'bg-primary', 'hint' => 'Effectif total'],
                 ['title' => 'Dette active', 'value' => $this->formatCurrencyCompact($debtTotal), 'icon' => 'bi-cash-stack', 'bg' => 'bg-danger', 'hint' => 'À régulariser'],
                 ['title' => 'Classes', 'value' => $classCount, 'icon' => 'bi-diagram-3', 'bg' => 'bg-info', 'hint' => 'Organisées'],
                 ['title' => 'Paiements 30j', 'value' => $this->formatCurrencyCompact($payments30d), 'icon' => 'bi-wallet2', 'bg' => 'bg-success', 'hint' => 'Reçus récemment'],
+            ],
+            'promoteur_école', 'DE_école', 'DD_école', 'DA_école' => [
+                ['title' => 'Élèves inscrits', 'value' => $studentCount, 'icon' => 'bi-people-fill', 'bg' => 'bg-primary', 'hint' => 'Effectif de l’école'],
+                ['title' => 'Classes', 'value' => $classCount, 'icon' => 'bi-diagram-3', 'bg' => 'bg-info', 'hint' => 'Organisation scolaire'],
+                ['title' => 'Enseignants', 'value' => $teacherCount, 'icon' => 'bi-person-workspace', 'bg' => 'bg-success', 'hint' => 'Comptes enseignants'],
+                ['title' => 'Événements', 'value' => $eventCount, 'icon' => 'bi-calendar-event', 'bg' => 'bg-warning', 'hint' => 'Activités enregistrées'],
             ],
             'comptable_école' => [
                 ['title' => 'Dette actuelle', 'value' => $this->formatCurrencyCompact($debtTotal), 'icon' => 'bi-cash-coin', 'bg' => 'bg-danger', 'hint' => 'Solde débiteur'],
@@ -322,10 +327,10 @@ class DashboardController extends Controller
                 ['title' => 'Parents', 'value' => $parentCount, 'icon' => 'bi-people', 'bg' => 'bg-warning', 'hint' => 'Contacts'],
             ],
             'sec_école' => [
-                ['title' => 'Inscriptions', 'value' => $studentCount, 'icon' => 'bi-person-plus', 'bg' => 'bg-primary', 'hint' => 'Dossiers actifs'],
-                ['title' => 'Parents', 'value' => $parentCount, 'icon' => 'bi-people', 'bg' => 'bg-success', 'hint' => 'Contacts actifs'],
+                ['title' => 'Élèves inscrits', 'value' => $studentCount, 'icon' => 'bi-person-plus', 'bg' => 'bg-primary', 'hint' => 'Effectif de l’école'],
+                ['title' => 'Parents', 'value' => $parentCount, 'icon' => 'bi-people', 'bg' => 'bg-success', 'hint' => 'Contacts enregistrés'],
                 ['title' => 'Classes', 'value' => $classCount, 'icon' => 'bi-diagram-3', 'bg' => 'bg-info', 'hint' => 'Disponibles'],
-                ['title' => 'Événements', 'value' => $eventCount, 'icon' => 'bi-calendar3', 'bg' => 'bg-warning', 'hint' => 'À venir'],
+                ['title' => 'Événements', 'value' => $eventCount, 'icon' => 'bi-calendar3', 'bg' => 'bg-warning', 'hint' => 'Activités enregistrées'],
             ],
             'préfet_école' => [
                 ['title' => 'Élèves inscrits', 'value' => $studentCount, 'icon' => 'bi-people-fill', 'bg' => 'bg-primary', 'hint' => 'Effectif de l’école'],
@@ -339,81 +344,13 @@ class DashboardController extends Controller
                 ['title' => 'Enseignants', 'value' => $schoolId > 0 ? $this->countSchoolUsers($schoolId, ['enseignant_école']) : 0, 'icon' => 'bi-person-workspace', 'bg' => 'bg-success', 'hint' => 'Comptes enseignants'],
                 ['title' => 'Événements', 'value' => $eventCount, 'icon' => 'bi-calendar-event', 'bg' => 'bg-warning', 'hint' => 'Activités enregistrées'],
             ],
-            'enseignant_école' => [
-                ['title' => 'Cours', 'value' => $classCount, 'icon' => 'bi-book', 'bg' => 'bg-primary', 'hint' => 'Programmes actifs'],
-                ['title' => 'Élèves', 'value' => $studentCount, 'icon' => 'bi-person-badge', 'bg' => 'bg-success', 'hint' => 'Suivis'],
-                ['title' => 'Parents', 'value' => $parentCount, 'icon' => 'bi-people', 'bg' => 'bg-info', 'hint' => 'Contacts'],
-                ['title' => 'Événements', 'value' => $eventCount, 'icon' => 'bi-calendar-event', 'bg' => 'bg-warning', 'hint' => 'Planifiés'],
-            ],
-            'eleve_ecole' => [
-                ['title' => 'Moyenne', 'value' => '15,4/20', 'icon' => 'bi-bar-chart-line', 'bg' => 'bg-primary', 'hint' => 'Dernier trimestre'],
-                ['title' => 'Présences', 'value' => '96%', 'icon' => 'bi-check2-square', 'bg' => 'bg-success', 'hint' => 'Ce mois'],
-                ['title' => 'Paiements', 'value' => $this->formatCurrencyCompact($payments30d), 'icon' => 'bi-wallet2', 'bg' => 'bg-info', 'hint' => 'Derniers 30j'],
-                ['title' => 'Classes', 'value' => $classCount, 'icon' => 'bi-calendar2-week', 'bg' => 'bg-warning', 'hint' => 'Programmes'],
-            ],
-            'parent_ecole' => [
-                ['title' => 'Enfants', 'value' => $studentCount, 'icon' => 'bi-people', 'bg' => 'bg-primary', 'hint' => 'Suivis'],
-                ['title' => 'Paiements', 'value' => $this->formatCurrencyCompact($payments30d), 'icon' => 'bi-currency-dollar', 'bg' => 'bg-info', 'hint' => 'Derniers 30j'],
-                ['title' => 'Dette', 'value' => $this->formatCurrencyCompact($debtTotal), 'icon' => 'bi-wallet2', 'bg' => 'bg-warning', 'hint' => 'À régulariser'],
-                ['title' => 'Messages', 'value' => $eventCount, 'icon' => 'bi-chat-dots', 'bg' => 'bg-success', 'hint' => 'Activités'],
-            ],
-            default => [
-                ['title' => 'Tableau', 'value' => 'Actif', 'icon' => 'bi-speedometer2', 'bg' => 'bg-primary', 'hint' => 'Vue principale'],
-                ['title' => 'Élèves', 'value' => $studentCount, 'icon' => 'bi-person-badge', 'bg' => 'bg-success', 'hint' => 'Inscrits'],
-                ['title' => 'Écoles', 'value' => $schoolCount, 'icon' => 'bi-building', 'bg' => 'bg-info', 'hint' => 'Disponibles'],
-                ['title' => 'Agents', 'value' => $teacherCount, 'icon' => 'bi-people-fill', 'bg' => 'bg-warning', 'hint' => 'Actifs'],
-            ],
+            default => [],
         };
     }
 
-    private function getChartSeries(string $role, array $user = []): array
+    private function getChartSeries(array $user): array
     {
-        $labels = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jui'];
-        $baseSeries = [18, 22, 26, 31, 34, 42];
-        $financeSeries = [12, 18, 24, 29, 33, 41];
-
-        if ($role === 'comptable_école') {
-            $sectionChart = $this->getPaymentEvolutionBySection($user);
-            if (!empty($sectionChart['datasets'])) {
-                return $sectionChart;
-            }
-
-            return [
-                'title' => 'Flux financier par section',
-                'label' => 'Paiements',
-                'labels' => $sectionChart['labels'] ?? [],
-                'datasets' => [],
-            ];
-        }
-
-        $series = match ($role) {
-            'super_admin', 'ecole_admin' => $baseSeries,
-            'comptable_école' => $financeSeries,
-            'enseignant_école' => [70, 75, 79, 82, 86, 90],
-            'eleve_ecole' => [11, 13, 12, 15, 14, 16],
-            'parent_ecole' => [2, 3, 2, 4, 5, 4],
-            'sec_école' => [12, 14, 16, 17, 19, 22],
-            default => [12, 19, 15, 24, 18, 30],
-        };
-
-        $chartConfig = match ($role) {
-            'super_admin', 'ecole_admin' => ['title' => 'Suivi de l’école', 'label' => 'Évolution de l’effectif', 'border' => '#0d6efd', 'background' => 'rgba(13, 110, 253, 0.18)'],
-            'comptable_école' => ['title' => 'Flux financier', 'label' => 'Paiements et recouvrements', 'border' => '#198754', 'background' => 'rgba(25, 135, 84, 0.18)'],
-            'sec_école' => ['title' => 'Inscriptions et affectations', 'label' => 'Nouveaux dossiers', 'border' => '#0dcaf0', 'background' => 'rgba(13, 202, 240, 0.18)'],
-            'enseignant_école' => ['title' => 'Suivi des présences', 'label' => 'Taux de présence', 'border' => '#ffc107', 'background' => 'rgba(255, 193, 7, 0.18)'],
-            'eleve_ecole' => ['title' => 'Progression des notes', 'label' => 'Moyenne trimestrielle', 'border' => '#6610f2', 'background' => 'rgba(102, 16, 242, 0.18)'],
-            'parent_ecole' => ['title' => 'Suivi des enfants', 'label' => 'Évolution scolaire', 'border' => '#6f42c1', 'background' => 'rgba(111, 66, 193, 0.18)'],
-            default => ['title' => 'Performance', 'label' => 'Indicateur', 'border' => '#0d6efd', 'background' => 'rgba(13, 110, 253, 0.18)'],
-        };
-
-        return [
-            'title' => $chartConfig['title'],
-            'label' => $chartConfig['label'],
-            'labels' => $labels,
-            'values' => $series,
-            'borderColor' => $chartConfig['border'],
-            'backgroundColor' => $chartConfig['background'],
-        ];
+        return $this->getPaymentEvolutionBySection($user);
     }
 
     private function getPaymentEvolutionBySection(array $user): array
@@ -510,142 +447,26 @@ class DashboardController extends Controller
         }
     }
 
-    private function getTableDataForRole(string $role): array
-    {
-        $rows = $this->getRecentRows('ecoles', 6);
-
-        $columns = [
-            ['key' => 'name', 'label' => 'Nom'],
-            ['key' => 'status', 'label' => 'Statut'],
-            ['key' => 'updated', 'label' => 'Mise à jour'],
-        ];
-
-        $tableTitle = 'Données récentes';
-        $emptyMessage = 'Aucune donnée disponible pour le moment.';
-
-        if ($role === 'enseignant_école') {
-            $tableTitle = 'Mes classes et évaluations';
-            $rows = [
-                ['name' => '3e A - Mathématiques', 'status' => 'En cours', 'updated' => 'Il y a 2h'],
-                ['name' => '2e B - Physique', 'status' => 'À préparer', 'updated' => 'Hier'],
-                ['name' => '1re C - SVT', 'status' => 'Validé', 'updated' => 'Il y a 1j'],
-            ];
-        } elseif ($role === 'eleve_ecole') {
-            $tableTitle = 'Mes dernières évaluations';
-            $rows = [
-                ['name' => 'Mathématiques', 'status' => '15.5/20', 'updated' => 'Cette semaine'],
-                ['name' => 'Français', 'status' => '16.0/20', 'updated' => 'Cette semaine'],
-                ['name' => 'Histoire', 'status' => '14.8/20', 'updated' => 'La semaine dernière'],
-            ];
-        } elseif ($role === 'parent_ecole') {
-            $tableTitle = 'Suivi de mes enfants';
-            $rows = [
-                ['name' => 'Mina Diop', 'status' => 'Bonne progression', 'updated' => 'Aujourd’hui'],
-                ['name' => 'Yann Diop', 'status' => 'Paiement à jour', 'updated' => 'Hier'],
-            ];
-        } elseif ($role === 'comptable_école') {
-            $tableTitle = 'Transactions récentes';
-            $rows = [
-                ['name' => 'Paiement école A', 'status' => 'Validé', 'updated' => 'Il y a 30 min'],
-                ['name' => 'Facture 2026-04', 'status' => 'En attente', 'updated' => 'Il y a 3h'],
-            ];
-        } elseif ($role === 'sec_école') {
-            $tableTitle = 'Demandes d’inscription';
-            $rows = [
-                ['name' => 'Awa Sarr', 'status' => 'Nouvelle', 'updated' => 'À l’instant'],
-                ['name' => 'Moussa Diallo', 'status' => 'À confirmer', 'updated' => 'Hier'],
-            ];
-        }
-
-        return [
-            'title' => $tableTitle,
-            'columns' => $columns,
-            'rows' => $rows,
-            'emptyMessage' => $emptyMessage,
-        ];
-    }
-
-    private function getRoleInsights(string $role, array $user): array
-    {
-        return match ($role) {
-            'super_admin', 'ecole_admin' => [
-                'Vue d’ensemble de l’établissement : effectifs, suivi financier et activités clés.',
-                'Les indicateurs ci-dessus vous permettent de piloter les opérations importantes en un seul endroit.',
-            ],
-            'comptable_école' => [
-                'Suivi clair des dettes, paiements reçus et dossiers comptables à traiter.',
-                'Les actions rapides facilitent la validation des règlements et la gestion de la trésorerie.',
-            ],
-            'sec_école' => [
-                'Suivi simplifié des inscriptions, parents et classes de l’établissement.',
-                'Les informations affichées permettent de traiter les dossiers plus rapidement et plus proprement.',
-            ],
-            'préfet_école' => [
-                'Pilotez l’organisation scolaire, les classes, les options et le suivi des élèves.',
-                'Les indicateurs sont limités à votre établissement et les accès rapides respectent votre rôle.',
-            ],
-            'DP_école' => [
-                'Suivez les effectifs, l’équipe pédagogique et les activités de l’établissement.',
-                'Retrouvez les outils de suivi des classes, des résultats et des présences dans un espace centralisé.',
-            ],
-            'enseignant_école' => [
-                'Vue rapide des classes, événements et élèves suivis dans votre enseignement.',
-                'Le tableau de bord centralise les éléments de suivi pédagogique et de planification.',
-            ],
-            'eleve_ecole' => [
-                'Consultation rapide de vos performances, présences et situation de paiement.',
-                'Cette vue met en avant les informations utiles pour suivre votre scolarité au quotidien.',
-            ],
-            'parent_ecole' => [
-                'Suivi simplifié du parcours scolaire de vos enfants et de leurs paiements.',
-                'Vous accédez ici aux informations clés sans passer par plusieurs écrans.',
-            ],
-            default => [
-                'Bienvenue sur votre tableau de bord personnalisé.',
-                'Les modules affichés ci-dessous sont adaptés à votre rôle et à vos besoins.',
-            ],
-        };
-    }
-
     private function getOverviewSummary(string $role, array $user): array
     {
         $schoolId = (int) ($user['ecole_id'] ?? 0);
-        $students = $schoolId > 0 ? $this->countSchoolStudents($schoolId) : $this->countTable('eleves');
-        $totalDebt = $this->sumOutstandingDebt($schoolId);
-        $payments30d = $this->sumPaymentsLast30Days($schoolId);
-        $recoveryRate = ($totalDebt > 0 || $payments30d > 0) ? (int) min(100, round(($payments30d / max(1, $payments30d + $totalDebt)) * 100)) : 100;
+        if ($schoolId <= 0) {
+            return ['title' => 'Vue synthétique', 'items' => []];
+        }
 
+        $students = $this->countSchoolStudents($schoolId);
         $items = match ($role) {
-            'super_admin', 'ecole_admin' => [
-                ['label' => 'Taux de recouvrement', 'value' => $recoveryRate . '%', 'color' => 'bg-success'],
-                ['label' => 'Élèves suivis', 'value' => (string) $students, 'color' => 'bg-primary'],
-                ['label' => 'Dette active', 'value' => $this->formatCurrencyCompact($totalDebt), 'color' => 'bg-warning'],
-            ],
-            'comptable_école' => [
-                ['label' => 'Paiements 30j', 'value' => $this->formatCurrencyCompact($payments30d), 'color' => 'bg-success'],
-                ['label' => 'Dette active', 'value' => $this->formatCurrencyCompact($totalDebt), 'color' => 'bg-danger'],
-                ['label' => 'Élèves suivis', 'value' => (string) $students, 'color' => 'bg-primary'],
-            ],
-            'sec_école' => [
-                ['label' => 'Dossiers actifs', 'value' => (string) $students, 'color' => 'bg-primary'],
-                ['label' => 'Classes', 'value' => (string) ($schoolId > 0 ? $this->countSchoolClasses($schoolId) : $this->countTable('classes')), 'color' => 'bg-info'],
-                ['label' => 'Parents', 'value' => (string) ($schoolId > 0 ? $this->countSchoolUsers($schoolId, ['parent_ecole']) : $this->countTable('parents')), 'color' => 'bg-success'],
-            ],
             'préfet_école' => [
                 ['label' => 'Effectif scolaire', 'value' => (string) $students, 'color' => 'bg-primary'],
-                ['label' => 'Classes organisées', 'value' => (string) ($schoolId > 0 ? $this->countSchoolClasses($schoolId) : 0), 'color' => 'bg-info'],
-                ['label' => 'Options rattachées', 'value' => (string) ($schoolId > 0 ? $this->countSchoolOptions($schoolId) : 0), 'color' => 'bg-success'],
+                ['label' => 'Classes organisées', 'value' => (string) $this->countSchoolClasses($schoolId), 'color' => 'bg-info'],
+                ['label' => 'Options rattachées', 'value' => (string) $this->countSchoolOptions($schoolId), 'color' => 'bg-success'],
             ],
             'DP_école' => [
                 ['label' => 'Effectif scolaire', 'value' => (string) $students, 'color' => 'bg-primary'],
-                ['label' => 'Enseignants', 'value' => (string) ($schoolId > 0 ? $this->countSchoolUsers($schoolId, ['enseignant_école']) : 0), 'color' => 'bg-success'],
-                ['label' => 'Événements enregistrés', 'value' => (string) ($schoolId > 0 ? $this->countSchoolEvents($schoolId) : 0), 'color' => 'bg-warning'],
+                ['label' => 'Enseignants', 'value' => (string) $this->countSchoolUsers($schoolId, ['enseignant_école']), 'color' => 'bg-success'],
+                ['label' => 'Événements enregistrés', 'value' => (string) $this->countSchoolEvents($schoolId), 'color' => 'bg-warning'],
             ],
-            default => [
-                ['label' => 'Vue globale', 'value' => 'Active', 'color' => 'bg-primary'],
-                ['label' => 'Élèves', 'value' => (string) $students, 'color' => 'bg-success'],
-                ['label' => 'Rôle', 'value' => User::getRoleLabel($role), 'color' => 'bg-info'],
-            ],
+            default => [],
         };
 
         return [
@@ -799,45 +620,6 @@ class DashboardController extends Controller
         }
 
         return number_format($amount, 0, ',', ' ');
-    }
-
-    private function countTable(string $table): int
-    {
-        try {
-            $db = Database::getConnection();
-            $stmt = $db->prepare('SELECT COUNT(*) AS total FROM ' . $table);
-            $stmt->execute();
-
-            return (int) ($stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
-        } catch (\Throwable $e) {
-            return 0;
-        }
-    }
-
-    private function countTableWhere(string $table, string $column, string $value): int
-    {
-        try {
-            $db = Database::getConnection();
-            $stmt = $db->prepare('SELECT COUNT(*) AS total FROM ' . $table . ' WHERE ' . $column . ' = :value');
-            $stmt->execute([':value' => $value]);
-
-            return (int) ($stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
-        } catch (\Throwable $e) {
-            return 0;
-        }
-    }
-
-    private function getRecentRows(string $table, int $limit = 5): array
-    {
-        try {
-            $db = Database::getConnection();
-            $stmt = $db->prepare('SELECT * FROM ' . $table . ' ORDER BY id DESC LIMIT ' . $limit);
-            $stmt->execute();
-
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
-        } catch (\Throwable $e) {
-            return [];
-        }
     }
 
 }

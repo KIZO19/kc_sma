@@ -201,6 +201,37 @@ $pageStyles = <<<'CSS'
   [data-theme="dark"] .academic-dashboard .academic-panel { border-color: rgba(255,255,255,.1); }
   [data-theme="dark"] .academic-dashboard .academic-action { border-color: rgba(255,255,255,.14); }
   [data-theme="dark"] .academic-dashboard .academic-action i { color: #b8e3f4; background: rgba(49,130,170,.2); }
+  .workspace-dashboard .workspace-intro {
+    border: 0;
+    border-radius: .9rem;
+    color: #fff;
+    background: linear-gradient(120deg, #17324d 0%, #17647a 100%);
+  }
+  .workspace-dashboard .workspace-intro p { color: rgba(255,255,255,.78); }
+  .workspace-dashboard .workspace-panel,
+  .workspace-dashboard .workspace-kpi {
+    height: 100%;
+    border: 1px solid var(--border);
+    border-radius: .75rem;
+    background: var(--card);
+  }
+  .workspace-dashboard .workspace-kpi-value { margin: .65rem 0 .15rem; font-size: 1.65rem; font-weight: 700; color: var(--text); }
+  .workspace-dashboard .workspace-kpi-icon { display: grid; width: 2.8rem; height: 2.8rem; place-items: center; border-radius: .75rem; font-size: 1.15rem; }
+  .workspace-dashboard .workspace-action {
+    display: flex;
+    min-height: 4.25rem;
+    align-items: center;
+    gap: .75rem;
+    padding: .75rem;
+    border: 1px solid var(--border);
+    border-radius: .65rem;
+    color: var(--text);
+    text-decoration: none;
+    transition: border-color .15s ease, background-color .15s ease;
+  }
+  .workspace-dashboard .workspace-action:hover { border-color: var(--sidebar-active); background: var(--surface-muted); }
+  .workspace-dashboard .workspace-action i { display: grid; width: 2.4rem; height: 2.4rem; flex: 0 0 auto; place-items: center; border-radius: .55rem; background: var(--surface-muted); color: var(--sidebar-active); font-size: 1.1rem; }
+  [data-theme="dark"] .workspace-dashboard .workspace-action i { background: rgba(255,255,255,.06); }
 </style>
 CSS;
 require __DIR__ . '/../partials/app_header.php';
@@ -209,12 +240,12 @@ require __DIR__ . '/../partials/app_header.php';
         <div class="container-fluid">
           <div class="row mb-2">
             <div class="col-sm-6">
-              <h1><?= ($role ?? '') === 'comptable_école' ? 'Espace comptable' : ((($role ?? '') === 'super_admin') ? 'Pilotage des écoles' : (in_array(($role ?? ''), ['préfet_école', 'DP_école'], true) ? 'Pilotage pédagogique' : 'Dashboard')) ?></h1>
+              <h1><?= ($role ?? '') === 'comptable_école' ? 'Espace comptable' : ((($role ?? '') === 'super_admin') ? 'Pilotage des écoles' : (in_array(($role ?? ''), ['préfet_école', 'DP_école'], true) ? 'Pilotage pédagogique' : 'Tableau de bord')) ?></h1>
             </div>
             <div class="col-sm-6">
               <ol class="breadcrumb float-sm-end">
                 <li class="breadcrumb-item"><a href="<?= BASE_URL ?>/dashboard">Accueil</a></li>
-                <li class="breadcrumb-item active"><?= ($role ?? '') === 'comptable_école' ? 'Espace comptable' : ((($role ?? '') === 'super_admin') ? 'Pilotage des écoles' : (in_array(($role ?? ''), ['préfet_école', 'DP_école'], true) ? 'Pilotage pédagogique' : 'Dashboard')) ?></li>
+                <li class="breadcrumb-item active"><?= ($role ?? '') === 'comptable_école' ? 'Espace comptable' : ((($role ?? '') === 'super_admin') ? 'Pilotage des écoles' : (in_array(($role ?? ''), ['préfet_école', 'DP_école'], true) ? 'Pilotage pédagogique' : 'Tableau de bord')) ?></li>
               </ol>
             </div>
           </div>
@@ -500,56 +531,105 @@ require __DIR__ . '/../partials/app_header.php';
             </div>
           </div>
           <?php elseif (($role ?? '') !== 'comptable_école'): ?>
-          <div class="row">
-            <?php foreach ($dashboardData['stats'] ?? [] as $stat): ?>
-              <div class="col-lg-3 col-md-6 col-sm-6 mb-4">
-                <div class="small-box <?= htmlspecialchars($stat['bg'] ?? 'bg-primary') ?> text-white">
-                  <div class="inner">
-                    <h3><?= htmlspecialchars($stat['value'] ?? '0') ?></h3>
-                    <p><?= htmlspecialchars($stat['title'] ?? '') ?></p>
-                  </div>
-                  <div class="icon"><i class="bi <?= htmlspecialchars($stat['icon'] ?? 'bi-bar-chart-line') ?>"></i></div>
-                  <a href="#" class="small-box-footer"><?= htmlspecialchars($stat['hint'] ?? 'Détails') ?> <i class="bi bi-arrow-right"></i></a>
+          <?php
+            $workspaceProfile = match ($role ?? '') {
+                'ecole_admin' => ['title' => 'Pilotage de l’établissement', 'eyebrow' => 'ADMINISTRATION'],
+                'promoteur_école' => ['title' => 'Vue d’ensemble de l’établissement', 'eyebrow' => 'PROMOTEUR'],
+                'DE_école' => ['title' => 'Suivi de la direction des études', 'eyebrow' => 'DIRECTION DES ÉTUDES'],
+                'DD_école' => ['title' => 'Suivi des départements', 'eyebrow' => 'DIRECTION DÉPARTEMENTALE'],
+                'DA_école' => ['title' => 'Suivi de l’établissement', 'eyebrow' => 'DIRECTION ADJOINTE'],
+                'sec_école' => ['title' => 'Espace secrétariat', 'eyebrow' => 'SECRÉTARIAT'],
+                'enseignant_école' => ['title' => 'Espace enseignant', 'eyebrow' => 'ENSEIGNEMENT'],
+                'eleve_ecole' => ['title' => 'Espace élève', 'eyebrow' => 'SCOLARITÉ'],
+                'parent_ecole' => ['title' => 'Espace famille', 'eyebrow' => 'SUIVI FAMILIAL'],
+                'agent_ecole' => ['title' => 'Espace agent', 'eyebrow' => 'GESTION SCOLAIRE'],
+                default => ['title' => 'Tableau de bord', 'eyebrow' => strtoupper($roleLabel ?? 'ESPACE PERSONNEL')],
+            };
+            $preferredPaths = match ($role ?? '') {
+                'ecole_admin' => ['/ecoles', '/agents', '/inscriptions', '/eleves', '/paiements', '/rapports', '/paiements/gestionAutorisations'],
+                'promoteur_école', 'DE_école', 'DD_école', 'DA_école' => ['/inscriptions', '/utilisateurs', '/classes', '/eleves', '/derogations', '/notes', '/bulletins', '/rapports'],
+                'sec_école' => ['/inscriptions', '/parents', '/eleves', '/communiques', '/presences', '/rapports'],
+                'enseignant_école' => ['/presences', '/notes', '/eleves'],
+                'eleve_ecole' => ['/mes-notes', '/mon-emploi', '/mes-presences', '/mes-paiements'],
+                'parent_ecole' => ['/mes-enfants', '/bulletins-enfant', '/paiements-enfant', '/messages'],
+                'agent_ecole' => ['/inscriptions'],
+                default => array_column($modules ?? [], 'path'),
+            };
+            $moduleByPath = [];
+            foreach ($modules ?? [] as $module) {
+                $moduleByPath[$module['path']] = $module;
+            }
+            $workspaceActions = [];
+            foreach ($preferredPaths as $path) {
+                if (isset($moduleByPath[$path])) {
+                    $workspaceActions[$path] = $moduleByPath[$path];
+                }
+            }
+            $workspaceActions = array_slice(array_values($workspaceActions), 0, 8);
+            $primaryAction = count($workspaceActions) > 1 ? $workspaceActions[0] : null;
+            $secondaryActions = $primaryAction ? array_slice($workspaceActions, 1) : $workspaceActions;
+          ?>
+          <div class="workspace-dashboard">
+            <div class="card workspace-intro mb-4">
+              <div class="card-body p-4 p-lg-5 d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-4">
+                <div>
+                  <span class="badge rounded-pill text-bg-light mb-3"><?= htmlspecialchars($workspaceProfile['eyebrow']) ?></span>
+                  <h2 class="h3 fw-bold mb-2"><?= htmlspecialchars($workspaceProfile['title']) ?></h2>
+                  <p class="mb-0"><?= htmlspecialchars($user['nom_complet'] ?? ($roleLabel ?? 'Votre espace')) ?></p>
                 </div>
-              </div>
-            <?php endforeach; ?>
-          </div>
-
-          <div class="row">
-            <div class="col-lg-8">
-              <div class="card card-primary card-outline">
-                <div class="card-header">
-                  <h3 class="card-title"><?= htmlspecialchars($dashboardData['chart']['title'] ?? 'Performance scolaire') ?></h3>
-                  <div class="card-tools">
-                      <button type="button" class="btn btn-tool" data-lte-toggle="card-collapse"><i class="bi bi-dash"></i></button>
-                  </div>
-                </div>
-                <div class="card-body">
-                  <canvas id="dashboardChart" height="230"></canvas>
-                </div>
+                <?php if ($primaryAction): ?>
+                  <a href="<?= BASE_URL . $primaryAction['path'] ?>" class="btn btn-light fw-semibold px-4 py-2 flex-shrink-0">
+                    <i class="bi <?= htmlspecialchars($primaryAction['icon']) ?> me-2"></i><?= htmlspecialchars($primaryAction['name']) ?>
+                  </a>
+                <?php endif; ?>
               </div>
             </div>
-            <div class="col-lg-4">
-              <div class="card card-outline shadow-sm h-100">
-                <div class="card-header bg-info">
-                  <h3 class="card-title text-white"><?= htmlspecialchars($dashboardData['overview']['title'] ?? 'Aperçu rapide') ?></h3>
-                </div>
-                <div class="card-body">
-                  <div class="mb-4">
-                    <h5 class="mb-1"><?= htmlspecialchars($dashboardData['overview']['title'] ?? 'Vue synthétique') ?></h5>
-                    <p class="text-muted">Suivi des points clés qui influencent la gestion quotidienne de l’établissement.</p>
-                  </div>
 
-                  <?php foreach ($dashboardData['overview']['items'] ?? [] as $item): ?>
-                    <div class="progress-group mb-3">
-                      <span class="progress-text"><?= htmlspecialchars($item['label'] ?? '') ?></span>
-                      <span class="float-right"><b><?= htmlspecialchars($item['value'] ?? '0') ?></b></span>
-                      <div class="progress progress-sm">
-                        <div class="progress-bar <?= htmlspecialchars($item['color'] ?? 'bg-primary') ?>" style="width: <?= isset($item['value']) && is_numeric(str_replace(['%', ',', ' '], '', (string) $item['value'])) ? min(100, max(10, (int) str_replace(['%', ',', ' '], '', (string) $item['value']))) : 75 ?>%"></div>
+            <?php if (!empty($dashboardData['stats'])): ?>
+              <div class="row g-3 mb-4">
+                <?php foreach ($dashboardData['stats'] as $stat): ?>
+                  <?php
+                    $tone = match ($stat['bg'] ?? '') {
+                        'bg-success' => 'success', 'bg-info' => 'info', 'bg-warning' => 'warning', 'bg-danger' => 'danger', default => 'primary',
+                    };
+                  ?>
+                  <div class="col-12 col-sm-6 col-xl-3">
+                    <div class="card workspace-kpi mb-0">
+                      <div class="card-body p-3 p-lg-4">
+                        <div class="d-flex justify-content-between align-items-center">
+                          <span class="small text-muted fw-semibold"><?= htmlspecialchars($stat['title'] ?? '') ?></span>
+                          <span class="workspace-kpi-icon text-<?= $tone ?> bg-<?= $tone ?>-subtle"><i class="bi <?= htmlspecialchars($stat['icon'] ?? 'bi-bar-chart-line') ?>"></i></span>
+                        </div>
+                        <div class="workspace-kpi-value"><?= htmlspecialchars((string) ($stat['value'] ?? '0')) ?></div>
+                        <div class="small text-muted"><?= htmlspecialchars($stat['hint'] ?? '') ?></div>
                       </div>
                     </div>
-                  <?php endforeach; ?>
-                </div>
+                  </div>
+                <?php endforeach; ?>
+              </div>
+            <?php endif; ?>
+
+            <div class="card workspace-panel">
+              <div class="card-header bg-transparent border-bottom-0 pt-4 px-4">
+                <span class="small text-uppercase fw-bold text-primary">Espace de travail</span>
+                <h2 class="h5 fw-bold mb-0 mt-1">Accès rapides</h2>
+              </div>
+              <div class="card-body px-4 pt-3">
+                <?php if ($secondaryActions): ?>
+                  <div class="row g-2">
+                    <?php foreach ($secondaryActions as $action): ?>
+                      <div class="col-12 col-md-6 col-xl-4">
+                        <a class="workspace-action h-100" href="<?= BASE_URL . $action['path'] ?>">
+                          <i class="bi <?= htmlspecialchars($action['icon']) ?>" aria-hidden="true"></i>
+                          <strong><?= htmlspecialchars($action['name']) ?></strong>
+                          <i class="bi bi-arrow-up-right ms-auto" aria-hidden="true"></i>
+                        </a>
+                      </div>
+                    <?php endforeach; ?>
+                  </div>
+                <?php else: ?>
+                  <p class="text-muted mb-0">Aucun module n’est actuellement associé à ce rôle.</p>
+                <?php endif; ?>
               </div>
             </div>
           </div>
@@ -655,32 +735,6 @@ require __DIR__ . '/../partials/app_header.php';
           <?php endif; ?>
 
           <?php if (($role ?? '') === 'ecole_admin'): ?>
-          <div class="row mt-3">
-            <div class="col-12 mb-4">
-              <div class="card border-primary shadow-sm h-100">
-                <div class="card-header bg-primary text-white">
-                  <h5 class="card-title mb-0">Portail de l’école</h5>
-                </div>
-                <div class="card-body">
-                  <div class="row g-3">
-                    <div class="col-md-6">
-                      <a href="<?= BASE_URL ?>/ecoles" class="btn btn-outline-primary w-100 h-100 p-3">
-                        <i class="bi bi-gear fs-3 d-block mb-2"></i>
-                        <strong>Paramètres de l’école</strong>
-                      </a>
-                    </div>
-                    <div class="col-md-6">
-                      <a href="<?= BASE_URL ?>/paiements/gestionAutorisations" class="btn btn-outline-success w-100 h-100 p-3">
-                        <i class="bi bi-shield-check fs-3 d-block mb-2"></i>
-                        <strong>Autorisations de paiement</strong>
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <?php if (!empty($_SESSION['dashboard_success'])): ?>
             <div class="alert alert-success alert-dismissible">
               <?= htmlspecialchars($_SESSION['dashboard_success']) ?>
@@ -696,8 +750,9 @@ require __DIR__ . '/../partials/app_header.php';
             <?php unset($_SESSION['dashboard_error']); ?>
           <?php endif; ?>
 
-          <div class="card card-outline card-primary mt-3">
-            <div class="card-header">
+          <div class="card workspace-panel mt-3">
+            <div class="card-header bg-transparent border-bottom-0 pt-4 px-4">
+              <span class="small text-uppercase fw-bold text-primary">Contrôle des accès</span>
               <h5 class="card-title mb-1">Actions de l’administration</h5>
               <p class="text-muted small mb-0">Définissez les rôles autorisés à accéder aux modules d’inscription et de notes.</p>
             </div>
@@ -745,43 +800,6 @@ require __DIR__ . '/../partials/app_header.php';
             </div>
           </div>
 
-          <div class="card mt-3">
-            <div class="card-header bg-light d-flex justify-content-between align-items-center">
-              <span>Dettes par frais, classe, option et section</span>
-              <a href="<?= BASE_URL ?>/recouvrements" class="btn btn-sm btn-outline-primary">Voir les recouvrements</a>
-            </div>
-            <div class="card-body p-0">
-              <div class="table-responsive">
-                <table class="table table-striped table-hover align-middle mb-0">
-                  <thead>
-                    <tr>
-                      <th>Frais</th>
-                      <th>Classe</th>
-                      <th>Option</th>
-                      <th>Section</th>
-                      <th class="text-end">Dette restante</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                  <?php foreach ($dashboardData['accounting']['debtBreakdown'] ?? [] as $breakdown): ?>
-                    <tr>
-                      <td><?= htmlspecialchars($breakdown['type_frais'] ?? 'Frais scolaire') ?></td>
-                      <td><?= htmlspecialchars($breakdown['nom_classe'] ?? 'Classe non définie') ?></td>
-                      <td><?= htmlspecialchars($breakdown['nom_option'] ?? 'Sans option') ?></td>
-                      <td><?= htmlspecialchars($breakdown['nom_section'] ?? 'Section non définie') ?></td>
-                      <td class="text-end fw-semibold text-danger">
-                        <?= number_format((float) ($breakdown['dette_restante'] ?? 0), 2, ',', ' ') ?> <?= htmlspecialchars($breakdown['devise'] ?? '') ?>
-                      </td>
-                    </tr>
-                  <?php endforeach; ?>
-                  <?php if (empty($dashboardData['accounting']['debtBreakdown'])): ?>
-                    <tr><td colspan="5" class="text-center text-muted">Aucune dette restante.</td></tr>
-                  <?php endif; ?>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
           <?php endif; ?>
 
           <?php if (($role ?? '') === 'comptable_école'): ?>
@@ -886,24 +904,6 @@ require __DIR__ . '/../partials/app_header.php';
           </div>
           <?php endif; ?>
 
-          <?php if (($role ?? '') !== 'comptable_école' && ($role ?? '') !== 'super_admin'): ?>
-          <div class="row">
-            <?php foreach ($modules as $module): ?>
-              <div class="col-lg-3 col-md-4 col-sm-6 mb-4">
-                <div class="card card-outline shadow-sm h-100 border-0">
-                  <div class="card-body text-center">
-                    <div class="mb-3">
-                      <i class="bi <?= htmlspecialchars($module['icon']) ?> text-primary" style="font-size:2.2rem;"></i>
-                    </div>
-                    <h5 class="card-title mb-1"><?= htmlspecialchars($module['name']) ?></h5>
-                    <p class="text-muted small">Accédez à <?= htmlspecialchars($module['name']) ?>.</p>
-                    <a href="<?= BASE_URL . $module['path'] ?>" class="btn btn-sm btn-primary rounded-pill">Ouvrir</a>
-                  </div>
-                </div>
-              </div>
-            <?php endforeach; ?>
-          </div>
-          <?php endif; ?>
         </div>
       </section>
 <?php $pageScripts = <<<'SCRIPT'

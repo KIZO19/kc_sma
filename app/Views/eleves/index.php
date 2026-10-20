@@ -1,4 +1,8 @@
-<?php require __DIR__ . '/../partials/app_header.php'; ?>
+<?php
+$pageScripts = '<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js" crossorigin="anonymous"></script>'
+  . '<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js" crossorigin="anonymous"></script>';
+require __DIR__ . '/../partials/app_header.php';
+?>
 <style>
   .student-kpi .card-body { padding: 1rem 1.25rem; }
   .student-kpi strong { font-size: 1.35rem; }
@@ -85,9 +89,14 @@
                 <h3 class="card-title mb-1">Répertoire des élèves</h3>
                 <div class="small text-muted">Recherchez, filtrez et triez les informations d’inscription.</div>
               </div>
-              <button id="exportStudents" class="btn btn-sm btn-outline-primary" type="button">
-                <i class="bi bi-download me-1"></i>Exporter la sélection (CSV)
-              </button>
+              <div class="btn-group btn-group-sm" role="group" aria-label="Exporter les élèves">
+                <button id="exportStudents" class="btn btn-outline-primary" type="button">
+                  <i class="bi bi-filetype-csv me-1"></i>CSV
+                </button>
+                <button id="exportStudentsPdf" class="btn btn-outline-danger" type="button">
+                  <i class="bi bi-filetype-pdf me-1"></i>PDF
+                </button>
+              </div>
             </div>
             <div class="card-body">
               <div class="row g-2 mb-3">
@@ -275,6 +284,7 @@
         const genderFilter = document.getElementById('genderFilter');
         const resetFiltersButton = document.getElementById('resetFilters');
         const exportButton = document.getElementById('exportStudents');
+        const exportPdfButton = document.getElementById('exportStudentsPdf');
         const studentTotal = document.getElementById('studentTotal');
         const activeTotal = document.getElementById('activeTotal');
         const pendingTotal = document.getElementById('pendingTotal');
@@ -442,6 +452,52 @@
             setTimeout(function () {
               URL.revokeObjectURL(link.href);
             }, 0);
+          });
+        }
+        if (exportPdfButton) {
+          exportPdfButton.addEventListener('click', function () {
+            if (!window.pdfMake) return;
+            const headers = Array.from(table.tHead.rows[0].cells).slice(1, -1).map(cell => cell.textContent.trim());
+            const body = [headers, ...filteredRows.map(function (row) {
+              return Array.from(row.cells).slice(1, -1).map(function (cell) {
+                return (cell.dataset.sortValue || cell.textContent).trim().replace(/\s+/g, ' ');
+              });
+            })];
+            const today = new Date();
+            const dateLabel = new Intl.DateTimeFormat('fr-FR').format(today);
+            const fileDate = today.toISOString().slice(0, 10);
+            const documentDefinition = {
+              info: { title: 'Répertoire des élèves' },
+              pageSize: 'A3',
+              pageOrientation: 'landscape',
+              pageMargins: [24, 38, 24, 34],
+              content: [
+                { text: 'Répertoire des élèves', style: 'title' },
+                { text: `${filteredRows.length} élève(s) · Exporté le ${dateLabel}`, style: 'subtitle', margin: [0, 0, 0, 14] },
+                {
+                  table: { headerRows: 1, widths: Array(headers.length).fill('*'), body: body },
+                  layout: {
+                    fillColor: function (rowIndex) {
+                      if (rowIndex === 0) return '#e9eef5';
+                      return rowIndex % 2 === 0 ? '#f6f8fa' : null;
+                    },
+                    hLineColor: function () { return '#d9e0e8'; },
+                    vLineColor: function () { return '#e4e9ef'; },
+                    paddingLeft: function () { return 5; },
+                    paddingRight: function () { return 5; },
+                    paddingTop: function () { return 5; },
+                    paddingBottom: function () { return 5; }
+                  }
+                }
+              ],
+              styles: {
+                title: { fontSize: 17, bold: true, color: '#1f2937' },
+                subtitle: { fontSize: 9, color: '#64748b' }
+              },
+              defaultStyle: { fontSize: 7 }
+            };
+            documentDefinition.content[2].table.body[0] = headers.map(text => ({ text: text, bold: true, color: '#334155' }));
+            pdfMake.createPdf(documentDefinition).download(`eleves-filtres-${fileDate}.pdf`);
           });
         }
 
