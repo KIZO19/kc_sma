@@ -30,6 +30,16 @@
     return Number.isFinite(parsed) ? parsed : null;
   };
 
+  const parseDate = (value) => {
+    const normalized = String(value ?? '').trim();
+    const frenchDate = normalized.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (frenchDate) {
+      return Date.UTC(Number(frenchDate[3]), Number(frenchDate[2]) - 1, Number(frenchDate[1]));
+    }
+    const parsed = Date.parse(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
   const initTable = (table, index) => {
     if (
       managedTableIds.has(table.id)
@@ -150,8 +160,11 @@
             const difference = (parseNumber(leftText) ?? 0) - (parseNumber(rightText) ?? 0);
             if (difference) return difference * sortDirection;
           } else if (type === 'date') {
-            const difference = Date.parse(leftText) - Date.parse(rightText);
-            if (Number.isFinite(difference) && difference) return difference * sortDirection;
+            const leftDate = parseDate(leftText);
+            const rightDate = parseDate(rightText);
+            if (leftDate !== null && rightDate !== null && leftDate !== rightDate) {
+              return (leftDate - rightDate) * sortDirection;
+            }
           }
           return collator.compare(leftText, rightText) * sortDirection
             || originalPositions.get(left) - originalPositions.get(right);

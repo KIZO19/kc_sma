@@ -21,10 +21,11 @@ class ElevesController extends Controller
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        $sectionScopeId = $this->getSectionScopeForUser($user);
         $isTeacher = $role === 'enseignant_école';
         $classes = $isTeacher
             ? TeacherAssignment::getClasses($ecoleId, (int) ($user['reference_id'] ?? 0))
-            : ($ecoleId > 0 ? Classe::getAllBySchool($ecoleId) : []);
+            : ($ecoleId > 0 ? Classe::getAllBySchool($ecoleId, $sectionScopeId) : []);
         $selectedClasseId = (int) ($_GET['classe_id'] ?? 0);
         $validClasseIds = array_map(static fn (array $classe): int => (int) $classe['id'], $classes);
         if ($selectedClasseId > 0 && !in_array($selectedClasseId, $validClasseIds, true)) {
@@ -32,7 +33,7 @@ class ElevesController extends Controller
         }
         $students = $isTeacher
             ? TeacherAssignment::getStudents($ecoleId, (int) ($user['reference_id'] ?? 0), $selectedClasseId > 0 ? $selectedClasseId : null)
-            : ($ecoleId > 0 ? Eleve::getAllBySchool($ecoleId) : Eleve::getAll());
+            : ($ecoleId > 0 ? Eleve::getAllBySchool($ecoleId, null, $sectionScopeId) : Eleve::getAll());
 
         $this->view('eleves/index', [
             'title' => APP_NAME . ' - Élèves',
@@ -54,6 +55,7 @@ class ElevesController extends Controller
 
         $user = Auth::refresh() ?: Auth::user();
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        $sectionScopeId = $this->getSectionScopeForUser($user);
         $eleveId = (int) ($_GET['id'] ?? 0);
 
         if ($eleveId <= 0) {
@@ -96,7 +98,11 @@ class ElevesController extends Controller
         }
 
         // Ensure the eleve belongs to the same school unless super_admin
-        if (($user['role'] ?? '') !== 'super_admin' && $ecoleId > 0 && !Eleve::findByIdAndSchool($eleveId, $ecoleId)) {
+        if (
+            ($user['role'] ?? '') !== 'super_admin'
+            && $ecoleId > 0
+            && !Eleve::findByIdAndSchool($eleveId, $ecoleId, $sectionScopeId)
+        ) {
             header('Location: ' . BASE_URL . '/error/accessDenied');
             exit;
         }

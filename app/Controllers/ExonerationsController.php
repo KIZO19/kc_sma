@@ -12,6 +12,7 @@ class ExonerationsController extends Controller
 {
     private const REQUEST_ROLES = ['comptable_école', 'ecole_admin', 'préfet_école'];
     private const VALIDATION_ROLES = [
+        'comptable_école',
         'ecole_admin',
         'promoteur_école',
         'préfet_école',

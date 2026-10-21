@@ -25,6 +25,47 @@ $pageScripts = <<<SCRIPT
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" crossorigin="anonymous"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.user-access-form').forEach(function (form) {
+      const roleSelect = form.querySelector('[name="role"]');
+      const sectionSelect = form.querySelector('[name="section_id"]');
+      const sectionField = form.querySelector('.user-section-field');
+      if (!roleSelect || !sectionSelect || !sectionField) return;
+
+      const updateSectionOptions = function () {
+        const role = roleSelect.value;
+        const secondaryRoles = ['préfet_école', 'DE_école', 'DD_école'];
+        const primaryRoles = ['DP_école', 'DA_école'];
+        const allowedNames = secondaryRoles.includes(role)
+          ? ['secondaire']
+          : (primaryRoles.includes(role) ? ['primaire', 'maternelle'] : []);
+        const scoped = allowedNames.length > 0;
+        sectionField.hidden = !scoped;
+        sectionSelect.disabled = !scoped;
+        sectionSelect.required = scoped;
+
+        let selectedIsAllowed = false;
+        Array.from(sectionSelect.options).forEach(function (option) {
+          const allowed = option.value !== '' && allowedNames.includes(option.dataset.sectionName || '');
+          option.hidden = option.value !== '' && scoped && !allowed;
+          if (option.selected && allowed) selectedIsAllowed = true;
+        });
+
+        if (scoped && !selectedIsAllowed) {
+          const preferredName = secondaryRoles.includes(role) ? 'secondaire' : 'primaire';
+          const preferredOption = Array.from(sectionSelect.options).find(function (option) {
+            return option.dataset.sectionName === preferredName && !option.hidden;
+          });
+          const firstAllowedOption = Array.from(sectionSelect.options).find(function (option) {
+            return option.value !== '' && !option.hidden;
+          });
+          sectionSelect.value = (preferredOption || firstAllowedOption || {}).value || '';
+        }
+      };
+
+      roleSelect.addEventListener('change', updateSectionOptions);
+      updateSectionOptions();
+    });
+
     const tableIds = ['#allUsersTable', '#inactiveUsersTable', '#unassignedUsersTable'];
     tableIds.forEach(function (selector) {
       const table = document.querySelector(selector);
@@ -252,7 +293,7 @@ SCRIPT;
                     </td>
                     <td>
                       <?php if (($role ?? '') === 'super_admin'): ?>
-                        <form method="post" action="<?= BASE_URL ?>/utilisateurs/update-access" class="d-flex flex-wrap gap-2 align-items-center">
+                        <form method="post" action="<?= BASE_URL ?>/utilisateurs/update-access" class="d-flex flex-wrap gap-2 align-items-center user-access-form">
                           <input type="hidden" name="user_id" value="<?= (int) $account['id'] ?>">
                           <select name="role" class="form-select form-select-sm" required>
                             <?php foreach (($availableRoles ?? []) as $roleKey => $roleName): ?>
@@ -265,6 +306,19 @@ SCRIPT;
                               <option value="<?= (int) $school['id'] ?>" <?= ((int) ($account['ecole_id'] ?? 0) === (int) $school['id']) ? 'selected' : '' ?>><?= htmlspecialchars($school['nom_etablissement']) ?></option>
                             <?php endforeach; ?>
                           </select>
+                          <div class="user-section-field" hidden>
+                            <select name="section_id" class="form-select form-select-sm" aria-label="Section affectée à ce compte" disabled>
+                              <option value="">Choisir une section</option>
+                              <?php foreach (($sections ?? []) as $section): ?>
+                                <option
+                                  value="<?= (int) $section['id'] ?>"
+                                  data-section-name="<?= htmlspecialchars(mb_strtolower(trim((string) $section['nom_section']), 'UTF-8'), ENT_QUOTES, 'UTF-8') ?>"
+                                  <?= (int) ($account['section_id'] ?? 0) === (int) $section['id'] ? 'selected' : '' ?>>
+                                  <?= htmlspecialchars($section['nom_section'], ENT_QUOTES, 'UTF-8') ?>
+                                </option>
+                              <?php endforeach; ?>
+                            </select>
+                          </div>
                           <select name="statut" class="form-select form-select-sm" required>
                             <option value="Actif" <?= (($account['statut'] ?? '') === 'Actif') ? 'selected' : '' ?>>Actif</option>
                             <option value="Inactif" <?= (($account['statut'] ?? '') === 'Inactif') ? 'selected' : '' ?>>Inactif</option>

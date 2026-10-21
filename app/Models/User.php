@@ -114,7 +114,7 @@ class User
         return self::findById((int) $db->lastInsertId());
     }
 
-    private static function getDefaultSectionIdForRole(string $role): ?int
+    public static function getDefaultSectionIdForRole(string $role): ?int
     {
         return match ($role) {
             'préfet_école', 'DE_école', 'DD_école' => 3,
@@ -400,11 +400,19 @@ class User
         }
     }
 
-    public static function updateAccess(int $id, string $role, string $statut, ?int $ecoleId): bool
+    public static function updateAccess(
+        int $id,
+        string $role,
+        string $statut,
+        ?int $ecoleId,
+        ?int $sectionId = null
+    ): bool
     {
         try {
             $db = Database::getConnection();
-            $sectionId = self::getDefaultSectionIdForRole($role);
+            if ($sectionId === null) {
+                $sectionId = self::getDefaultSectionIdForRole($role);
+            }
             $stmt = $db->prepare(
                 'UPDATE utilisateurs SET role = :role, statut = :statut, ecole_id = :ecole_id, section_id = :section_id WHERE id = :id'
             );

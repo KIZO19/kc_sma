@@ -126,35 +126,51 @@ class Eleve
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public static function getPendingBySchool(int $ecoleId): array
+    public static function getPendingBySchool(int $ecoleId, ?int $sectionId = null): array
     {
         $db = Database::getConnection();
-        $stmt = $db->prepare(
+        $sql =
             'SELECT e.*, p.nom_responsable AS parent_nom_responsable '
             . 'FROM eleves e '
             . 'LEFT JOIN parents p ON e.parent_id = p.id '
             . 'WHERE e.statut_eleve = :statut AND (e.ecole_id = :ecole_id OR p.ecole_id = :ecole_id OR EXISTS ('
             . 'SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id '
-            . 'WHERE i.eleve_id = e.id AND c.ecole_id = :ecole_id)) '
-            . 'ORDER BY e.id DESC'
-        );
-        $stmt->execute([':statut' => 'inactif', ':ecole_id' => $ecoleId]);
+            . 'WHERE i.eleve_id = e.id AND c.ecole_id = :ecole_id))';
+        $params = [':statut' => 'inactif', ':ecole_id' => $ecoleId];
+        if ($sectionId !== null) {
+            $sql .= ' AND EXISTS (SELECT 1 FROM inscriptions section_i '
+                . 'INNER JOIN classes section_c ON section_c.id = section_i.classe_id '
+                . 'WHERE section_i.eleve_id = e.id AND section_c.ecole_id = :section_school '
+                . 'AND section_c.section_id = :section_id)';
+            $params[':section_school'] = $ecoleId;
+            $params[':section_id'] = $sectionId;
+        }
+        $stmt = $db->prepare($sql . ' ORDER BY e.id DESC');
+        $stmt->execute($params);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public static function getEnrolledBySchool(int $ecoleId): array
+    public static function getEnrolledBySchool(int $ecoleId, ?int $sectionId = null): array
     {
         $db = Database::getConnection();
-        $stmt = $db->prepare(
+        $sql =
             'SELECT e.*, p.nom_responsable AS parent_nom_responsable '
             . 'FROM eleves e '
             . 'LEFT JOIN parents p ON e.parent_id = p.id '
             . 'WHERE e.statut_eleve = :statut AND (e.ecole_id = :ecole_id OR p.ecole_id = :ecole_id OR EXISTS ('
             . 'SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id '
-            . 'WHERE i.eleve_id = e.id AND c.ecole_id = :ecole_id)) '
-            . 'ORDER BY e.nom ASC, e.postnom ASC, e.prenom ASC'
-        );
-        $stmt->execute([':statut' => 'actif', ':ecole_id' => $ecoleId]);
+            . 'WHERE i.eleve_id = e.id AND c.ecole_id = :ecole_id))';
+        $params = [':statut' => 'actif', ':ecole_id' => $ecoleId];
+        if ($sectionId !== null) {
+            $sql .= ' AND EXISTS (SELECT 1 FROM inscriptions section_i '
+                . 'INNER JOIN classes section_c ON section_c.id = section_i.classe_id '
+                . 'WHERE section_i.eleve_id = e.id AND section_c.ecole_id = :section_school '
+                . 'AND section_c.section_id = :section_id)';
+            $params[':section_school'] = $ecoleId;
+            $params[':section_id'] = $sectionId;
+        }
+        $stmt = $db->prepare($sql . ' ORDER BY e.nom ASC, e.postnom ASC, e.prenom ASC');
+        $stmt->execute($params);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -181,7 +197,7 @@ class Eleve
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public static function getAllBySchool(int $ecoleId, ?int $classeId = null): array
+    public static function getAllBySchool(int $ecoleId, ?int $classeId = null, ?int $sectionId = null): array
     {
         $db = Database::getConnection();
         $sql =
@@ -193,7 +209,8 @@ class Eleve
             . 'LEFT JOIN parents p ON e.parent_id = p.id '
             . 'LEFT JOIN inscriptions i ON i.id = ('
             . 'SELECT i2.id FROM inscriptions i2 WHERE i2.eleve_id = e.id '
-            . 'AND i2.classe_id IN (SELECT c2.id FROM classes c2 WHERE c2.ecole_id = :inscription_school) '
+            . 'AND i2.classe_id IN (SELECT c2.id FROM classes c2 WHERE c2.ecole_id = :inscription_school'
+            . ($sectionId !== null ? ' AND c2.section_id = :inscription_section' : '') . ') '
             . 'ORDER BY i2.date_inscription DESC, i2.id DESC LIMIT 1) '
             . 'LEFT JOIN classes c ON c.id = i.classe_id '
             . 'LEFT JOIN sections s ON s.id = c.section_id '
@@ -203,6 +220,16 @@ class Eleve
             . 'SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id '
             . 'WHERE i.eleve_id = e.id AND c.ecole_id = :ecole_id))';
         $params = [':ecole_id' => $ecoleId, ':inscription_school' => $ecoleId];
+
+        if ($sectionId !== null) {
+            $sql .= ' AND EXISTS (SELECT 1 FROM inscriptions section_i '
+                . 'INNER JOIN classes section_c ON section_c.id = section_i.classe_id '
+                . 'WHERE section_i.eleve_id = e.id AND section_c.ecole_id = :section_school '
+                . 'AND section_c.section_id = :section_id)';
+            $params[':inscription_section'] = $sectionId;
+            $params[':section_school'] = $ecoleId;
+            $params[':section_id'] = $sectionId;
+        }
 
         if ($classeId !== null && $classeId > 0) {
             $sql .= ' AND EXISTS (SELECT 1 FROM inscriptions ic INNER JOIN classes cc ON ic.classe_id = cc.id '
@@ -486,17 +513,25 @@ class Eleve
         return $eleve ?: null;
     }
 
-    public static function findByIdAndSchool(int $id, int $ecoleId): ?array
+    public static function findByIdAndSchool(int $id, int $ecoleId, ?int $sectionId = null): ?array
     {
         $db = Database::getConnection();
-        $stmt = $db->prepare(
+        $sql =
             'SELECT e.* FROM eleves e '
             . 'WHERE e.id = :id AND (e.ecole_id = :ecole_id OR EXISTS ('
             . 'SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id '
-            . 'WHERE i.eleve_id = e.id AND c.ecole_id = :ecole_id)) '
-            . 'LIMIT 1'
-        );
-        $stmt->execute([':id' => $id, ':ecole_id' => $ecoleId]);
+            . 'WHERE i.eleve_id = e.id AND c.ecole_id = :ecole_id))';
+        $params = [':id' => $id, ':ecole_id' => $ecoleId];
+        if ($sectionId !== null) {
+            $sql .= ' AND EXISTS (SELECT 1 FROM inscriptions section_i '
+                . 'INNER JOIN classes section_c ON section_c.id = section_i.classe_id '
+                . 'WHERE section_i.eleve_id = e.id AND section_c.ecole_id = :section_school '
+                . 'AND section_c.section_id = :section_id)';
+            $params[':section_school'] = $ecoleId;
+            $params[':section_id'] = $sectionId;
+        }
+        $stmt = $db->prepare($sql . ' LIMIT 1');
+        $stmt->execute($params);
         $eleve = $stmt->fetch(PDO::FETCH_ASSOC);
 
         return $eleve ?: null;

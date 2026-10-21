@@ -40,8 +40,13 @@ class InscriptionsController extends Controller
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
-        $pendingStudents = $ecoleId > 0 ? Eleve::getPendingBySchool($ecoleId) : Eleve::getPending();
-        $enrolledStudents = $ecoleId > 0 ? Eleve::getEnrolledBySchool($ecoleId) : [];
+        $sectionScopeId = $this->getSectionScopeForUser($user);
+        $pendingStudents = $ecoleId > 0
+            ? Eleve::getPendingBySchool($ecoleId, $sectionScopeId)
+            : Eleve::getPending();
+        $enrolledStudents = $ecoleId > 0
+            ? Eleve::getEnrolledBySchool($ecoleId, $sectionScopeId)
+            : [];
         $sections = Section::getAll();
         $options = $ecoleId > 0 ? Option::getAllForSchool($ecoleId) : Option::getAll();
 

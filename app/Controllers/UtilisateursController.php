@@ -6,6 +6,7 @@ use App\Core\Auth;
 use App\Core\Controller;
 use App\Entities\Roles;
 use App\Models\Ecole;
+use App\Models\Section;
 use App\Models\User;
 
 class UtilisateursController extends Controller
@@ -127,6 +128,7 @@ class UtilisateursController extends Controller
             'inactiveUsers' => $inactiveUsers,
             'unassignedUsers' => $unassignedUsers,
             'schools' => $schools,
+            'sections' => Section::getAll(),
             'schoolNamesById' => $schoolNamesById,
             'schoolDetailsById' => $schoolDetailsById,
             'currentSchoolLogoUrl' => $currentSchoolLogoUrl,
@@ -145,6 +147,7 @@ class UtilisateursController extends Controller
         $role = (string) ($_POST['role'] ?? '');
         $statut = (string) ($_POST['statut'] ?? '');
         $ecoleId = (int) ($_POST['ecole_id'] ?? 0);
+        $sectionId = (int) ($_POST['section_id'] ?? 0);
         $targetUser = $userId > 0 ? User::findById($userId) : null;
         $errors = [];
 
@@ -172,7 +175,30 @@ class UtilisateursController extends Controller
             $ecoleId = null;
         }
 
-        if (empty($errors) && User::updateAccess($userId, $role, $statut, $ecoleId > 0 ? $ecoleId : null)) {
+        $sectionScopedRoles = ['préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école'];
+        if (in_array($role, $sectionScopedRoles, true)) {
+            $section = $sectionId > 0 ? Section::findById($sectionId) : null;
+            $sectionName = mb_strtolower(trim((string) ($section['nom_section'] ?? '')), 'UTF-8');
+            $allowedSectionNames = in_array($role, ['préfet_école', 'DE_école', 'DD_école'], true)
+                ? ['secondaire']
+                : ['primaire', 'maternelle'];
+            if (!$section || !in_array($sectionName, $allowedSectionNames, true)) {
+                $errors[] = 'La section sélectionnée ne correspond pas aux responsabilités de ce rôle.';
+            }
+        } else {
+            $sectionId = 0;
+        }
+
+        if (
+            empty($errors)
+            && User::updateAccess(
+                $userId,
+                $role,
+                $statut,
+                $ecoleId > 0 ? $ecoleId : null,
+                $sectionId > 0 ? $sectionId : null
+            )
+        ) {
             $_SESSION['utilisateurs_success'] = 'Les accès de l’utilisateur ont été mis à jour.';
         } else {
             $_SESSION['utilisateurs_errors'] = $errors ?: ['Impossible de mettre à jour les accès.'];

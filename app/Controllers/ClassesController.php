@@ -42,10 +42,11 @@ class ClassesController extends Controller
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        $sectionScopeId = $this->getSectionScopeForUser($user);
         $classes = [];
 
         if ($ecoleId > 0) {
-            $classes = Classe::getAllBySchool($ecoleId);
+            $classes = Classe::getAllBySchool($ecoleId, $sectionScopeId);
         }
 
         $this->view('classes/index', [
@@ -68,8 +69,18 @@ class ClassesController extends Controller
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
-        $sections = Section::getAll();
-        $options = $ecoleId > 0 ? Option::getAllForSchool($ecoleId) : [];
+        $sectionScopeId = $this->getSectionScopeForUser($user);
+        $sections = $sectionScopeId === null
+            ? Section::getAll()
+            : array_values(array_filter(
+                Section::getAllForSchool($ecoleId),
+                static fn (array $section): bool => (int) $section['id'] === $sectionScopeId
+            ));
+        $options = $ecoleId > 0
+            ? ($sectionScopeId === null
+                ? Option::getAllForSchool($ecoleId)
+                : Option::getAllForSchoolAndSection($ecoleId, $sectionScopeId))
+            : [];
         $oldInput = $_SESSION['class_old'] ?? [];
         unset($_SESSION['class_old']);
 
@@ -103,7 +114,14 @@ class ClassesController extends Controller
         $nomClasse = trim((string) ($_POST['nom_classe'] ?? ''));
         $sectionId = (int) ($_POST['section_id'] ?? 0);
         $optionId = (int) ($_POST['option_id'] ?? 0);
-        $errors = $this->validateClassData($ecoleId, $role, $nomClasse, $sectionId, $optionId);
+        $errors = $this->validateClassData(
+            $ecoleId,
+            $role,
+            $nomClasse,
+            $sectionId,
+            $optionId,
+            $this->getSectionScopeForUser($user)
+        );
 
         if (empty($errors) && Classe::nameExists($ecoleId, $sectionId, $optionId, $nomClasse)) {
             $errors[] = 'Une classe portant ce nom existe déjà dans cette section et cette option.';
@@ -144,8 +162,11 @@ class ClassesController extends Controller
 
         $user = Auth::refresh() ?: Auth::user();
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        $sectionScopeId = $this->getSectionScopeForUser($user);
         $id = (int) ($_GET['id'] ?? 0);
-        $classe = $id > 0 && $ecoleId > 0 ? Classe::findByIdForSchool($id, $ecoleId) : null;
+        $classe = $id > 0 && $ecoleId > 0
+            ? Classe::findByIdForSchool($id, $ecoleId, $sectionScopeId)
+            : null;
         if (!$classe) {
             $_SESSION['classes_errors'] = ['Classe introuvable ou non rattachée à votre école.'];
             $this->redirect('/classes');
@@ -161,8 +182,15 @@ class ClassesController extends Controller
             'role' => $role,
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $this->getModulesForRole($role),
-            'sections' => Section::getAll(),
-            'options' => Option::getAllForSchool($ecoleId),
+            'sections' => $sectionScopeId === null
+                ? Section::getAll()
+                : array_values(array_filter(
+                    Section::getAllForSchool($ecoleId),
+                    static fn (array $section): bool => (int) $section['id'] === $sectionScopeId
+                )),
+            'options' => $sectionScopeId === null
+                ? Option::getAllForSchool($ecoleId)
+                : Option::getAllForSchoolAndSection($ecoleId, $sectionScopeId),
             'oldInput' => $oldInput,
             'isEditing' => true,
             'classe' => $classe,
@@ -180,8 +208,11 @@ class ClassesController extends Controller
 
         $user = Auth::refresh() ?: Auth::user();
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        $sectionScopeId = $this->getSectionScopeForUser($user);
         $id = (int) ($_POST['id'] ?? 0);
-        $classe = $id > 0 && $ecoleId > 0 ? Classe::findByIdForSchool($id, $ecoleId) : null;
+        $classe = $id > 0 && $ecoleId > 0
+            ? Classe::findByIdForSchool($id, $ecoleId, $sectionScopeId)
+            : null;
         if (!$classe) {
             $_SESSION['classes_errors'] = ['Classe introuvable ou non rattachée à votre école.'];
             $this->redirect('/classes');
@@ -191,7 +222,14 @@ class ClassesController extends Controller
         $nomClasse = trim((string) ($_POST['nom_classe'] ?? ''));
         $sectionId = (int) ($_POST['section_id'] ?? 0);
         $optionId = (int) ($_POST['option_id'] ?? 0);
-        $errors = $this->validateClassData($ecoleId, (string) ($user['role'] ?? ''), $nomClasse, $sectionId, $optionId);
+        $errors = $this->validateClassData(
+            $ecoleId,
+            (string) ($user['role'] ?? ''),
+            $nomClasse,
+            $sectionId,
+            $optionId,
+            $sectionScopeId
+        );
         if (Classe::nameExists($ecoleId, $sectionId, $optionId, $nomClasse, $id)) {
             $errors[] = 'Une classe portant ce nom existe déjà dans cette section et cette option.';
         }
@@ -245,8 +283,11 @@ class ClassesController extends Controller
 
         $user = Auth::refresh() ?: Auth::user();
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        $sectionScopeId = $this->getSectionScopeForUser($user);
         $id = (int) ($_POST['id'] ?? 0);
-        $classe = $id > 0 && $ecoleId > 0 ? Classe::findByIdForSchool($id, $ecoleId) : null;
+        $classe = $id > 0 && $ecoleId > 0
+            ? Classe::findByIdForSchool($id, $ecoleId, $sectionScopeId)
+            : null;
         if (!$classe) {
             $_SESSION['classes_errors'] = ['Classe introuvable ou non rattachée à votre école.'];
             $this->redirect('/classes');
@@ -275,7 +316,14 @@ class ClassesController extends Controller
         $this->redirect('/classes');
     }
 
-    private function validateClassData(int $ecoleId, string $role, string $nomClasse, int $sectionId, int $optionId): array
+    private function validateClassData(
+        int $ecoleId,
+        string $role,
+        string $nomClasse,
+        int $sectionId,
+        int $optionId,
+        ?int $sectionScopeId = null
+    ): array
     {
         $errors = [];
         if ($ecoleId <= 0) {
@@ -290,6 +338,9 @@ class ClassesController extends Controller
             $errors[] = 'La section sélectionnée est invalide.';
         } elseif (!$this->isAllowedClassLevel($nomClasse, $sectionId)) {
             $errors[] = 'Le niveau doit respecter la section : maternelle 1 à 3, primaire 1 à 6, secondaire 7e, 8e ou 1e à 4e.';
+        }
+        if ($sectionScopeId !== null && $sectionId !== $sectionScopeId) {
+            $errors[] = 'Vous n’êtes pas autorisé à gérer des classes hors de votre section.';
         }
         if (!in_array($role, self::PRIMARY_ROLES, true) && $sectionId !== 1 && $sectionId !== 2) {
             $errors[] = 'Vous n’êtes pas autorisé à créer une classe hors primaire ou maternelle.';

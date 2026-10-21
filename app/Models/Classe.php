@@ -7,18 +7,21 @@ use PDO;
 
 class Classe
 {
-    public static function getAllBySchool(int $ecoleId): array
+    public static function getAllBySchool(int $ecoleId, ?int $sectionId = null): array
     {
         $db = Database::getConnection();
-        $stmt = $db->prepare(
-            'SELECT c.*, s.nom_section, o.nom_option
-             FROM classes c
-             LEFT JOIN sections s ON c.section_id = s.id
-             LEFT JOIN options o ON c.option_id = o.id
-             WHERE c.ecole_id = :ecole_id
-             ORDER BY c.nom_classe ASC'
-        );
-        $stmt->execute([':ecole_id' => $ecoleId]);
+        $sql = 'SELECT c.*, s.nom_section, o.nom_option
+                FROM classes c
+                LEFT JOIN sections s ON c.section_id = s.id
+                LEFT JOIN options o ON c.option_id = o.id
+                WHERE c.ecole_id = :ecole_id';
+        $params = [':ecole_id' => $ecoleId];
+        if ($sectionId !== null) {
+            $sql .= ' AND c.section_id = :section_id';
+            $params[':section_id'] = $sectionId;
+        }
+        $stmt = $db->prepare($sql . ' ORDER BY c.nom_classe ASC');
+        $stmt->execute($params);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -78,11 +81,17 @@ class Classe
         return $classe ?: null;
     }
 
-    public static function findByIdForSchool(int $id, int $ecoleId): ?array
+    public static function findByIdForSchool(int $id, int $ecoleId, ?int $sectionId = null): ?array
     {
         $db = Database::getConnection();
-        $stmt = $db->prepare('SELECT * FROM classes WHERE id = :id AND ecole_id = :ecole_id LIMIT 1');
-        $stmt->execute([':id' => $id, ':ecole_id' => $ecoleId]);
+        $sql = 'SELECT * FROM classes WHERE id = :id AND ecole_id = :ecole_id';
+        $params = [':id' => $id, ':ecole_id' => $ecoleId];
+        if ($sectionId !== null) {
+            $sql .= ' AND section_id = :section_id';
+            $params[':section_id'] = $sectionId;
+        }
+        $stmt = $db->prepare($sql . ' LIMIT 1');
+        $stmt->execute($params);
         $classe = $stmt->fetch(PDO::FETCH_ASSOC);
 
         return $classe ?: null;

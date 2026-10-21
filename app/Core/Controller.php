@@ -261,4 +261,25 @@ class Controller
             $this->redirect('/error/accessDenied');
         }
     }
+
+    protected function getSectionScopeForUser(array $user): ?int
+    {
+        $role = (string) ($user['role'] ?? '');
+        if (in_array($role, ['préfet_école', 'DE_école', 'DD_école'], true)) {
+            return \App\Models\User::getDefaultSectionIdForRole($role) ?? 0;
+        }
+
+        if (in_array($role, ['DP_école', 'DA_école'], true)) {
+            $sectionId = (int) ($user['section_id'] ?? 0);
+            $section = $sectionId > 0 ? \App\Models\Section::findById($sectionId) : null;
+            $sectionName = mb_strtolower(trim((string) ($section['nom_section'] ?? '')), 'UTF-8');
+            if (in_array($sectionName, ['primaire', 'maternelle'], true)) {
+                return $sectionId;
+            }
+
+            return \App\Models\User::getDefaultSectionIdForRole($role) ?? 0;
+        }
+
+        return null;
+    }
 }
