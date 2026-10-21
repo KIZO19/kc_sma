@@ -376,6 +376,12 @@ foreach ($parents as $parent) {
             updateTerritories(this.value, '');
           });
 
+          territoireSelect && territoireSelect.addEventListener('change', function () {
+            legacyFields.forEach(function (field) {
+              if (field) field.value = '';
+            });
+          });
+
           function updateTerritories(province, selected) {
             const isKinshasa = province === 'Kinshasa';
             const placeholder = isKinshasa ? 'Sélectionnez une commune' : 'Sélectionnez un territoire';

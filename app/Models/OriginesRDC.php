@@ -111,10 +111,9 @@ class OriginesRDC
                 'Masina', 'Lemba', 'Bandalungwa', 'Barumbu', 'Bumbu', 'Gombe',
                 'Kalamu', 'Kasavubu', 'Kimbanseke', 'Kinshasa', 'Kintambo',
                 'Kinsenso', 'Limete', 'Lingwala', 'Maluku', 'Matete', 'Makala',
-                'Mont-Ngafula', 'N’Djili', 'Ngaba', 'Ngaliema', 'Ngiri-Ngiri',
+                'Mont-Ngafula', 'Ndjili', 'Ngaba', 'Ngaliema', 'Ngiri-Ngiri',
                 'Nsele', 'Selembao',
             ],
-            'territoire_label' => 'Commune',
         ],
     ];
 
@@ -135,11 +134,6 @@ class OriginesRDC
     public static function isKnownProvince(string $province): bool
     {
         return isset(self::PROVINCES[self::normalizeProvince($province)]);
-    }
-
-    public static function territoryLabel(string $province): string
-    {
-        return self::PROVINCES[self::normalizeProvince($province)]['territoire_label'] ?? 'Territoire';
     }
 
     public static function normalizeProvince(string $province): string

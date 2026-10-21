@@ -4,6 +4,8 @@ $parents = $parents ?? [];
 $sections = $sections ?? [];
 $options = $options ?? [];
 $oldInput = $oldInput ?? [];
+$selectedSectionName = mb_strtolower(trim((string) ($selectedSection['nom_section'] ?? '')), 'UTF-8');
+$showRegistrationOptions = $selectedSectionName === 'secondaire';
 $pageStyles = <<<STYLE
 <style>
   .registration-card { width: 100%; border-radius: 1rem; overflow: hidden; }
@@ -177,7 +179,7 @@ STYLE;
                         <span class="registration-section-step">2</span>
                         <div>
                           <h4 id="registration-school-heading">Affectation scolaire</h4>
-                          <p>Choisissez la section, l’option et la classe d’inscription.</p>
+                          <p>Choisissez la section, l’option (pour le secondaire) et la classe d’inscription.</p>
                         </div>
                       </div>
                     <div class="mb-3">
@@ -188,13 +190,13 @@ STYLE;
                             <option value="">Sélectionnez une section</option>
                             <?php foreach ($sections as $section): ?>
                               <?php $sectionValue = (int) ($oldInput['section_id'] ?? ($selectedSection['id'] ?? 0)); ?>
-                              <option value="<?= (int) $section['id'] ?>" <?= $sectionValue === (int) $section['id'] ? 'selected' : '' ?>><?= htmlspecialchars($section['nom_section']) ?></option>
+                              <option value="<?= (int) $section['id'] ?>" data-section-name="<?= htmlspecialchars(mb_strtolower(trim((string) $section['nom_section']), 'UTF-8'), ENT_QUOTES, 'UTF-8') ?>" <?= $sectionValue === (int) $section['id'] ? 'selected' : '' ?>><?= htmlspecialchars($section['nom_section']) ?></option>
                             <?php endforeach; ?>
                           </select>
                         </div>
-                        <div class="col-md-6 mb-3">
-                          <label class="form-label">Option <span class="text-danger">*</span></label>
-                          <select id="registration-option-select" name="option_id" class="form-select" required disabled>
+                        <div class="col-md-6 mb-3" id="registration-option-group" <?= $showRegistrationOptions ? '' : 'hidden' ?>>
+                          <label class="form-label" for="registration-option-select">Option <span class="text-danger">*</span></label>
+                          <select id="registration-option-select" name="option_id" class="form-select" <?= $showRegistrationOptions ? 'required' : 'disabled' ?>>
                             <option value="">Sélectionnez une option</option>
                             <?php foreach ($options as $option): ?>
                               <?php $optionValue = (int) ($oldInput['option_id'] ?? ($selectedOption['id'] ?? 0)); ?>
@@ -359,9 +361,10 @@ STYLE;
         document.addEventListener('DOMContentLoaded', function () {
           const sectionSelect = document.getElementById('registration-section-select');
           const optionSelect = document.getElementById('registration-option-select');
+          const optionGroup = document.getElementById('registration-option-group');
           const classSelect = document.getElementById('registration-classe-select');
           const classHelp = document.getElementById('registration-class-help');
-          if (!sectionSelect || !optionSelect || !classSelect) return;
+          if (!sectionSelect || !optionSelect || !optionGroup || !classSelect) return;
 
           const options = Array.from(optionSelect.options).slice(1).map((item) => ({
             value: item.value,
@@ -377,10 +380,14 @@ STYLE;
 
           function refreshOptions() {
             const sectionId = sectionSelect.value;
+            const selectedSection = sectionSelect.selectedOptions[0];
+            const isSecondary = selectedSection?.dataset.sectionName === 'secondaire';
             const currentValue = optionSelect.value;
-            optionSelect.disabled = !sectionId;
+            optionGroup.hidden = !isSecondary;
+            optionSelect.disabled = !isSecondary;
+            optionSelect.required = isSecondary;
             optionSelect.innerHTML = '<option value="">Sélectionnez une option</option>';
-            options.filter((item) => !sectionId || item.sectionId === sectionId).forEach((item) => {
+            options.filter((item) => isSecondary && item.sectionId === sectionId).forEach((item) => {
               const option = document.createElement('option');
               option.value = item.value;
               option.textContent = item.label;
@@ -396,11 +403,12 @@ STYLE;
 
           function refreshClasses() {
             const sectionId = sectionSelect.value;
+            const isSecondary = sectionSelect.selectedOptions[0]?.dataset.sectionName === 'secondaire';
             const optionId = optionSelect.value;
             const currentValue = classSelect.value;
             classSelect.innerHTML = '<option value="">Sélectionnez une classe</option>';
-            const matchingClasses = sectionId && optionId
-              ? classes.filter((item) => item.sectionId === sectionId && item.optionId === optionId)
+            const matchingClasses = sectionId && (isSecondary ? optionId : true)
+              ? classes.filter((item) => item.sectionId === sectionId && item.optionId === (isSecondary ? optionId : '0'))
               : [];
             matchingClasses.forEach((item) => {
               const option = document.createElement('option');
@@ -413,10 +421,12 @@ STYLE;
             classSelect.disabled = matchingClasses.length === 0;
 
             if (classHelp) {
-              classHelp.textContent = !sectionId || !optionId
-                ? 'Sélectionnez d’abord une section et une option.'
+              classHelp.textContent = !sectionId || (isSecondary && !optionId)
+                ? (isSecondary ? 'Sélectionnez d’abord une section et une option.' : 'Sélectionnez une section.')
                 : matchingClasses.length === 0
-                  ? 'Aucune classe n’est disponible pour cette section et cette option.'
+                  ? (isSecondary
+                    ? 'Aucune classe n’est disponible pour cette section et cette option.'
+                    : 'Aucune classe sans option n’est disponible dans cette section.')
                   : 'Sélectionnez la classe où l’élève doit être inscrit.';
             }
           }

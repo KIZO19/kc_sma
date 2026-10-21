@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Core\Auth;
 use App\Core\Controller;
+use App\Entities\Roles;
 use App\Models\AnneeScolaire;
 use App\Models\Evenement;
 use App\Models\User;
@@ -40,6 +41,7 @@ class EvenementsController extends Controller
         }
 
         Evenement::ensureAuthorColumn();
+        Evenement::ensureAudienceRolesColumn();
         $activeYear = AnneeScolaire::getActiveBySchool($schoolId);
         $token = (string) ($_SESSION['evenement_form_token'] ?? '');
         if ($token === '') {
@@ -59,12 +61,33 @@ class EvenementsController extends Controller
             'modules' => $this->getModulesForRole($role),
             'events' => Evenement::getAllBySchool($schoolId),
             'categories' => Evenement::getCategories(),
+            'audienceRoles' => array_diff_key(Roles::list(), ['super_admin' => true]),
             'activeYear' => $activeYear,
             'canPlan' => in_array($role, self::PLANNER_ROLES, true),
             'formToken' => $token,
             'success' => $success,
             'error' => $error,
         ]);
+    }
+
+    public function openNotification(): void
+    {
+        Auth::requireAuth();
+        $user = Auth::refresh() ?: Auth::user();
+        $notificationId = filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT);
+        if (!$user || !$notificationId || $notificationId <= 0) {
+            $this->redirect('/dashboard');
+        }
+
+        $eventId = \App\Models\EvenementNotification::markReadAndGetEventId(
+            $notificationId,
+            (int) $user['id']
+        );
+        if ($eventId === null) {
+            $this->redirect('/evenements');
+        }
+
+        $this->redirect('/evenements#event-' . $eventId);
     }
 
     public function store(): void
@@ -84,6 +107,9 @@ class EvenementsController extends Controller
         $error = $this->validateEventData($event);
         if ($error !== null) {
             $this->fail($error);
+        }
+        if ($event['nouvelle_categorie'] !== '') {
+            $event['categorie_id'] = Evenement::findOrCreateCategory($event['nouvelle_categorie']);
         }
         if (!Evenement::categoryExists((int) $event['categorie_id'])) {
             $this->fail('La catégorie sélectionnée n’est pas valide.');
@@ -166,6 +192,7 @@ class EvenementsController extends Controller
         }
 
         Evenement::ensureAuthorColumn();
+        Evenement::ensureAudienceRolesColumn();
         return $user;
     }
 
@@ -185,7 +212,26 @@ class EvenementsController extends Controller
             'date_fin' => trim((string) ($_POST['date_fin'] ?? '')),
             'lieu' => trim((string) ($_POST['lieu'] ?? '')),
             'categorie_id' => (int) ($_POST['categorie_id'] ?? 0),
+            'nouvelle_categorie' => trim((string) ($_POST['nouvelle_categorie'] ?? '')),
+            'audience_roles' => $this->readAudienceRoles(),
         ];
+    }
+
+    private function readAudienceRoles(): array
+    {
+        $submitted = $_POST['audience_roles'] ?? [];
+        if (!is_array($submitted)) {
+            return [];
+        }
+
+        $allowedRoles = array_keys(array_diff_key(Roles::list(), ['super_admin' => true]));
+        $roles = array_values(array_unique(array_filter(
+            array_map('strval', $submitted),
+            static fn (string $role): bool => in_array($role, $allowedRoles, true)
+        )));
+        sort($roles);
+
+        return $roles;
     }
 
     private function validateEventData(array &$event): ?string
@@ -199,8 +245,14 @@ class EvenementsController extends Controller
         if (mb_strlen($event['lieu']) > 150) {
             return 'Le lieu ne peut dépasser 150 caractères.';
         }
-        if ((int) $event['categorie_id'] <= 0) {
-            return 'Veuillez sélectionner une catégorie.';
+        if (mb_strlen($event['nouvelle_categorie']) > 100) {
+            return 'Le nom de la catégorie ne peut dépasser 100 caractères.';
+        }
+        if ((int) $event['categorie_id'] <= 0 && $event['nouvelle_categorie'] === '') {
+            return 'Sélectionnez une catégorie ou saisissez-en une nouvelle.';
+        }
+        if ($event['audience_roles'] === []) {
+            return 'Sélectionnez au moins un rôle destinataire pour l’événement.';
         }
 
         $start = \DateTimeImmutable::createFromFormat('!Y-m-d\TH:i', $event['date_debut']);

@@ -8,6 +8,7 @@ use PDO;
 class Evenement
 {
     private static bool $authorColumnReady = false;
+    private static bool $audienceRolesColumnReady = false;
 
     public static function ensureAuthorColumn(): void
     {
@@ -33,6 +34,21 @@ class Evenement
         self::$authorColumnReady = true;
     }
 
+    public static function ensureAudienceRolesColumn(): void
+    {
+        if (self::$audienceRolesColumnReady) {
+            return;
+        }
+
+        $db = Database::getConnection();
+        $column = $db->query("SHOW COLUMNS FROM evenements LIKE 'audience_roles'")->fetch();
+        if (!$column) {
+            $db->exec('ALTER TABLE evenements ADD COLUMN audience_roles TEXT DEFAULT NULL AFTER categorie_id');
+        }
+
+        self::$audienceRolesColumnReady = true;
+    }
+
     public static function getCategories(): array
     {
         $stmt = Database::getConnection()->query(
@@ -50,8 +66,29 @@ class Evenement
         return (bool) $stmt->fetchColumn();
     }
 
+    public static function findOrCreateCategory(string $categoryName): int
+    {
+        $db = Database::getConnection();
+        $find = $db->prepare(
+            'SELECT id FROM categories_evenements WHERE nom_categorie = :nom_categorie LIMIT 1'
+        );
+        $find->execute([':nom_categorie' => $categoryName]);
+        $categoryId = $find->fetchColumn();
+        if ($categoryId !== false) {
+            return (int) $categoryId;
+        }
+
+        $create = $db->prepare(
+            'INSERT INTO categories_evenements (nom_categorie) VALUES (:nom_categorie)'
+        );
+        $create->execute([':nom_categorie' => $categoryName]);
+
+        return (int) $db->lastInsertId();
+    }
+
     public static function getAllBySchool(int $schoolId): array
     {
+        self::ensureAudienceRolesColumn();
         $stmt = Database::getConnection()->prepare(
             'SELECT e.*, c.nom_categorie, u.nom_complet AS auteur_nom
              FROM evenements e
@@ -66,13 +103,14 @@ class Evenement
 
     public static function create(array $data): void
     {
+        self::ensureAudienceRolesColumn();
         $stmt = Database::getConnection()->prepare(
             'INSERT INTO evenements (
                 ecole_id, titre, description, date_debut, date_fin, lieu,
-                categorie_id, organisateur_id, annee_scolaire_id, auteur_user_id
+                categorie_id, audience_roles, organisateur_id, annee_scolaire_id, auteur_user_id
              ) VALUES (
                 :ecole_id, :titre, :description, :date_debut, :date_fin, :lieu,
-                :categorie_id, NULL, :annee_scolaire_id, :auteur_user_id
+                :categorie_id, :audience_roles, NULL, :annee_scolaire_id, :auteur_user_id
              )'
         );
         $stmt->execute([
@@ -83,6 +121,7 @@ class Evenement
             ':date_fin' => $data['date_fin'],
             ':lieu' => $data['lieu'] !== '' ? $data['lieu'] : null,
             ':categorie_id' => $data['categorie_id'],
+            ':audience_roles' => json_encode($data['audience_roles'], JSON_UNESCAPED_UNICODE),
             ':annee_scolaire_id' => $data['annee_scolaire_id'],
             ':auteur_user_id' => $data['auteur_user_id'],
         ]);
@@ -90,11 +129,13 @@ class Evenement
 
     public static function updateOwned(int $id, int $schoolId, int $authorId, array $data): bool
     {
+        self::ensureAudienceRolesColumn();
         $db = Database::getConnection();
         $stmt = $db->prepare(
             'UPDATE evenements
              SET titre = :titre, description = :description, date_debut = :date_debut,
-                 date_fin = :date_fin, lieu = :lieu, categorie_id = :categorie_id
+                 date_fin = :date_fin, lieu = :lieu, categorie_id = :categorie_id,
+                 audience_roles = :audience_roles
              WHERE id = :id AND ecole_id = :ecole_id AND auteur_user_id = :auteur_user_id'
         );
         $stmt->execute([
@@ -104,6 +145,7 @@ class Evenement
             ':date_fin' => $data['date_fin'],
             ':lieu' => $data['lieu'] !== '' ? $data['lieu'] : null,
             ':categorie_id' => $data['categorie_id'],
+            ':audience_roles' => json_encode($data['audience_roles'], JSON_UNESCAPED_UNICODE),
             ':id' => $id,
             ':ecole_id' => $schoolId,
             ':auteur_user_id' => $authorId,

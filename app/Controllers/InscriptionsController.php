@@ -176,8 +176,25 @@ class InscriptionsController extends Controller
             if ($sectionScopeId !== null && $sectionId !== $sectionScopeId) {
                 $errors[] = 'Vous ne pouvez inscrire des élèves que dans la section secondaire.';
             }
-            if ($optionId <= 0) {
+            $selectedSection = $sectionId > 0 ? Section::findById($sectionId) : null;
+            $isSecondarySection = mb_strtolower(
+                trim((string) ($selectedSection['nom_section'] ?? '')),
+                'UTF-8'
+            ) === 'secondaire';
+            if ($sectionId > 0 && !$selectedSection) {
+                $errors[] = 'La section sélectionnée est invalide.';
+            }
+            if ($isSecondarySection && $optionId <= 0) {
                 $errors[] = 'L’option de l’élève est requise pour l’inscription.';
+            } elseif (!$isSecondarySection && $optionId > 0) {
+                $errors[] = 'Les options sont réservées aux inscriptions en section secondaire.';
+            } elseif ($isSecondarySection) {
+                $option = $ecoleId > 0
+                    ? Option::findByIdForSchool($optionId, $ecoleId)
+                    : Option::findById($optionId);
+                if (!$option || (int) ($option['section_id'] ?? 0) !== $sectionId) {
+                    $errors[] = 'L’option sélectionnée ne correspond pas à la section secondaire.';
+                }
             }
             $birthDate = \DateTime::createFromFormat('Y-m-d', $dateNaissance);
             if (!$birthDate || $birthDate->format('Y-m-d') !== $dateNaissance) {
@@ -299,9 +316,9 @@ class InscriptionsController extends Controller
                         'nom_mere' => trim($_POST['nom_mere'] ?? null),
                         'province_origine' => OriginesRDC::normalizeProvince(trim((string) ($_POST['province_origine'] ?? ''))),
                         'territoire' => trim($_POST['territoire'] ?? null),
-                        'secteur' => trim($_POST['secteur'] ?? null),
-                        'groupement' => trim($_POST['groupement'] ?? null),
-                        'village' => trim($_POST['village'] ?? null),
+                        'secteur' => isset($_POST['secteur']) ? trim((string) $_POST['secteur']) : null,
+                        'groupement' => isset($_POST['groupement']) ? trim((string) $_POST['groupement']) : null,
+                        'village' => isset($_POST['village']) ? trim((string) $_POST['village']) : null,
                         'num_permanent' => trim($_POST['num_permanent'] ?? null),
                         'statut_eleve' => 'inactif',
                     ]);
@@ -727,9 +744,9 @@ class InscriptionsController extends Controller
                     'nom_mere' => trim($_POST['nom_mere'] ?? null),
                     'province_origine' => OriginesRDC::normalizeProvince(trim((string) ($_POST['province_origine'] ?? ''))),
                     'territoire' => trim($_POST['territoire'] ?? null),
-                    'secteur' => trim($_POST['secteur'] ?? null),
-                    'groupement' => trim($_POST['groupement'] ?? null),
-                    'village' => trim($_POST['village'] ?? null),
+                    'secteur' => isset($_POST['secteur']) ? trim((string) $_POST['secteur']) : null,
+                    'groupement' => isset($_POST['groupement']) ? trim((string) $_POST['groupement']) : null,
+                    'village' => isset($_POST['village']) ? trim((string) $_POST['village']) : null,
                     'num_permanent' => trim($_POST['num_permanent'] ?? null),
                 ];
 
@@ -840,52 +857,6 @@ class InscriptionsController extends Controller
         header('Content-Type: application/json');
         $province = trim($_GET['province'] ?? '');
         echo json_encode(OriginesRDC::territoriesFor($province), JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-
-    public function secteurs(): void
-    {
-        Auth::requireAuth();
-        $this->requireAdministrationModuleAccess(Auth::refresh() ?: Auth::user(), 'inscriptions');
-        header('Content-Type: application/json');
-        $territoire = trim($_GET['territoire'] ?? '');
-        $map = [
-            'Goma' => ['Sector 1','Sector 2'],
-            'Beni' => ['Beni-Centre','Mabalako'],
-            'Lubumbashi' => ['Kawama','Katanga-Centre']
-        ];
-        $list = $map[$territoire] ?? [];
-        echo json_encode(array_values($list));
-        exit;
-    }
-
-    public function groupements(): void
-    {
-        Auth::requireAuth();
-        $this->requireAdministrationModuleAccess(Auth::refresh() ?: Auth::user(), 'inscriptions');
-        header('Content-Type: application/json');
-        $secteur = trim($_GET['secteur'] ?? '');
-        $map = [
-            'Sector 1' => ['Group A','Group B'],
-            'Beni-Centre' => ['Group X','Group Y']
-        ];
-        $list = $map[$secteur] ?? [];
-        echo json_encode(array_values($list));
-        exit;
-    }
-
-    public function villages(): void
-    {
-        Auth::requireAuth();
-        $this->requireAdministrationModuleAccess(Auth::refresh() ?: Auth::user(), 'inscriptions');
-        header('Content-Type: application/json');
-        $groupement = trim($_GET['groupement'] ?? '');
-        $map = [
-            'Group A' => ['Village 1','Village 2'],
-            'Group X' => ['Village X1','Village X2']
-        ];
-        $list = $map[$groupement] ?? [];
-        echo json_encode(array_values($list));
         exit;
     }
 

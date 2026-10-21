@@ -44,8 +44,6 @@ $displayDate = static fn ($value): string =>
         <div class="card-body">
           <?php if (!$activeYear): ?>
             <div class="alert alert-warning mb-0">Aucune année scolaire active n’est configurée. Contactez l’administration de votre école.</div>
-          <?php elseif ($categories === []): ?>
-            <div class="alert alert-warning mb-0">Aucune catégorie d’événement n’est disponible. Contactez l’administration de votre école.</div>
           <?php else: ?>
             <form method="post" action="<?= BASE_URL ?>/evenements/store" class="row g-3">
               <input type="hidden" name="form_token" value="<?= $e($formToken) ?>">
@@ -54,13 +52,32 @@ $displayDate = static fn ($value): string =>
                 <input class="form-control" id="eventTitle" name="titre" maxlength="150" required>
               </div>
               <div class="col-12 col-lg-6">
-                <label class="form-label" for="eventCategory">Catégorie</label>
-                <select class="form-select" id="eventCategory" name="categorie_id" required>
-                  <option value="">Sélectionner une catégorie</option>
+                <label class="form-label" for="eventCategory">Catégorie existante</label>
+                <select class="form-select" id="eventCategory" name="categorie_id">
+                  <option value="">Sélectionner une catégorie existante</option>
                   <?php foreach ($categories as $category): ?>
                     <option value="<?= (int) $category['id'] ?>"><?= $e($category['nom_categorie']) ?></option>
                   <?php endforeach; ?>
                 </select>
+                <label class="form-label mt-2" for="newEventCategory">Ou créer une catégorie</label>
+                <input class="form-control" id="newEventCategory" name="nouvelle_categorie" maxlength="100" placeholder="Ex. Réunion des parents">
+                <div class="form-text">La nouvelle catégorie sera disponible pour les prochains événements.</div>
+              </div>
+              <div class="col-12">
+                <fieldset class="border rounded p-3">
+                  <legend class="float-none w-auto px-2 fs-6">Comptes concernés <span class="text-danger">*</span></legend>
+                  <p class="small text-muted">Les rôles sélectionnés recevront une notification à la date et l’heure de début de l’événement.</p>
+                  <div class="row g-2">
+                    <?php foreach ($audienceRoles as $roleKey => $roleLabel): ?>
+                      <div class="col-12 col-sm-6 col-lg-4">
+                        <div class="form-check">
+                          <input class="form-check-input" type="checkbox" name="audience_roles[]" id="event-audience-<?= $e($roleKey) ?>" value="<?= $e($roleKey) ?>">
+                          <label class="form-check-label" for="event-audience-<?= $e($roleKey) ?>"><?= $e($roleLabel) ?></label>
+                        </div>
+                      </div>
+                    <?php endforeach; ?>
+                  </div>
+                </fieldset>
               </div>
               <div class="col-12 col-md-6">
                 <label class="form-label" for="eventStart">Date et heure de début</label>
@@ -108,7 +125,11 @@ $displayDate = static fn ($value): string =>
               </thead>
               <tbody>
                 <?php foreach ($events as $event): ?>
-                  <tr>
+                  <?php
+                    $selectedAudienceRoles = json_decode((string) ($event['audience_roles'] ?? ''), true);
+                    $selectedAudienceRoles = is_array($selectedAudienceRoles) ? $selectedAudienceRoles : [];
+                  ?>
+                  <tr id="event-<?= (int) $event['id'] ?>">
                     <td>
                       <strong><?= $e($event['titre']) ?></strong>
                       <?php if (!empty($event['description'])): ?>
@@ -143,6 +164,19 @@ $displayDate = static fn ($value): string =>
                                   <?php endforeach; ?>
                                 </select>
                               </div>
+                              <fieldset class="border rounded p-2 mb-2">
+                                <legend class="float-none w-auto px-2 fs-6">Comptes concernés</legend>
+                                <div class="row g-1">
+                                  <?php foreach ($audienceRoles as $roleKey => $roleLabel): ?>
+                                    <div class="col-12">
+                                      <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="audience_roles[]" id="event-<?= (int) $event['id'] ?>-audience-<?= $e($roleKey) ?>" value="<?= $e($roleKey) ?>" <?= in_array($roleKey, $selectedAudienceRoles, true) ? 'checked' : '' ?>>
+                                        <label class="form-check-label" for="event-<?= (int) $event['id'] ?>-audience-<?= $e($roleKey) ?>"><?= $e($roleLabel) ?></label>
+                                      </div>
+                                    </div>
+                                  <?php endforeach; ?>
+                                </div>
+                              </fieldset>
                               <div class="mb-2">
                                 <label class="form-label" for="start-<?= (int) $event['id'] ?>">Début</label>
                                 <input class="form-control form-control-sm" type="datetime-local" id="start-<?= (int) $event['id'] ?>" name="date_debut" value="<?= $e($localDate($event['date_debut'])) ?>" required>

@@ -7,6 +7,11 @@ class Controller
     protected function view(string $view, array $data = []): void
     {
         $user = $data['user'] ?? null;
+        if ($user !== null && (int) ($user['id'] ?? 0) > 0) {
+            \App\Models\EvenementNotification::deliverDueForUser($user);
+            $data['eventNotifications'] = \App\Models\EvenementNotification::getForUser((int) $user['id']);
+            $data['eventNotificationsCount'] = \App\Models\EvenementNotification::countUnreadForUser((int) $user['id']);
+        }
         $expiryNoticeRoles = [
             'ecole_admin',
             'promoteur_école',

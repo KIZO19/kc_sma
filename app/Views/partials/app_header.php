@@ -374,21 +374,28 @@ if (!empty($schoolContext['logo_url'])) {
           <li class="nav-item dropdown">
             <a class="nav-link" data-bs-toggle="dropdown" href="#">
               <i class="bi bi-bell-fill"></i>
-              <span class="navbar-badge badge text-bg-warning">15</span>
+              <?php if (!empty($eventNotificationsCount)): ?>
+                <span class="navbar-badge badge text-bg-warning"><?= (int) $eventNotificationsCount ?></span>
+              <?php endif; ?>
             </a>
             <div class="dropdown-menu dropdown-menu-lg dropdown-menu-end p-2">
-              <span class="dropdown-item-text fw-bold">Notifications</span>
+              <span class="dropdown-item-text fw-bold">Notifications d’événements</span>
               <div class="dropdown-divider"></div>
-              <a href="#" class="dropdown-item">
-                <i class="bi bi-envelope-fill me-2"></i> Nouveau message reçu
-                <span class="float-end text-muted small">2m</span>
-              </a>
-              <a href="#" class="dropdown-item">
-                <i class="bi bi-person-check-fill me-2"></i> Compte confirmé
-                <span class="float-end text-muted small">1h</span>
-              </a>
+              <?php if (!empty($eventNotifications)): ?>
+                <?php foreach ($eventNotifications as $eventNotification): ?>
+                  <a href="<?= BASE_URL ?>/evenements/open-notification?id=<?= (int) $eventNotification['id'] ?>" class="dropdown-item text-wrap <?= (int) $eventNotification['is_read'] === 1 ? 'text-muted' : '' ?>">
+                    <i class="bi bi-calendar-event me-2 text-primary"></i><?= htmlspecialchars((string) $eventNotification['titre'], ENT_QUOTES, 'UTF-8') ?>
+                    <span class="d-block ms-4 text-muted small">
+                      <?= htmlspecialchars(date('d/m/Y à H:i', strtotime((string) $eventNotification['date_debut'])), ENT_QUOTES, 'UTF-8') ?>
+                      <?php if (!empty($eventNotification['lieu'])): ?> · <?= htmlspecialchars((string) $eventNotification['lieu'], ENT_QUOTES, 'UTF-8') ?><?php endif; ?>
+                    </span>
+                  </a>
+                <?php endforeach; ?>
+              <?php else: ?>
+                <span class="dropdown-item-text text-muted small">Aucune notification pour le moment.</span>
+              <?php endif; ?>
               <div class="dropdown-divider"></div>
-              <a href="#" class="dropdown-item text-center">Voir toutes les notifications</a>
+              <a href="<?= BASE_URL ?>/evenements" class="dropdown-item text-center">Voir les événements</a>
             </div>
           </li>
         </ul>
