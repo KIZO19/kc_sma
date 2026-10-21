@@ -350,25 +350,31 @@ if (!empty($schoolContext['logo_url'])) {
             </ul>
           </li>
           <li class="nav-item dropdown">
-            <a class="nav-link" data-bs-toggle="dropdown" href="#">
+            <a class="nav-link" data-bs-toggle="dropdown" href="#" aria-label="Messages">
               <i class="bi bi-chat-text"></i>
-              <span class="navbar-badge badge text-bg-danger">3</span>
+              <?php if (!empty($pendingDerogationMessagesCount)): ?>
+                <span class="navbar-badge badge text-bg-danger"><?= (int) $pendingDerogationMessagesCount ?></span>
+              <?php endif; ?>
             </a>
-            <div class="dropdown-menu dropdown-menu-lg dropdown-menu-end">
-              <a href="#" class="dropdown-item">
-                <div class="d-flex">
-                  <div class="flex-shrink-0">
-                    <img src="<?= BASE_URL ?>/assets/user1-128x128.jpg" alt="User Avatar" class="img-size-50 rounded-circle me-3">
-                  </div>
-                  <div class="flex-grow-1">
-                    <h3 class="dropdown-item-title">Brad Diesel <span class="float-end fs-7 text-danger"><i class="bi bi-star-fill"></i></span></h3>
-                    <p class="fs-7">Call me whenever you can...</p>
-                    <p class="fs-7 text-secondary"><i class="bi bi-clock-fill me-1"></i> 4 Hours Ago</p>
-                  </div>
-                </div>
-              </a>
+            <div class="dropdown-menu dropdown-menu-lg dropdown-menu-end p-2">
+              <span class="dropdown-item-text fw-bold">Demandes à valider</span>
               <div class="dropdown-divider"></div>
-              <a href="#" class="dropdown-item">See All Messages</a>
+              <?php if (!empty($pendingDerogationMessages)): ?>
+                <?php foreach ($pendingDerogationMessages as $derogationMessage): ?>
+                  <a href="<?= BASE_URL ?>/derogations" class="dropdown-item text-wrap">
+                    <i class="bi bi-file-earmark-check me-2 text-warning"></i>
+                    <strong><?= htmlspecialchars(\App\Core\PersonName::format($derogationMessage), ENT_QUOTES, 'UTF-8') ?></strong>
+                    <span class="d-block ms-4 small text-muted">
+                      Demande de <?= htmlspecialchars((string) ($derogationMessage['demandeur_nom'] ?? 'Autorité scolaire'), ENT_QUOTES, 'UTF-8') ?>
+                      · jusqu’au <?= htmlspecialchars(date('d/m/Y', strtotime((string) $derogationMessage['date_fin'])), ENT_QUOTES, 'UTF-8') ?>
+                    </span>
+                  </a>
+                <?php endforeach; ?>
+              <?php else: ?>
+                <span class="dropdown-item-text text-muted small">Aucune demande de dérogation à valider.</span>
+              <?php endif; ?>
+              <div class="dropdown-divider"></div>
+              <a href="<?= BASE_URL ?>/derogations" class="dropdown-item text-center">Ouvrir les dérogations</a>
             </div>
           </li>
           <li class="nav-item dropdown">

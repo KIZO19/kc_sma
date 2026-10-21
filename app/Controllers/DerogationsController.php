@@ -11,17 +11,8 @@ use App\Models\User;
 
 class DerogationsController extends Controller
 {
-    private const REQUEST_ROLES = ['comptable_école', 'préfet_école'];
-    private const VALIDATION_ROLES = [
-        'comptable_école',
-        'promoteur_école',
-        'préfet_école',
-        'sec_école',
-        'DE_école',
-        'DD_école',
-        'DP_école',
-        'DA_école',
-    ];
+    private const REQUEST_ROLES = ['préfet_école', 'DE_école', 'DP_école'];
+    private const VALIDATION_ROLES = ['comptable_école'];
 
     public function index(): void
     {
@@ -82,7 +73,7 @@ class DerogationsController extends Controller
                 'motif' => $motif,
                 'demandeur_id' => (int) ($user['id'] ?? 0),
             ]);
-            $_SESSION['derogations_success'] = 'La demande de dérogation a été envoyée au promoteur.';
+            $_SESSION['derogations_success'] = 'La demande de dérogation a été envoyée au comptable pour validation.';
         } else {
             $_SESSION['derogations_errors'] = $errors;
         }

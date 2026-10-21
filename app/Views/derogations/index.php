@@ -19,7 +19,7 @@ $formatFinancialText = static function (array $financial, string $key) use ($for
 <section class="content-header">
   <div class="container-fluid">
     <h1>Dérogations</h1>
-    <p class="text-muted mb-0">Protégez temporairement un élève contre le renvoi jusqu’à une date déterminée.</p>
+    <p class="text-muted mb-0">Les autorités de section peuvent demander une protection temporaire; elle ne prend effet qu’après validation du comptable.</p>
   </div>
 </section>
 <section class="content">

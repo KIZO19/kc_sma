@@ -11,6 +11,11 @@ class Controller
             \App\Models\EvenementNotification::deliverDueForUser($user);
             $data['eventNotifications'] = \App\Models\EvenementNotification::getForUser((int) $user['id']);
             $data['eventNotificationsCount'] = \App\Models\EvenementNotification::countUnreadForUser((int) $user['id']);
+            if (($user['role'] ?? '') === 'comptable_école') {
+                $schoolId = (int) ($user['ecole_id'] ?? 0);
+                $data['pendingDerogationMessages'] = \App\Models\Derogation::getPendingForAccountant($schoolId);
+                $data['pendingDerogationMessagesCount'] = \App\Models\Derogation::countPendingForAccountant($schoolId);
+            }
         }
         $expiryNoticeRoles = [
             'ecole_admin',

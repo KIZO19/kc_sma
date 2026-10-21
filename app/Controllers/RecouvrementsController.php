@@ -194,7 +194,7 @@ class RecouvrementsController extends Controller
             "SELECT eleve_id, statut, date_fin, motif
              FROM derogations
              WHERE ecole_id = :ecole_id
-               AND (statut = 'En_attente' OR (statut = 'Approuvee' AND date_fin >= CURDATE()))
+               AND statut = 'Approuvee' AND date_fin >= CURDATE()
              ORDER BY CASE WHEN statut = 'Approuvee' THEN 0 ELSE 1 END, created_at DESC, id DESC"
         );
         $stmt->execute([':ecole_id' => $ecoleId]);

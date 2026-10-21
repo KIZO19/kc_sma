@@ -55,6 +55,44 @@ class Derogation
         return $requests;
     }
 
+    public static function getPendingForAccountant(int $ecoleId, int $limit = 5): array
+    {
+        if ($ecoleId <= 0) {
+            return [];
+        }
+
+        $stmt = Database::getConnection()->prepare(
+            "SELECT d.id, d.eleve_id, d.date_fin, d.motif, d.created_at,
+                    e.nom, e.postnom, e.prenom, u.nom_complet AS demandeur_nom
+             FROM derogations d
+             INNER JOIN eleves e ON e.id = d.eleve_id
+             LEFT JOIN utilisateurs u ON u.id = d.demandeur_id
+             WHERE d.ecole_id = :ecole_id AND d.statut = 'En_attente'
+             ORDER BY d.created_at DESC, d.id DESC
+             LIMIT :limit"
+        );
+        $stmt->bindValue(':ecole_id', $ecoleId, PDO::PARAM_INT);
+        $stmt->bindValue(':limit', max(1, min(20, $limit)), PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function countPendingForAccountant(int $ecoleId): int
+    {
+        if ($ecoleId <= 0) {
+            return 0;
+        }
+
+        $stmt = Database::getConnection()->prepare(
+            "SELECT COUNT(*) FROM derogations
+             WHERE ecole_id = :ecole_id AND statut = 'En_attente'"
+        );
+        $stmt->execute([':ecole_id' => $ecoleId]);
+
+        return (int) $stmt->fetchColumn();
+    }
+
     public static function hasPendingOrActive(int $eleveId, int $ecoleId): bool
     {
         $db = Database::getConnection();
