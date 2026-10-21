@@ -254,6 +254,9 @@ class Controller
         if (in_array($role, ['préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école'], true)) {
             array_unshift($modules, ['name' => 'Communiqués', 'path' => '/communiques', 'icon' => 'bi-megaphone']);
         }
+        if ($role === 'DE_école') {
+            array_unshift($modules, ['name' => 'Gestion des horaires', 'path' => '/horaires', 'icon' => 'bi-calendar-week']);
+        }
 
         $user = Auth::user();
         if (!$user || ($user['role'] ?? '') !== $role) {
