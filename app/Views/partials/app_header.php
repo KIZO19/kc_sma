@@ -352,13 +352,19 @@ if (!empty($schoolContext['logo_url'])) {
           <li class="nav-item dropdown">
             <a class="nav-link" data-bs-toggle="dropdown" href="#" aria-label="Messages">
               <i class="bi bi-chat-text"></i>
-              <?php if (!empty($pendingDerogationMessagesCount)): ?>
-                <span class="navbar-badge badge text-bg-danger"><?= (int) $pendingDerogationMessagesCount ?></span>
+              <?php
+                $messageCount = (int) ($pendingDerogationMessagesCount ?? 0)
+                  + (int) ($derogationDecisionMessagesCount ?? 0);
+              ?>
+              <?php if ($messageCount > 0): ?>
+                <span class="navbar-badge badge text-bg-danger"><?= $messageCount ?></span>
               <?php endif; ?>
             </a>
             <div class="dropdown-menu dropdown-menu-lg dropdown-menu-end p-2">
-              <span class="dropdown-item-text fw-bold">Demandes à valider</span>
-              <div class="dropdown-divider"></div>
+              <?php if (isset($pendingDerogationMessages)): ?>
+                <span class="dropdown-item-text fw-bold">Demandes à valider</span>
+                <div class="dropdown-divider"></div>
+              <?php endif; ?>
               <?php if (!empty($pendingDerogationMessages)): ?>
                 <?php foreach ($pendingDerogationMessages as $derogationMessage): ?>
                   <a href="<?= BASE_URL ?>/derogations" class="dropdown-item text-wrap">
@@ -370,11 +376,35 @@ if (!empty($schoolContext['logo_url'])) {
                     </span>
                   </a>
                 <?php endforeach; ?>
-              <?php else: ?>
+              <?php elseif (isset($pendingDerogationMessages)): ?>
                 <span class="dropdown-item-text text-muted small">Aucune demande de dérogation à valider.</span>
               <?php endif; ?>
-              <div class="dropdown-divider"></div>
-              <a href="<?= BASE_URL ?>/derogations" class="dropdown-item text-center">Ouvrir les dérogations</a>
+              <?php if (!empty($derogationDecisionMessages)): ?>
+                <?php if (isset($pendingDerogationMessages)): ?><div class="dropdown-divider"></div><?php endif; ?>
+                <span class="dropdown-item-text fw-bold">Décisions sur vos demandes</span>
+                <div class="dropdown-divider"></div>
+                <?php foreach ($derogationDecisionMessages as $decisionMessage): ?>
+                  <a href="<?= BASE_URL ?>/derogations/open-message?id=<?= (int) $decisionMessage['id'] ?>" class="dropdown-item text-wrap">
+                    <i class="bi <?= $decisionMessage['statut'] === 'Approuvee' ? 'bi-check-circle-fill text-success' : 'bi-x-circle-fill text-danger' ?> me-2"></i>
+                    <?= htmlspecialchars(\App\Core\PersonName::format($decisionMessage), ENT_QUOTES, 'UTF-8') ?> :
+                    <?= $decisionMessage['statut'] === 'Approuvee' ? 'demande approuvée' : 'demande refusée' ?>
+                    <span class="d-block ms-4 small text-muted">
+                      Par <?= htmlspecialchars((string) ($decisionMessage['validateur_nom'] ?? 'le comptable'), ENT_QUOTES, 'UTF-8') ?>
+                      <?php if (!empty($decisionMessage['commentaire'])): ?> · <?= htmlspecialchars((string) $decisionMessage['commentaire'], ENT_QUOTES, 'UTF-8') ?><?php endif; ?>
+                    </span>
+                  </a>
+                <?php endforeach; ?>
+              <?php elseif (isset($derogationDecisionMessages)): ?>
+                <?php if (isset($pendingDerogationMessages)): ?><div class="dropdown-divider"></div><?php endif; ?>
+                <span class="dropdown-item-text text-muted small">Aucune nouvelle décision sur vos demandes.</span>
+              <?php endif; ?>
+              <?php if (!isset($pendingDerogationMessages) && !isset($derogationDecisionMessages)): ?>
+                <span class="dropdown-item-text text-muted small">Aucun nouveau message.</span>
+              <?php endif; ?>
+              <?php if (isset($pendingDerogationMessages) || isset($derogationDecisionMessages)): ?>
+                <div class="dropdown-divider"></div>
+                <a href="<?= BASE_URL ?>/derogations" class="dropdown-item text-center">Ouvrir les dérogations</a>
+              <?php endif; ?>
             </div>
           </li>
           <li class="nav-item dropdown">

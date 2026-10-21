@@ -79,7 +79,7 @@ $formatFinancialText = static function (array $financial, string $key) use ($for
               <tbody>
                 <?php foreach ($requests as $request): ?>
                   <?php $status = $request['statut'] ?? 'En_attente'; ?>
-                  <tr>
+                  <tr id="derogation-<?= (int) $request['id'] ?>">
                     <td><strong><?= htmlspecialchars($request['eleve_nom'] ?? '') ?></strong><br><small class="text-muted"><?= htmlspecialchars($request['matricule'] ?? '') ?></small></td>
                     <td><?= htmlspecialchars(date('d/m/Y', strtotime($request['date_fin'] ?? 'now'))) ?></td>
                     <td class="text-end text-nowrap"><?= $formatFinancial($request['financial_summary'] ?? [], 'paid') ?></td>

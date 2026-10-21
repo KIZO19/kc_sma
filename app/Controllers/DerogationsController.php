@@ -99,4 +99,18 @@ class DerogationsController extends Controller
             : ['La décision n’a pas pu être enregistrée.'];
         $this->redirect('/derogations');
     }
+
+    public function openMessage(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(self::REQUEST_ROLES);
+        $user = Auth::refresh() ?: Auth::user();
+        $derogationId = filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT);
+        if (!$user || !$derogationId || $derogationId <= 0) {
+            $this->redirect('/derogations');
+        }
+
+        Derogation::markDecisionMessageRead($derogationId, (int) $user['id']);
+        $this->redirect('/derogations#derogation-' . $derogationId);
+    }
 }

@@ -15,6 +15,10 @@ class Controller
                 $schoolId = (int) ($user['ecole_id'] ?? 0);
                 $data['pendingDerogationMessages'] = \App\Models\Derogation::getPendingForAccountant($schoolId);
                 $data['pendingDerogationMessagesCount'] = \App\Models\Derogation::countPendingForAccountant($schoolId);
+            } elseif (in_array($user['role'] ?? '', ['préfet_école', 'DE_école', 'DP_école'], true)) {
+                $requesterId = (int) $user['id'];
+                $data['derogationDecisionMessages'] = \App\Models\Derogation::getUnreadDecisionMessages($requesterId);
+                $data['derogationDecisionMessagesCount'] = \App\Models\Derogation::countUnreadDecisionMessages($requesterId);
             }
         }
         $expiryNoticeRoles = [
