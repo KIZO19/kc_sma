@@ -16,11 +16,20 @@ class ParentModel
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public static function getAllBySchool(int $ecoleId): array
+    public static function getAllBySchool(int $ecoleId, ?int $sectionId = null): array
     {
         $db = Database::getConnection();
-        $stmt = $db->prepare('SELECT id, nom_responsable, telephone, email FROM parents WHERE ecole_id = :ecole_id ORDER BY nom_responsable ASC');
-        $stmt->execute([':ecole_id' => $ecoleId]);
+        $sql = 'SELECT id, nom_responsable, telephone, email FROM parents WHERE ecole_id = :ecole_id';
+        $params = [':ecole_id' => $ecoleId];
+        if ($sectionId !== null) {
+            $sql .= ' AND EXISTS (SELECT 1 FROM eleves e INNER JOIN inscriptions i ON i.eleve_id = e.id '
+                . 'INNER JOIN classes c ON c.id = i.classe_id '
+                . 'WHERE e.parent_id = parents.id AND c.ecole_id = :section_school AND c.section_id = :section_id)';
+            $params[':section_school'] = $ecoleId;
+            $params[':section_id'] = $sectionId;
+        }
+        $stmt = $db->prepare($sql . ' ORDER BY nom_responsable ASC');
+        $stmt->execute($params);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -34,11 +43,20 @@ class ParentModel
         return $parent ?: null;
     }
 
-    public static function findByIdAndSchool(int $id, int $ecoleId): ?array
+    public static function findByIdAndSchool(int $id, int $ecoleId, ?int $sectionId = null): ?array
     {
         $db = Database::getConnection();
-        $stmt = $db->prepare('SELECT * FROM parents WHERE id = :id AND ecole_id = :ecole_id LIMIT 1');
-        $stmt->execute([':id' => $id, ':ecole_id' => $ecoleId]);
+        $sql = 'SELECT * FROM parents WHERE id = :id AND ecole_id = :ecole_id';
+        $params = [':id' => $id, ':ecole_id' => $ecoleId];
+        if ($sectionId !== null) {
+            $sql .= ' AND EXISTS (SELECT 1 FROM eleves e INNER JOIN inscriptions i ON i.eleve_id = e.id '
+                . 'INNER JOIN classes c ON c.id = i.classe_id '
+                . 'WHERE e.parent_id = parents.id AND c.ecole_id = :section_school AND c.section_id = :section_id)';
+            $params[':section_school'] = $ecoleId;
+            $params[':section_id'] = $sectionId;
+        }
+        $stmt = $db->prepare($sql . ' LIMIT 1');
+        $stmt->execute($params);
         $parent = $stmt->fetch(PDO::FETCH_ASSOC);
 
         return $parent ?: null;
@@ -94,16 +112,34 @@ class ParentModel
         return $updated;
     }
 
-    public static function getChildren(int $parentId): array
+    public static function getChildren(int $parentId, ?int $ecoleId = null, ?int $sectionId = null): array
     {
         $db = Database::getConnection();
-        $stmt = $db->prepare(
+        $classScope = $sectionId !== null
+            ? ' AND c.ecole_id = :class_school AND c.section_id = :class_section'
+            : '';
+        $sql =
             'SELECT e.id, e.matricule, e.nom, e.postnom, e.prenom, e.statut_eleve, '
             . '(SELECT c.nom_classe FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id '
-            . 'WHERE i.eleve_id = e.id ORDER BY i.date_inscription DESC, i.id DESC LIMIT 1) AS nom_classe '
-            . 'FROM eleves e WHERE e.parent_id = :parent_id ORDER BY e.nom ASC, e.postnom ASC, e.prenom ASC'
-        );
-        $stmt->execute([':parent_id' => $parentId]);
+            . 'WHERE i.eleve_id = e.id' . $classScope . ' ORDER BY i.date_inscription DESC, i.id DESC LIMIT 1) AS nom_classe '
+            . 'FROM eleves e WHERE e.parent_id = :parent_id';
+        $params = [':parent_id' => $parentId];
+        if ($sectionId !== null) {
+            $params[':class_school'] = (int) $ecoleId;
+            $params[':class_section'] = $sectionId;
+        }
+        if ($ecoleId !== null) {
+            $sql .= ' AND EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id '
+                . 'WHERE i.eleve_id = e.id AND c.ecole_id = :ecole_id';
+            $params[':ecole_id'] = $ecoleId;
+            if ($sectionId !== null) {
+                $sql .= ' AND c.section_id = :section_id';
+                $params[':section_id'] = $sectionId;
+            }
+            $sql .= ')';
+        }
+        $stmt = $db->prepare($sql . ' ORDER BY e.nom ASC, e.postnom ASC, e.prenom ASC');
+        $stmt->execute($params);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 

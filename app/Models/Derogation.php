@@ -25,10 +25,10 @@ class Derogation
         ]);
     }
 
-    public static function getAllBySchool(int $ecoleId): array
+    public static function getAllBySchool(int $ecoleId, ?int $sectionId = null): array
     {
         $db = Database::getConnection();
-        $stmt = $db->prepare(
+        $sql =
             'SELECT d.*, CONCAT_WS(\' \', e.nom, e.postnom, e.prenom) AS eleve_nom,
                     e.matricule, u.nom_complet AS demandeur_nom,
                     v.nom_complet AS validateur_nom
@@ -36,12 +36,18 @@ class Derogation
              INNER JOIN eleves e ON e.id = d.eleve_id
              LEFT JOIN utilisateurs u ON u.id = d.demandeur_id
              LEFT JOIN utilisateurs v ON v.id = d.validateur_id
-             WHERE d.ecole_id = :ecole_id
-             ORDER BY d.date_fin ASC, d.created_at DESC, d.id DESC'
-        );
-        $stmt->execute([':ecole_id' => $ecoleId]);
+             WHERE d.ecole_id = :ecole_id';
+        $params = [':ecole_id' => $ecoleId];
+        if ($sectionId !== null) {
+            $sql .= ' AND EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id '
+                . 'WHERE i.eleve_id = d.eleve_id AND c.ecole_id = :section_school AND c.section_id = :section_id)';
+            $params[':section_school'] = $ecoleId;
+            $params[':section_id'] = $sectionId;
+        }
+        $stmt = $db->prepare($sql . ' ORDER BY d.date_fin ASC, d.created_at DESC, d.id DESC');
+        $stmt->execute($params);
         $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        $financialByStudent = Exoneration::getFinancialSummaryBySchool($ecoleId);
+        $financialByStudent = Exoneration::getFinancialSummaryBySchool($ecoleId, $sectionId);
         foreach ($requests as &$request) {
             $request['financial_summary'] = $financialByStudent[(int) $request['eleve_id']] ?? [];
         }
@@ -62,17 +68,16 @@ class Derogation
         return (bool) $stmt->fetchColumn();
     }
 
-    public static function decide(int $id, int $ecoleId, int $validateurId, string $status, string $commentaire): bool
+    public static function decide(int $id, int $ecoleId, int $validateurId, string $status, string $commentaire, ?int $sectionId = null): bool
     {
         $db = Database::getConnection();
-        $stmt = $db->prepare(
+        $sql =
             'UPDATE derogations
              SET statut = :statut, commentaire = :commentaire,
                  validateur_id = :validateur_id, decided_at = NOW()
                          WHERE id = :id AND ecole_id = :ecole_id AND statut = :pending
-                             AND demandeur_id <> :demandeur_exclu'
-        );
-        $stmt->execute([
+                             AND demandeur_id <> :demandeur_exclu';
+        $params = [
             ':statut' => $status,
             ':commentaire' => $commentaire !== '' ? $commentaire : null,
             ':validateur_id' => $validateurId,
@@ -80,7 +85,15 @@ class Derogation
             ':id' => $id,
             ':ecole_id' => $ecoleId,
             ':pending' => 'En_attente',
-        ]);
+        ];
+        if ($sectionId !== null) {
+            $sql .= ' AND EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id '
+                . 'WHERE i.eleve_id = derogations.eleve_id AND c.ecole_id = :section_school AND c.section_id = :section_id)';
+            $params[':section_school'] = $ecoleId;
+            $params[':section_id'] = $sectionId;
+        }
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
         return $stmt->rowCount() > 0;
     }
 }

@@ -38,4 +38,16 @@ class Section
 
         return $section ?: null;
     }
+
+    public static function findIdByName(string $name): ?int
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            'SELECT id FROM sections WHERE LOWER(TRIM(nom_section)) = LOWER(TRIM(:nom_section)) LIMIT 1'
+        );
+        $stmt->execute([':nom_section' => $name]);
+        $sectionId = $stmt->fetchColumn();
+
+        return $sectionId !== false ? (int) $sectionId : null;
+    }
 }

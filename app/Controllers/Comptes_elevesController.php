@@ -25,6 +25,14 @@ class Comptes_elevesController extends Controller
             $schoolFilter = 'WHERE (el.ecole_id = :ecole OR EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id WHERE i.eleve_id = el.id AND c.ecole_id = :ecole))';
             $params[':ecole'] = (int) $user['ecole_id'];
         }
+        $sectionScopeId = $this->getSectionScopeForUser($user);
+        if ($sectionScopeId !== null) {
+            $schoolFilter .= $schoolFilter === '' ? 'WHERE ' : ' AND ';
+            $schoolFilter .= 'EXISTS (SELECT 1 FROM inscriptions si INNER JOIN classes sc ON si.classe_id = sc.id '
+                . 'WHERE si.eleve_id = el.id AND sc.ecole_id = :section_school AND sc.section_id = :section_id)';
+            $params[':section_school'] = (int) ($user['ecole_id'] ?? 0);
+            $params[':section_id'] = $sectionScopeId;
+        }
 
         $sql = 'SELECT el.id AS eleve_id, el.nom, el.postnom, el.prenom, COALESCE(SUM(ce.solde_debiteur),0) AS solde FROM eleves el LEFT JOIN comptes_eleves ce ON ce.eleve_id = el.id INNER JOIN annees_scolaires a ON ce.annee_scolaire_id = a.id AND a.est_active = 1 ' . $schoolFilter . ' GROUP BY el.id ORDER BY solde DESC, el.nom ASC';
 

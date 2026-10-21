@@ -7,7 +7,7 @@ use PDO;
 
 class PresenceEleve
 {
-    public static function getAvailableClasses(?int $schoolId, ?int $teacherAgentId = null): array
+    public static function getAvailableClasses(?int $schoolId, ?int $teacherAgentId = null, ?int $sectionId = null): array
     {
         if ($teacherAgentId !== null && $teacherAgentId <= 0) {
             return [];
@@ -25,6 +25,11 @@ class PresenceEleve
         if ($schoolId !== null) {
             $sql .= ' AND c.ecole_id = :ecole_id';
             $params[':ecole_id'] = $schoolId;
+        }
+
+        if ($sectionId !== null) {
+            $sql .= ' AND c.section_id = :section_id';
+            $params[':section_id'] = $sectionId;
         }
 
         if ($teacherAgentId !== null) {

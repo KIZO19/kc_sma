@@ -194,38 +194,22 @@ foreach ($parents as $parent) {
                         </select>
                       </div>
                       <div class="col-md-6 mb-3">
-                        <label class="form-label">Territoire</label>
+                        <label class="form-label" id="territory-label" for="territoire-select">Territoire</label>
                         <select name="territoire" id="territoire-select" class="form-select">
-                          <option value="">Sélectionnez un territoire</option>
+                          <option value="">Sélectionnez d’abord une province</option>
                         </select>
                       </div>
                     </div>
+                    <input type="hidden" name="secteur" value="<?= htmlspecialchars($oldInput['secteur'] ?? $student['secteur'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="groupement" value="<?= htmlspecialchars($oldInput['groupement'] ?? $student['groupement'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="village" value="<?= htmlspecialchars($oldInput['village'] ?? $student['village'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
                     <div class="row">
-                      <div class="col-md-6 mb-3">
-                        <label class="form-label">Secteur</label>
-                        <select name="secteur" id="secteur-select" class="form-select">
-                          <option value="">Sélectionnez un secteur</option>
-                        </select>
-                      </div>
-                      <div class="col-md-6 mb-3">
-                        <label class="form-label">Groupement</label>
-                        <select name="groupement" id="groupement-select" class="form-select">
-                          <option value="">Sélectionnez un groupement</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div class="row">
-                      <div class="col-md-6 mb-3">
-                        <label class="form-label">Village</label>
-                        <select name="village" id="village-select" class="form-select">
-                          <option value="">Sélectionnez un village</option>
-                        </select>
-                      </div>
                       <div class="col-md-6 mb-3">
                         <label class="form-label">Numéro permanent</label>
                         <input type="text" name="num_permanent" class="form-control" value="<?= htmlspecialchars($oldInput['num_permanent'] ?? $student['num_permanent']) ?>" placeholder="Numéro permanent MINEDUB">
                       </div>
                     </div>
+                    <div id="origin-location-error" class="alert alert-danger d-none" role="alert"></div>
                     <div class="mb-3">
                       <label class="form-label">Lieu de naissance</label>
                       <input type="text" name="lieu_naissance" class="form-control" value="<?= htmlspecialchars($oldInput['lieu_naissance'] ?? $student['lieu_naissance']) ?>">
@@ -342,129 +326,72 @@ foreach ($parents as $parent) {
           const baseUrl = '<?= BASE_URL ?>';
           const provinceSelect = document.getElementById('province-select');
           const territoireSelect = document.getElementById('territoire-select');
-          const secteurSelect = document.getElementById('secteur-select');
-          const groupementSelect = document.getElementById('groupement-select');
-          const villageSelect = document.getElementById('village-select');
+          const territoryLabel = document.getElementById('territory-label');
+          const locationError = document.getElementById('origin-location-error');
+          const legacyFields = ['secteur', 'groupement', 'village'].map(function (name) {
+            return document.querySelector('input[name="' + name + '"]');
+          });
 
-          function populate(select, items, selected) {
-            select.innerHTML = '<option value="">Sélectionnez</option>';
+          function populate(select, items, selected, placeholder, labelItems) {
+            select.innerHTML = '';
+            const emptyOption = document.createElement('option');
+            emptyOption.value = '';
+            emptyOption.textContent = placeholder;
+            select.appendChild(emptyOption);
             items.forEach(function (it) {
               const opt = document.createElement('option');
-              opt.value = it;
-              opt.textContent = it;
-              if (selected && selected === it) opt.selected = true;
+              opt.value = it.nom || it;
+              opt.textContent = labelItems && it.nom ? it.nom + ' — Chef-lieu : ' + it.chef_lieu : (it.nom || it);
+              if (selected && selected === opt.value) opt.selected = true;
               select.appendChild(opt);
             });
           }
 
-          const LOCAL_LOCATIONS = {
-            provinces: ['Bas-Uele','Équateur','Haut-Katanga','Haut-Lomami','Haut-Uele','Ituri','Kasaï','Kasaï-Central','Kasaï-Oriental','Kinshasa','Kongo-Central','Kwango','Kwilu','Lomami','Lualaba','Mai-Ndombe','Maniema','Mongala','Nord-Kivu','Nord-Ubangi','Sankuru','Sud-Kivu','Sud-Ubangi','Tanganyika','Tshopo','Tshuapa'],
-            territoires: {
-              'Bas-Uele': ['Buta'], 'Équateur': ['Mbandaka'],
-              'Haut-Katanga': ['Lubumbashi','Likasi','Kasumbalesa'], 'Haut-Lomami': ['Kamina'],
-              'Haut-Uele': ['Isiro'], 'Ituri': ['Bunia'], 'Kasaï': ['Tshikapa'],
-              'Kasaï-Central': ['Kananga'], 'Kasaï-Oriental': ['Mbuji-Mayi'], 'Kinshasa': ['Kinshasa'],
-              'Kongo-Central': ['Matadi','Boma','Muanda'], 'Kwango': ['Kenge'], 'Kwilu': ['Bandundu','Kikwit'],
-              'Lomami': ['Kabinda'], 'Lualaba': ['Kolwezi'], 'Mai-Ndombe': ['Inongo'], 'Maniema': ['Kindu'],
-              'Mongala': ['Lisala'], 'Nord-Kivu': ['Goma','Beni','Butembo'], 'Nord-Ubangi': ['Gbadolite'],
-              'Sankuru': ['Lusambo'], 'Sud-Kivu': ['Bukavu','Uvira','Baraka'], 'Sud-Ubangi': ['Gemena','Zongo'],
-              'Tanganyika': ['Kalemie'], 'Tshopo': ['Kisangani'], 'Tshuapa': ['Boende']
-            },
-            secteurs: {
-              'Goma': ['Sector 1','Sector 2'],
-              'Beni': ['Beni-Centre','Mabalako'],
-              'Lubumbashi': ['Kawama','Katanga-Centre']
-            },
-            groupements: {
-              'Sector 1': ['Group A','Group B'],
-              'Beni-Centre': ['Group X','Group Y']
-            },
-            villages: {
-              'Group A': ['Village 1','Village 2'],
-              'Group X': ['Village X1','Village X2']
-            }
-          };
-
           function fetchJson(url) {
-            return fetch(url, { credentials: 'same-origin' }).then(function (r) { return r.json(); }).catch(function () {
-              try {
-                const u = new URL(url, location.origin);
-                const pathname = u.pathname || '';
-                const params = Object.fromEntries(u.searchParams.entries());
-                if (pathname.endsWith('/inscriptions/provinces')) return Promise.resolve(LOCAL_LOCATIONS.provinces || []);
-                if (pathname.endsWith('/inscriptions/territoires')) {
-                  return Promise.resolve(LOCAL_LOCATIONS.territoires[params.province] || []);
-                }
-                if (pathname.endsWith('/inscriptions/secteurs')) {
-                  return Promise.resolve(LOCAL_LOCATIONS.secteurs[params.territoire] || []);
-                }
-                if (pathname.endsWith('/inscriptions/groupements')) {
-                  return Promise.resolve(LOCAL_LOCATIONS.groupements[params.secteur] || []);
-                }
-                if (pathname.endsWith('/inscriptions/villages')) {
-                  return Promise.resolve(LOCAL_LOCATIONS.villages[params.groupement] || []);
-                }
-              } catch (e) {
-              }
-              return Promise.resolve([]);
+            return fetch(url, { credentials: 'same-origin' }).then(function (response) {
+              if (!response.ok) throw new Error('Chargement des origines impossible.');
+              return response.json();
             });
           }
 
-          const initialProvince = '<?= htmlspecialchars($oldInput['province_origine'] ?? $student['province_origine'] ?? '') ?>';
-          const initialTerritoire = '<?= htmlspecialchars($oldInput['territoire'] ?? $student['territoire'] ?? '') ?>';
-          const initialSecteur = '<?= htmlspecialchars($oldInput['secteur'] ?? $student['secteur'] ?? '') ?>';
-          const initialGroupement = '<?= htmlspecialchars($oldInput['groupement'] ?? $student['groupement'] ?? '') ?>';
-          const initialVillage = '<?= htmlspecialchars($oldInput['village'] ?? $student['village'] ?? '') ?>';
+          const initialProvince = <?= json_encode((string) ($oldInput['province_origine'] ?? $student['province_origine'] ?? ''), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+          const initialTerritoire = <?= json_encode((string) ($oldInput['territoire'] ?? $student['territoire'] ?? ''), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+          let restoredTerritory = initialTerritoire;
 
           fetchJson(baseUrl + '/inscriptions/provinces').then(function (data) {
-            populate(provinceSelect, data, initialProvince || null);
-            if (initialProvince) provinceSelect.dispatchEvent(new Event('change'));
-          }).catch(()=>{});
+            const province = initialProvince === 'Mai-Ndombe' ? 'Maï-Ndombe' : initialProvince;
+            populate(provinceSelect, data, province || null, 'Sélectionnez une province', true);
+            updateTerritories(province, restoredTerritory);
+            restoredTerritory = '';
+          }).catch(function (error) {
+            console.error(error);
+            locationError.textContent = 'Impossible de charger les provinces. Rechargez la page ou contactez l’administration.';
+            locationError.classList.remove('d-none');
+          });
 
           provinceSelect && provinceSelect.addEventListener('change', function () {
-            const val = this.value;
-            populate(territoireSelect, [], null);
-            populate(secteurSelect, [], null);
-            populate(groupementSelect, [], null);
-            populate(villageSelect, [], null);
-            if (!val) return;
-            fetchJson(baseUrl + '/inscriptions/territoires?province=' + encodeURIComponent(val)).then(function (data) {
-              populate(territoireSelect, data, initialTerritoire || null);
-              if (initialTerritoire) territoireSelect.dispatchEvent(new Event('change'));
-            }).catch(()=>{});
+            legacyFields.forEach(function (field) {
+              if (field) field.value = '';
+            });
+            updateTerritories(this.value, '');
           });
 
-          territoireSelect && territoireSelect.addEventListener('change', function () {
-            const val = this.value;
-            populate(secteurSelect, [], null);
-            populate(groupementSelect, [], null);
-            populate(villageSelect, [], null);
-            if (!val) return;
-            fetchJson(baseUrl + '/inscriptions/secteurs?territoire=' + encodeURIComponent(val)).then(function (data) {
-              populate(secteurSelect, data, initialSecteur || null);
-              if (initialSecteur) secteurSelect.dispatchEvent(new Event('change'));
-            }).catch(()=>{});
-          });
+          function updateTerritories(province, selected) {
+            const isKinshasa = province === 'Kinshasa';
+            const placeholder = isKinshasa ? 'Sélectionnez une commune' : 'Sélectionnez un territoire';
+            territoryLabel.textContent = isKinshasa ? 'Commune' : 'Territoire';
+            populate(territoireSelect, [], null, province ? placeholder : 'Sélectionnez d’abord une province');
+            locationError.classList.add('d-none');
+            if (!province) return;
 
-          secteurSelect && secteurSelect.addEventListener('change', function () {
-            const val = this.value;
-            populate(groupementSelect, [], null);
-            populate(villageSelect, [], null);
-            if (!val) return;
-            fetchJson(baseUrl + '/inscriptions/groupements?secteur=' + encodeURIComponent(val)).then(function (data) {
-              populate(groupementSelect, data, initialGroupement || null);
-              if (initialGroupement) groupementSelect.dispatchEvent(new Event('change'));
-            }).catch(()=>{});
-          });
-
-          groupementSelect && groupementSelect.addEventListener('change', function () {
-            const val = this.value;
-            populate(villageSelect, [], null);
-            if (!val) return;
-            fetchJson(baseUrl + '/inscriptions/villages?groupement=' + encodeURIComponent(val)).then(function (data) {
-              populate(villageSelect, data, initialVillage || null);
-            }).catch(()=>{});
-          });
+            fetchJson(baseUrl + '/inscriptions/territoires?province=' + encodeURIComponent(province)).then(function (data) {
+              populate(territoireSelect, data, selected || null, placeholder, false);
+            }).catch(function (error) {
+              console.error(error);
+              locationError.textContent = 'Impossible de charger les territoires ou les communes de cette province.';
+              locationError.classList.remove('d-none');
+            });
+          }
         })();
       </script>
 <?php require __DIR__ . '/../partials/app_footer.php'; ?>

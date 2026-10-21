@@ -33,7 +33,9 @@ class ElevesController extends Controller
         }
         $students = $isTeacher
             ? TeacherAssignment::getStudents($ecoleId, (int) ($user['reference_id'] ?? 0), $selectedClasseId > 0 ? $selectedClasseId : null)
-            : ($ecoleId > 0 ? Eleve::getAllBySchool($ecoleId, null, $sectionScopeId) : Eleve::getAll());
+            : ($ecoleId > 0
+                ? Eleve::getAllBySchool($ecoleId, null, $sectionScopeId)
+                : ($role === 'super_admin' ? Eleve::getAll() : []));
 
         $this->view('eleves/index', [
             'title' => APP_NAME . ' - Élèves',
@@ -100,8 +102,7 @@ class ElevesController extends Controller
         // Ensure the eleve belongs to the same school unless super_admin
         if (
             ($user['role'] ?? '') !== 'super_admin'
-            && $ecoleId > 0
-            && !Eleve::findByIdAndSchool($eleveId, $ecoleId, $sectionScopeId)
+            && ($ecoleId <= 0 || !Eleve::findByIdAndSchool($eleveId, $ecoleId, $sectionScopeId))
         ) {
             header('Location: ' . BASE_URL . '/error/accessDenied');
             exit;

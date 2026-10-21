@@ -32,11 +32,16 @@ class OptionsController extends Controller
             $this->redirect('/error/accessDenied');
         }
         $modules = $this->getModulesForRole($role);
+        $sectionScopeId = $this->getSectionScopeForUser($user);
         if ($role === 'super_admin') {
             $options = Option::getAll();
         } else {
             $ecoleId = (int) ($user['ecole_id'] ?? 0);
-            $options = $ecoleId > 0 ? Option::getAllForSchool($ecoleId) : [];
+            $options = $ecoleId > 0
+                ? ($sectionScopeId !== null
+                    ? Option::getAllForSchoolAndSection($ecoleId, $sectionScopeId)
+                    : Option::getAllForSchool($ecoleId))
+                : [];
         }
 
         $this->view('options/index', [
@@ -62,7 +67,10 @@ class OptionsController extends Controller
         }
         $modules = $this->getModulesForRole($role);
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
-        $sections = Section::getAll();
+        $sectionScopeId = $this->getSectionScopeForUser($user);
+        $sections = $sectionScopeId !== null
+            ? array_values(array_filter(Section::getAll(), static fn (array $section): bool => (int) $section['id'] === $sectionScopeId))
+            : Section::getAll();
         $oldInput = $_SESSION['option_old'] ?? [];
         unset($_SESSION['option_old']);
 
@@ -96,6 +104,13 @@ class OptionsController extends Controller
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
         $nomOption = trim((string) ($_POST['nom_option'] ?? ''));
         $sectionId = (int) ($_POST['section_id'] ?? 0);
+        $sectionScopeId = $this->getSectionScopeForUser($user);
+        if ($sectionScopeId !== null && $sectionId !== $sectionScopeId) {
+            $_SESSION['options_errors'] = ['Vous ne pouvez gérer que les options de la section secondaire.'];
+            $_SESSION['option_old'] = $_POST;
+            $this->redirect('/options/create');
+            return;
+        }
         $errors = $this->validateOptionData($ecoleId, $nomOption, $sectionId);
         if (empty($errors) && Option::nameExists($ecoleId, $sectionId, $nomOption)) {
             $errors[] = 'Une option portant ce nom existe déjà dans cette section.';
@@ -153,8 +168,12 @@ class OptionsController extends Controller
             $this->redirect('/error/accessDenied');
         }
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        $sectionScopeId = $this->getSectionScopeForUser($user);
         if ($role !== 'super_admin') {
             $option = $ecoleId > 0 ? Option::findByIdForSchool($id, $ecoleId) : null;
+            if ($option && $sectionScopeId !== null && (int) ($option['section_id'] ?? 0) !== $sectionScopeId) {
+                $option = null;
+            }
             if (!$option || !$this->canManage((string) $role)) {
                 $_SESSION['options_errors'] = ['Cette option n’existe pas dans votre école ou vous n’êtes pas autorisé(e) à la modifier.'];
                 $this->redirect('/options');
@@ -163,7 +182,9 @@ class OptionsController extends Controller
         }
 
         $modules = $this->getModulesForRole($role);
-        $sections = Section::getAll();
+        $sections = $sectionScopeId !== null
+            ? array_values(array_filter(Section::getAll(), static fn (array $section): bool => (int) $section['id'] === $sectionScopeId))
+            : Section::getAll();
         $usage = Option::getUsage($id);
 
         $oldInput = $_SESSION['option_old'] ?? [];
@@ -201,7 +222,17 @@ class OptionsController extends Controller
         $id = (int) ($_POST['id'] ?? 0);
         $nomOption = trim($_POST['nom_option'] ?? '');
         $sectionId = (int) ($_POST['section_id'] ?? 0);
+        $sectionScopeId = $this->getSectionScopeForUser($user);
         $option = $id > 0 && $ecoleId > 0 ? Option::findByIdForSchool($id, $ecoleId) : null;
+        if ($option && $sectionScopeId !== null && (int) ($option['section_id'] ?? 0) !== $sectionScopeId) {
+            $option = null;
+        }
+        if ($sectionScopeId !== null && $sectionId !== $sectionScopeId) {
+            $_SESSION['options_errors'] = ['Vous ne pouvez gérer que les options de la section secondaire.'];
+            $_SESSION['option_old'] = $_POST;
+            $this->redirect('/options/edit?id=' . $id);
+            return;
+        }
         $keepLegacyNullSection = $option !== null
             && $option['section_id'] === null
             && $sectionId <= 0;
@@ -282,6 +313,7 @@ class OptionsController extends Controller
             $this->redirect('/error/accessDenied');
         }
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        $sectionScopeId = $this->getSectionScopeForUser($user);
         $id = (int) ($_POST['id'] ?? 0);
         if ($id <= 0) {
             $_SESSION['options_errors'] = ['Identifiant invalide.'];
@@ -289,6 +321,9 @@ class OptionsController extends Controller
             return;
         }
         $option = $ecoleId > 0 ? Option::findByIdForSchool($id, $ecoleId) : null;
+        if ($option && $sectionScopeId !== null && (int) ($option['section_id'] ?? 0) !== $sectionScopeId) {
+            $option = null;
+        }
         if (!$option || !$this->canManage($role)) {
             $_SESSION['options_errors'] = ['Cette option n’existe pas dans votre école ou vous n’êtes pas autorisé(e) à la supprimer.'];
             $this->redirect('/options');

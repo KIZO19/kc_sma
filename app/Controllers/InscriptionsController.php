@@ -11,6 +11,7 @@ use App\Models\Classe;
 use App\Models\Ecole;
 use App\Models\Inscription;
 use App\Models\Option;
+use App\Models\OriginesRDC;
 use App\Models\ParentModel;
 use App\Models\Section;
 use App\Models\User;
@@ -43,12 +44,18 @@ class InscriptionsController extends Controller
         $sectionScopeId = $this->getSectionScopeForUser($user);
         $pendingStudents = $ecoleId > 0
             ? Eleve::getPendingBySchool($ecoleId, $sectionScopeId)
-            : Eleve::getPending();
+            : ($role === 'super_admin' ? Eleve::getPending() : []);
         $enrolledStudents = $ecoleId > 0
             ? Eleve::getEnrolledBySchool($ecoleId, $sectionScopeId)
             : [];
-        $sections = Section::getAll();
-        $options = $ecoleId > 0 ? Option::getAllForSchool($ecoleId) : Option::getAll();
+        $sections = $sectionScopeId !== null
+            ? array_values(array_filter(Section::getAll(), static fn (array $section): bool => (int) $section['id'] === $sectionScopeId))
+            : Section::getAll();
+        $options = $ecoleId > 0
+            ? ($sectionScopeId !== null
+                ? Option::getAllForSchoolAndSection($ecoleId, $sectionScopeId)
+                : Option::getAllForSchool($ecoleId))
+            : ($role === 'super_admin' ? Option::getAll() : []);
 
         $this->view('inscriptions/index', [
             'title' => APP_NAME . ' - Dossiers d’inscription',
@@ -76,12 +83,19 @@ class InscriptionsController extends Controller
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
-        $parents = $ecoleId > 0 ? ParentModel::getAllBySchool($ecoleId) : [];
-        $sections = Section::getAll();
-        $options = $ecoleId > 0 ? Option::getAllForSchool($ecoleId) : Option::getAll();
+        $sectionScopeId = $this->getSectionScopeForUser($user);
+        $parents = $ecoleId > 0 ? ParentModel::getAllBySchool($ecoleId, $sectionScopeId) : [];
+        $sections = $sectionScopeId !== null
+            ? array_values(array_filter(Section::getAll(), static fn (array $section): bool => (int) $section['id'] === $sectionScopeId))
+            : Section::getAll();
+        $options = $ecoleId > 0
+            ? ($sectionScopeId !== null
+                ? Option::getAllForSchoolAndSection($ecoleId, $sectionScopeId)
+                : Option::getAllForSchool($ecoleId))
+            : ($role === 'super_admin' ? Option::getAll() : []);
         $selectedSection = null;
         $selectedOption = null;
-        $sectionId = (int) ($_GET['section_id'] ?? 0);
+        $sectionId = $sectionScopeId ?? (int) ($_GET['section_id'] ?? 0);
         $optionId = (int) ($_GET['option_id'] ?? 0);
         if ($sectionId > 0) {
             $selectedSection = Section::findById($sectionId);
@@ -90,9 +104,12 @@ class InscriptionsController extends Controller
             $selectedOption = $ecoleId > 0
                 ? Option::findByIdForSchool($optionId, $ecoleId)
                 : Option::findById($optionId);
+            if ($sectionScopeId !== null && (int) ($selectedOption['section_id'] ?? 0) !== $sectionScopeId) {
+                $selectedOption = null;
+            }
         }
 
-        $classes = $ecoleId > 0 ? Classe::getAllBySchool($ecoleId) : [];
+        $classes = $ecoleId > 0 ? Classe::getAllBySchool($ecoleId, $sectionScopeId) : [];
         $oldInput = $_SESSION['inscriptions_old'] ?? [];
         unset($_SESSION['inscriptions_old']);
 
@@ -120,6 +137,7 @@ class InscriptionsController extends Controller
         $user = Auth::refresh() ?: Auth::user();
         $this->requireAdministrationModuleAccess($user, 'inscriptions');
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        $sectionScopeId = $this->getSectionScopeForUser($user);
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $nom = trim($_POST['nom'] ?? '');
@@ -138,6 +156,7 @@ class InscriptionsController extends Controller
             $optionId = (int) ($_POST['option_id'] ?? 0);
 
             $errors = [];
+            $errors = array_merge($errors, $this->validateOriginSelection($_POST));
             $activeYear = null;
             if ($nom === '') {
                 $errors[] = 'Le nom de l’élève est requis.';
@@ -153,6 +172,9 @@ class InscriptionsController extends Controller
             }
             if ($sectionId <= 0) {
                 $errors[] = 'La section de l’élève est requise pour l’inscription.';
+            }
+            if ($sectionScopeId !== null && $sectionId !== $sectionScopeId) {
+                $errors[] = 'Vous ne pouvez inscrire des élèves que dans la section secondaire.';
             }
             if ($optionId <= 0) {
                 $errors[] = 'L’option de l’élève est requise pour l’inscription.';
@@ -193,8 +215,8 @@ class InscriptionsController extends Controller
             }
 
             if (empty($errors)) {
-                $selectedClass = Classe::findById($classeId);
-                if (!$selectedClass || (int) ($selectedClass['ecole_id'] ?? 0) !== $ecoleId) {
+                $selectedClass = Classe::findByIdForSchool($classeId, $ecoleId, $sectionScopeId);
+                if (!$selectedClass) {
                     $errors[] = 'La classe sélectionnée est invalide ou n’appartient pas à votre école.';
                 } else {
                     if ($sectionId > 0 && (int) ($selectedClass['section_id'] ?? 0) !== $sectionId) {
@@ -239,7 +261,7 @@ class InscriptionsController extends Controller
                 }
 
                 if ($parentChoice === 'existing' && $parentId > 0) {
-                    $parentBelongsToSchool = ParentModel::findByIdAndSchool($parentId, $ecoleId);
+                    $parentBelongsToSchool = ParentModel::findByIdAndSchool($parentId, $ecoleId, $sectionScopeId);
                     if (!$parentBelongsToSchool) {
                         $errors[] = 'Le parent sélectionné n’appartient pas à votre école.';
                     }
@@ -275,7 +297,7 @@ class InscriptionsController extends Controller
                         'ecole_id' => $studentSchoolId > 0 ? $studentSchoolId : null,
                         'nom_pere' => trim($_POST['nom_pere'] ?? null),
                         'nom_mere' => trim($_POST['nom_mere'] ?? null),
-                        'province_origine' => trim($_POST['province_origine'] ?? null),
+                        'province_origine' => OriginesRDC::normalizeProvince(trim((string) ($_POST['province_origine'] ?? ''))),
                         'territoire' => trim($_POST['territoire'] ?? null),
                         'secteur' => trim($_POST['secteur'] ?? null),
                         'groupement' => trim($_POST['groupement'] ?? null),
@@ -515,7 +537,8 @@ class InscriptionsController extends Controller
         $user = Auth::refresh() ?: Auth::user();
         $this->requireAdministrationModuleAccess($user, 'inscriptions');
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
-        $student = Eleve::findByIdAndSchool($eleveId, $ecoleId);
+        $sectionScopeId = $this->getSectionScopeForUser($user);
+        $student = Eleve::findByIdAndSchool($eleveId, $ecoleId, $sectionScopeId);
         if (!$student) {
             $_SESSION['inscriptions_errors'] = ['Élève introuvable ou n’appartenant pas à votre école.'];
             $this->redirect('/inscriptions');
@@ -524,19 +547,30 @@ class InscriptionsController extends Controller
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
-        $parents = $ecoleId > 0 ? ParentModel::getAllBySchool($ecoleId) : [];
-        $classes = $ecoleId > 0 ? Classe::getAllBySchool($ecoleId) : [];
-        $sections = Section::getAll();
-        $options = $ecoleId > 0 ? Option::getAllForSchool($ecoleId) : Option::getAll();
+        $parents = $ecoleId > 0 ? ParentModel::getAllBySchool($ecoleId, $sectionScopeId) : [];
+        $classes = $ecoleId > 0 ? Classe::getAllBySchool($ecoleId, $sectionScopeId) : [];
+        $sections = $sectionScopeId !== null
+            ? array_values(array_filter(Section::getAll(), static fn (array $section): bool => (int) $section['id'] === $sectionScopeId))
+            : Section::getAll();
+        $options = $ecoleId > 0
+            ? ($sectionScopeId !== null
+                ? Option::getAllForSchoolAndSection($ecoleId, $sectionScopeId)
+                : Option::getAllForSchool($ecoleId))
+            : [];
         $db = Database::getConnection();
         $inscriptionStmt = $db->prepare(
             'SELECT i.*, c.section_id, c.option_id
              FROM inscriptions i
              INNER JOIN classes c ON c.id = i.classe_id
-             WHERE i.eleve_id = :eleve_id
-             ORDER BY i.date_inscription DESC, i.id DESC LIMIT 1'
+             WHERE i.eleve_id = :eleve_id'
+             . ($sectionScopeId !== null ? ' AND c.section_id = :section_id' : '')
+             . ' ORDER BY i.date_inscription DESC, i.id DESC LIMIT 1'
         );
-        $inscriptionStmt->execute([':eleve_id' => $eleveId]);
+        $inscriptionParams = [':eleve_id' => $eleveId];
+        if ($sectionScopeId !== null) {
+            $inscriptionParams[':section_id'] = $sectionScopeId;
+        }
+        $inscriptionStmt->execute($inscriptionParams);
         $currentInscription = $inscriptionStmt->fetch() ?: [];
         $oldInput = $_SESSION['inscriptions_old'] ?? [];
         unset($_SESSION['inscriptions_old']);
@@ -578,6 +612,7 @@ class InscriptionsController extends Controller
             $optionId = (int) ($_POST['option_id'] ?? 0);
 
             $errors = [];
+            $errors = array_merge($errors, $this->validateOriginSelection($_POST));
             if ($eleveId <= 0) {
                 $errors[] = 'Identifiant de l’élève invalide.';
             }
@@ -605,15 +640,16 @@ class InscriptionsController extends Controller
 
             $user = Auth::refresh() ?: Auth::user();
             $ecoleId = (int) ($user['ecole_id'] ?? 0);
+            $sectionScopeId = $this->getSectionScopeForUser($user);
             $db = Database::getConnection();
-            $student = Eleve::findByIdAndSchool($eleveId, $ecoleId);
+            $student = Eleve::findByIdAndSchool($eleveId, $ecoleId, $sectionScopeId);
             if (!$student) {
                 $errors[] = 'Élève introuvable ou n’appartenant pas à votre école.';
             }
 
             $parentUpdateData = null;
             if ($parentId > 0) {
-                $parent = ParentModel::findByIdAndSchool($parentId, $ecoleId);
+                $parent = ParentModel::findByIdAndSchool($parentId, $ecoleId, $sectionScopeId);
                 if (!$parent) {
                     $errors[] = 'Le parent sélectionné n’appartient pas à votre école.';
                 } else {
@@ -662,8 +698,8 @@ class InscriptionsController extends Controller
                 }
             }
 
-            $selectedClass = $classeId > 0 ? Classe::findById($classeId) : null;
-            if (!$selectedClass || (int) ($selectedClass['ecole_id'] ?? 0) !== $ecoleId) {
+            $selectedClass = $classeId > 0 ? Classe::findByIdForSchool($classeId, $ecoleId, $sectionScopeId) : null;
+            if (!$selectedClass) {
                 $errors[] = 'La classe sélectionnée est invalide ou n’appartient pas à votre école.';
             } elseif ((int) ($selectedClass['section_id'] ?? 0) !== $sectionId || (int) ($selectedClass['option_id'] ?? 0) !== $optionId) {
                 $errors[] = 'La classe sélectionnée ne correspond pas à la section et à l’option choisies.';
@@ -689,7 +725,7 @@ class InscriptionsController extends Controller
                     'parent_id' => $parentId > 0 ? $parentId : null,
                     'nom_pere' => trim($_POST['nom_pere'] ?? null),
                     'nom_mere' => trim($_POST['nom_mere'] ?? null),
-                    'province_origine' => trim($_POST['province_origine'] ?? null),
+                    'province_origine' => OriginesRDC::normalizeProvince(trim((string) ($_POST['province_origine'] ?? ''))),
                     'territoire' => trim($_POST['territoire'] ?? null),
                     'secteur' => trim($_POST['secteur'] ?? null),
                     'groupement' => trim($_POST['groupement'] ?? null),
@@ -697,10 +733,14 @@ class InscriptionsController extends Controller
                     'num_permanent' => trim($_POST['num_permanent'] ?? null),
                 ];
 
-                $inscriptionStmt = $db->prepare(
-                    'SELECT id FROM inscriptions WHERE eleve_id = :eleve_id ORDER BY date_inscription DESC, id DESC LIMIT 1'
-                );
-                $inscriptionStmt->execute([':eleve_id' => $eleveId]);
+                $inscriptionSql = 'SELECT i.id FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id WHERE i.eleve_id = :eleve_id';
+                $inscriptionParams = [':eleve_id' => $eleveId];
+                if ($sectionScopeId !== null) {
+                    $inscriptionSql .= ' AND c.section_id = :section_id';
+                    $inscriptionParams[':section_id'] = $sectionScopeId;
+                }
+                $inscriptionStmt = $db->prepare($inscriptionSql . ' ORDER BY i.date_inscription DESC, i.id DESC LIMIT 1');
+                $inscriptionStmt->execute($inscriptionParams);
                 $currentInscriptionId = (int) ($inscriptionStmt->fetchColumn() ?: 0);
                 if ($currentInscriptionId <= 0) {
                     $errors[] = 'Aucune inscription scolaire à mettre à jour n’a été trouvée.';
@@ -789,14 +829,7 @@ class InscriptionsController extends Controller
         Auth::requireAuth();
         $this->requireAdministrationModuleAccess(Auth::refresh() ?: Auth::user(), 'inscriptions');
         header('Content-Type: application/json');
-        $provinces = [
-            'Bas-Uele', 'Équateur', 'Haut-Katanga', 'Haut-Lomami', 'Haut-Uele',
-            'Ituri', 'Kasaï', 'Kasaï-Central', 'Kasaï-Oriental', 'Kinshasa',
-            'Kongo-Central', 'Kwango', 'Kwilu', 'Lomami', 'Lualaba', 'Mai-Ndombe',
-            'Maniema', 'Mongala', 'Nord-Kivu', 'Nord-Ubangi', 'Sankuru', 'Sud-Kivu',
-            'Sud-Ubangi', 'Tanganyika', 'Tshopo', 'Tshuapa'
-        ];
-        echo json_encode(array_values($provinces));
+        echo json_encode(OriginesRDC::provinces(), JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -806,36 +839,7 @@ class InscriptionsController extends Controller
         $this->requireAdministrationModuleAccess(Auth::refresh() ?: Auth::user(), 'inscriptions');
         header('Content-Type: application/json');
         $province = trim($_GET['province'] ?? '');
-        $map = [
-            'Bas-Uele' => ['Buta'],
-            'Équateur' => ['Mbandaka'],
-            'Haut-Katanga' => ['Lubumbashi', 'Likasi', 'Kasumbalesa'],
-            'Haut-Lomami' => ['Kamina'],
-            'Haut-Uele' => ['Isiro'],
-            'Ituri' => ['Bunia'],
-            'Kasaï' => ['Tshikapa'],
-            'Kasaï-Central' => ['Kananga'],
-            'Kasaï-Oriental' => ['Mbuji-Mayi'],
-            'Kinshasa' => ['Kinshasa'],
-            'Kongo-Central' => ['Matadi', 'Boma', 'Muanda'],
-            'Kwango' => ['Kenge'],
-            'Kwilu' => ['Bandundu', 'Kikwit'],
-            'Lomami' => ['Kabinda'],
-            'Lualaba' => ['Kolwezi'],
-            'Mai-Ndombe' => ['Inongo'],
-            'Maniema' => ['Kindu'],
-            'Mongala' => ['Lisala'],
-            'Nord-Kivu' => ['Goma', 'Beni', 'Butembo'],
-            'Nord-Ubangi' => ['Gbadolite'],
-            'Sankuru' => ['Lusambo'],
-            'Sud-Kivu' => ['Bukavu', 'Uvira', 'Baraka'],
-            'Sud-Ubangi' => ['Gemena', 'Zongo'],
-            'Tanganyika' => ['Kalemie'],
-            'Tshopo' => ['Kisangani'],
-            'Tshuapa' => ['Boende'],
-        ];
-        $list = $map[$province] ?? [];
-        echo json_encode(array_values($list));
+        echo json_encode(OriginesRDC::territoriesFor($province), JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -898,9 +902,11 @@ class InscriptionsController extends Controller
             $eleveId = (int) ($_POST['eleve_id'] ?? 0);
 
             if ($eleveId > 0) {
-                $student = $role === 'super_admin' || $ecoleId <= 0
+                $student = $role === 'super_admin'
                     ? Eleve::findById($eleveId)
-                    : Eleve::findByIdAndSchool($eleveId, $ecoleId);
+                    : ($ecoleId > 0
+                        ? Eleve::findByIdAndSchool($eleveId, $ecoleId, $this->getSectionScopeForUser($user))
+                        : null);
                 if ($student) {
                     $wasAlreadyActive = ($student['statut_eleve'] ?? '') === 'actif';
                     if ($wasAlreadyActive) {
@@ -935,6 +941,23 @@ class InscriptionsController extends Controller
         }
 
         $this->redirect('/inscriptions');
+    }
+
+    private function validateOriginSelection(array $input): array
+    {
+        $province = OriginesRDC::normalizeProvince(trim((string) ($input['province_origine'] ?? '')));
+        $territory = trim((string) ($input['territoire'] ?? ''));
+        if ($province === '') {
+            return $territory === '' ? [] : ['Sélectionnez une province avant de choisir un territoire ou une commune.'];
+        }
+        if (!OriginesRDC::isKnownProvince($province)) {
+            return ['La province d’origine sélectionnée est invalide.'];
+        }
+        if ($territory !== '' && !in_array($territory, OriginesRDC::territoriesFor($province), true)) {
+            return ['Le territoire ou la commune ne correspond pas à la province sélectionnée.'];
+        }
+
+        return [];
     }
 
     private function ensureUniqueMatricule(string $matricule, ?int $excludeId = null): string

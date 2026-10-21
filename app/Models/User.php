@@ -117,8 +117,8 @@ class User
     public static function getDefaultSectionIdForRole(string $role): ?int
     {
         return match ($role) {
-            'préfet_école', 'DE_école', 'DD_école' => 3,
-            'DP_école', 'DA_école' => 2,
+            'préfet_école', 'DE_école', 'DD_école' => Section::findIdByName('Secondaire'),
+            'DP_école', 'DA_école' => Section::findIdByName('Primaire'),
             default => null,
         };
     }

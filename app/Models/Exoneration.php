@@ -30,10 +30,10 @@ class Exoneration
         ]);
     }
 
-    public static function getAllBySchool(int $ecoleId): array
+    public static function getAllBySchool(int $ecoleId, ?int $sectionId = null): array
     {
         $db = Database::getConnection();
-        $stmt = $db->prepare(
+        $sql =
                 'SELECT x.*, e.nom, e.postnom, e.prenom, e.matricule,
                     f.type_frais, f.devise AS frais_devise,
                     u.nom_complet AS demandeur_nom,
@@ -43,12 +43,18 @@ class Exoneration
              INNER JOIN frais_scolaires f ON f.id = x.frais_id
              LEFT JOIN utilisateurs u ON u.id = x.demandeur_id
              LEFT JOIN utilisateurs v ON v.id = x.validateur_id
-             WHERE x.ecole_id = :ecole_id
-             ORDER BY x.created_at DESC, x.id DESC'
-        );
-        $stmt->execute([':ecole_id' => $ecoleId]);
+             WHERE x.ecole_id = :ecole_id';
+        $params = [':ecole_id' => $ecoleId];
+        if ($sectionId !== null) {
+            $sql .= ' AND EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id '
+                . 'WHERE i.eleve_id = x.eleve_id AND c.ecole_id = :section_school AND c.section_id = :section_id)';
+            $params[':section_school'] = $ecoleId;
+            $params[':section_id'] = $sectionId;
+        }
+        $stmt = $db->prepare($sql . ' ORDER BY x.created_at DESC, x.id DESC');
+        $stmt->execute($params);
         $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        $financialByStudent = self::getFinancialSummaryBySchool($ecoleId);
+        $financialByStudent = self::getFinancialSummaryBySchool($ecoleId, $sectionId);
         foreach ($requests as &$request) {
             $request['financial_summary'] = $financialByStudent[(int) $request['eleve_id']] ?? [];
         }
@@ -56,7 +62,7 @@ class Exoneration
         return $requests;
     }
 
-    public static function getFinancialSummaryBySchool(int $ecoleId): array
+    public static function getFinancialSummaryBySchool(int $ecoleId, ?int $sectionId = null): array
     {
         $db = Database::getConnection();
         $stmt = $db->prepare(
@@ -85,9 +91,20 @@ class Exoneration
                  INNER JOIN annees_scolaires a ON a.id = d.annee_scolaire_id AND a.ecole_id = e.ecole_id AND a.est_active = 1
                  GROUP BY d.eleve_id, d.frais_id, UPPER(COALESCE(d.devise, \'USD\'))
              ) fee_debts
+             WHERE (:scope_none = 1 OR EXISTS (
+                 SELECT 1 FROM inscriptions si
+                 INNER JOIN classes sc ON sc.id = si.classe_id
+                 WHERE si.eleve_id = fee_debts.eleve_id
+                   AND sc.ecole_id = :scope_school AND sc.section_id = :scope_section
+             ))
              GROUP BY fee_debts.eleve_id, fee_debts.devise'
         );
-        $stmt->execute([':school' => $ecoleId]);
+        $stmt->execute([
+            ':school' => $ecoleId,
+            ':scope_none' => $sectionId === null ? 1 : 0,
+            ':scope_school' => $ecoleId,
+            ':scope_section' => $sectionId ?? 0,
+        ]);
 
         $summary = [];
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
@@ -173,7 +190,7 @@ class Exoneration
         return (float) ($stmt->fetchColumn() ?: 0);
     }
 
-    public static function decide(int $id, int $ecoleId, int $validateurId, string $status, string $commentaire): bool
+    public static function decide(int $id, int $ecoleId, int $validateurId, string $status, string $commentaire, ?int $sectionId = null): bool
     {
         if (!in_array($status, ['Approuvee', 'Refusee'], true) || $ecoleId <= 0 || $validateurId <= 0) {
             return false;
@@ -183,12 +200,17 @@ class Exoneration
         $db->beginTransaction();
 
         try {
-            $stmt = $db->prepare(
-                'SELECT * FROM exonerations
-                 WHERE id = :id AND ecole_id = :ecole_id AND statut = :statut
-                 LIMIT 1 FOR UPDATE'
-            );
-            $stmt->execute([':id' => $id, ':ecole_id' => $ecoleId, ':statut' => 'En_attente']);
+            $sql = 'SELECT * FROM exonerations
+                 WHERE id = :id AND ecole_id = :ecole_id AND statut = :statut';
+            $params = [':id' => $id, ':ecole_id' => $ecoleId, ':statut' => 'En_attente'];
+            if ($sectionId !== null) {
+                $sql .= ' AND EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id '
+                    . 'WHERE i.eleve_id = exonerations.eleve_id AND c.ecole_id = :section_school AND c.section_id = :section_id)';
+                $params[':section_school'] = $ecoleId;
+                $params[':section_id'] = $sectionId;
+            }
+            $stmt = $db->prepare($sql . ' LIMIT 1 FOR UPDATE');
+            $stmt->execute($params);
             $request = $stmt->fetch(PDO::FETCH_ASSOC);
             if (!$request || (int) $request['demandeur_id'] === $validateurId) {
                 $db->rollBack();

@@ -31,8 +31,9 @@ class ExonerationsController extends Controller
         $user = Auth::refresh() ?: Auth::user();
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
         $role = $user['role'] ?? 'default';
+        $sectionScopeId = $this->getSectionScopeForUser($user);
         $studentId = (int) ($_GET['eleve_id'] ?? 0);
-        $student = $studentId > 0 ? Eleve::findByIdAndSchool($studentId, $ecoleId) : null;
+        $student = $studentId > 0 ? Eleve::findByIdAndSchool($studentId, $ecoleId, $sectionScopeId) : null;
 
         $this->view('exonerations/index', [
             'title' => APP_NAME . ' - Exonérations',
@@ -40,10 +41,10 @@ class ExonerationsController extends Controller
             'role' => $role,
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $this->getModulesForRole($role),
-            'students' => in_array($role, self::REQUEST_ROLES, true) ? Eleve::getAllBySchool($ecoleId) : [],
+            'students' => in_array($role, self::REQUEST_ROLES, true) ? Eleve::getAllBySchool($ecoleId, null, $sectionScopeId) : [],
             'student' => $student,
             'availableFees' => $student ? Exoneration::getAvailableFeesForStudent($studentId, $ecoleId) : [],
-            'requests' => Exoneration::getAllBySchool($ecoleId),
+            'requests' => Exoneration::getAllBySchool($ecoleId, $sectionScopeId),
             'canRequest' => in_array($role, self::REQUEST_ROLES, true),
             'canValidate' => in_array($role, self::VALIDATION_ROLES, true),
         ]);
@@ -57,8 +58,9 @@ class ExonerationsController extends Controller
 
         $user = Auth::refresh() ?: Auth::user();
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        $sectionScopeId = $this->getSectionScopeForUser($user);
         $studentId = (int) ($_GET['eleve_id'] ?? 0);
-        if ($ecoleId <= 0 || !Eleve::findByIdAndSchool($studentId, $ecoleId)) {
+        if ($ecoleId <= 0 || !Eleve::findByIdAndSchool($studentId, $ecoleId, $sectionScopeId)) {
             http_response_code(404);
             echo json_encode(['fees' => []], JSON_UNESCAPED_UNICODE);
             return;
@@ -79,13 +81,14 @@ class ExonerationsController extends Controller
         Auth::requireRoles(self::REQUEST_ROLES);
         $user = Auth::refresh() ?: Auth::user();
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        $sectionScopeId = $this->getSectionScopeForUser($user);
         $studentId = (int) ($_POST['eleve_id'] ?? 0);
         $feeId = (int) ($_POST['frais_id'] ?? 0);
         $amount = trim((string) ($_POST['montant'] ?? ''));
         $motif = trim((string) ($_POST['motif'] ?? ''));
         $errors = [];
 
-        if ($ecoleId <= 0 || !Eleve::findByIdAndSchool($studentId, $ecoleId)) {
+        if ($ecoleId <= 0 || !Eleve::findByIdAndSchool($studentId, $ecoleId, $sectionScopeId)) {
             $errors[] = 'Élève invalide pour cette école.';
         }
         if (!is_numeric($amount) || (float) $amount <= 0) {
@@ -144,7 +147,8 @@ class ExonerationsController extends Controller
             (int) ($user['ecole_id'] ?? 0),
             (int) ($user['id'] ?? 0),
             $status,
-            trim((string) ($_POST['commentaire'] ?? ''))
+            trim((string) ($_POST['commentaire'] ?? '')),
+            $this->getSectionScopeForUser($user)
         );
 
         if ($ok) {

@@ -133,6 +133,7 @@ class Controller
                 ['name' => 'Bulletins', 'path' => '/bulletins', 'icon' => 'bi-file-earmark-text'],
                 ['name' => 'Présences', 'path' => '/presences', 'icon' => 'bi-calendar-check'],
                 ['name' => 'Évaluations', 'path' => '/evaluations', 'icon' => 'bi-journal-check'],
+                ['name' => 'Événements', 'path' => '/evenements', 'icon' => 'bi-calendar-event'],
             ],
             'DP_école' => [
                 ['name' => 'Classes', 'path' => '/classes', 'icon' => 'bi-houses'],
@@ -170,6 +171,7 @@ class Controller
                 ['name' => 'Recouvrements', 'path' => '/recouvrements', 'icon' => 'bi-cash-stack'],
                 ['name' => 'Caisses & Banques', 'path' => '/comptes', 'icon' => 'bi-bank'],
                 ['name' => 'Paiements', 'path' => '/paiements', 'icon' => 'bi-currency-dollar'],
+                ['name' => 'Événements', 'path' => '/evenements', 'icon' => 'bi-calendar-event'],
                 ['name' => 'Rapports', 'path' => '/rapports', 'icon' => 'bi-file-earmark-bar-graph'],
             ],
             'sec_école' => [
@@ -266,6 +268,13 @@ class Controller
     {
         $role = (string) ($user['role'] ?? '');
         if (in_array($role, ['préfet_école', 'DE_école', 'DD_école'], true)) {
+            $sectionId = (int) ($user['section_id'] ?? 0);
+            $section = $sectionId > 0 ? \App\Models\Section::findById($sectionId) : null;
+            $sectionName = mb_strtolower(trim((string) ($section['nom_section'] ?? '')), 'UTF-8');
+            if ($sectionName === 'secondaire') {
+                return $sectionId;
+            }
+
             return \App\Models\User::getDefaultSectionIdForRole($role) ?? 0;
         }
 

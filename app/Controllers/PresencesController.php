@@ -20,8 +20,9 @@ class PresencesController extends Controller
         $schoolId = (int) ($user['ecole_id'] ?? 0);
         $isTeacher = $role === 'enseignant_école';
         $teacherAgentId = $isTeacher ? (int) ($user['reference_id'] ?? 0) : null;
+        $sectionScopeId = $this->getSectionScopeForUser($user);
         $classes = ($role === 'super_admin' || $schoolId > 0)
-            ? PresenceEleve::getAvailableClasses($role === 'super_admin' ? null : $schoolId, $teacherAgentId)
+            ? PresenceEleve::getAvailableClasses($role === 'super_admin' ? null : $schoolId, $teacherAgentId, $sectionScopeId)
             : [];
         $csrfToken = (string) ($_SESSION['attendance_csrf_token'] ?? '');
         if ($csrfToken === '') {

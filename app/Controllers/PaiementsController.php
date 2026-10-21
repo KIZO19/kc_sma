@@ -24,10 +24,12 @@ class PaiementsController extends Controller
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
+        $sectionScopeId = $this->getSectionScopeForUser($user);
         $eleveId = !empty($_GET['eleve_id']) ? (int) $_GET['eleve_id'] : null;
         $fraisId = !empty($_GET['frais_id']) ? (int) $_GET['frais_id'] : null;
-        if ($eleveId && ($role !== 'super_admin') && (int) ($user['ecole_id'] ?? 0) > 0) {
-            if (!Eleve::findByIdAndSchool($eleveId, (int) $user['ecole_id'])) {
+        if ($eleveId && $role !== 'super_admin') {
+            if ((int) ($user['ecole_id'] ?? 0) <= 0
+                || !Eleve::findByIdAndSchool($eleveId, (int) $user['ecole_id'], $sectionScopeId)) {
                 $eleveId = null;
             }
         }
@@ -44,20 +46,29 @@ class PaiementsController extends Controller
         // Show only enrolled (validated) students who still have outstanding debts for selection
         $db = Database::getConnection();
         if ($userSchool > 0) {
-            $stmt = $db->prepare(
+            $stmtSql =
                 'SELECT DISTINCT e.* FROM eleves e '
                 . 'INNER JOIN dettes_eleves d ON d.eleve_id = e.id '
                 . 'LEFT JOIN inscriptions i ON i.eleve_id = e.id '
                 . 'LEFT JOIN classes c ON i.classe_id = c.id '
-                . "WHERE d.montant_restant > 0 AND e.statut_eleve = :statut AND (e.ecole_id = :ecole_id OR c.ecole_id = :ecole_id) "
-                . 'ORDER BY e.nom ASC, e.postnom ASC, e.prenom ASC'
-            );
-            $stmt->execute([':statut' => 'actif', ':ecole_id' => $userSchool]);
+                . "WHERE d.montant_restant > 0 AND e.statut_eleve = :statut AND (e.ecole_id = :ecole_id OR c.ecole_id = :ecole_id) ";
+            $params = [':statut' => 'actif', ':ecole_id' => $userSchool];
+            if ($sectionScopeId !== null) {
+                $stmtSql .= 'AND EXISTS (SELECT 1 FROM inscriptions si INNER JOIN classes sc ON sc.id = si.classe_id '
+                    . 'WHERE si.eleve_id = e.id AND sc.ecole_id = :section_school AND sc.section_id = :section_id) ';
+                $params[':section_school'] = $userSchool;
+                $params[':section_id'] = $sectionScopeId;
+            }
+            $stmtSql .= 'ORDER BY e.nom ASC, e.postnom ASC, e.prenom ASC';
+            $stmt = $db->prepare($stmtSql);
+            $stmt->execute($params);
             $students = $stmt->fetchAll();
-        } else {
+        } elseif ($role === 'super_admin') {
             $stmt = $db->prepare('SELECT DISTINCT e.* FROM eleves e INNER JOIN dettes_eleves d ON d.eleve_id = e.id WHERE d.montant_restant > 0 AND e.statut_eleve = :statut ORDER BY e.nom ASC, e.postnom ASC, e.prenom ASC');
             $stmt->execute([':statut' => 'actif']);
             $students = $stmt->fetchAll();
+        } else {
+            $students = [];
         }
         $fees = $userSchool > 0 ? FraisScolaire::getAllBySchool($userSchool) : [];
 
@@ -92,10 +103,12 @@ class PaiementsController extends Controller
         Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'parent_ecole']);
 
         $user = Auth::refresh() ?: Auth::user();
+        $sectionScopeId = $this->getSectionScopeForUser($user);
         $eleveId = !empty($_GET['eleve_id']) ? (int) $_GET['eleve_id'] : null;
         $fraisId = !empty($_GET['frais_id']) ? (int) $_GET['frais_id'] : null;
-        if ($eleveId && ($user['role'] ?? '') !== 'super_admin' && (int) ($user['ecole_id'] ?? 0) > 0) {
-            if (!Eleve::findByIdAndSchool($eleveId, (int) $user['ecole_id'])) {
+        if ($eleveId && ($user['role'] ?? '') !== 'super_admin') {
+            if ((int) ($user['ecole_id'] ?? 0) <= 0
+                || !Eleve::findByIdAndSchool($eleveId, (int) $user['ecole_id'], $sectionScopeId)) {
                 $eleveId = null;
             }
         }
@@ -161,10 +174,12 @@ class PaiementsController extends Controller
         Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'parent_ecole']);
 
         $user = Auth::refresh() ?: Auth::user();
+        $sectionScopeId = $this->getSectionScopeForUser($user);
         $eleveId = !empty($_GET['eleve_id']) ? (int) $_GET['eleve_id'] : null;
         $fraisId = !empty($_GET['frais_id']) ? (int) $_GET['frais_id'] : null;
-        if ($eleveId && ($user['role'] ?? '') !== 'super_admin' && (int) ($user['ecole_id'] ?? 0) > 0) {
-            if (!Eleve::findByIdAndSchool($eleveId, (int) $user['ecole_id'])) {
+        if ($eleveId && ($user['role'] ?? '') !== 'super_admin') {
+            if ((int) ($user['ecole_id'] ?? 0) <= 0
+                || !Eleve::findByIdAndSchool($eleveId, (int) $user['ecole_id'], $sectionScopeId)) {
                 $eleveId = null;
             }
         }
@@ -183,6 +198,7 @@ class PaiementsController extends Controller
     private function fetchTotalPaidForEleve(array $user, int $eleveId): float
     {
         $db = \App\Core\Database::getConnection();
+        $sectionScopeId = $this->getSectionScopeForUser($user);
         $sql = 'SELECT SUM(ece.montant) AS total_paid FROM ecritures_comptables_eleves ece '
             . 'INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id '
             . 'INNER JOIN eleves el ON ce.eleve_id = el.id '
@@ -196,6 +212,12 @@ class PaiementsController extends Controller
                 OR EXISTS (SELECT 1 FROM frais_scolaires fs2 INNER JOIN classes c2 ON c2.id = fs2.classe_id WHERE fs2.id = ece.frais_id AND c2.ecole_id = :ecole)
             ) ';
             $params[':ecole'] = (int) ($user['ecole_id'] ?? 0);
+        }
+        if ($sectionScopeId !== null) {
+            $sql .= 'AND EXISTS (SELECT 1 FROM inscriptions si INNER JOIN classes sc ON si.classe_id = sc.id '
+                . 'WHERE si.eleve_id = el.id AND sc.ecole_id = :section_school AND sc.section_id = :section_id) ';
+            $params[':section_school'] = (int) ($user['ecole_id'] ?? 0);
+            $params[':section_id'] = $sectionScopeId;
         }
 
         $stmt = $db->prepare($sql);
@@ -217,6 +239,12 @@ class PaiementsController extends Controller
                     OR EXISTS (SELECT 1 FROM frais_scolaires fs2 INNER JOIN classes c2 ON c2.id = fs2.classe_id WHERE fs2.id = pe.frais_id AND c2.ecole_id = :ecole)
                 ) ';
                 $legacyParams[':ecole'] = (int) ($user['ecole_id'] ?? 0);
+            }
+            if ($sectionScopeId !== null) {
+                $legacySql .= 'AND EXISTS (SELECT 1 FROM inscriptions si INNER JOIN classes sc ON si.classe_id = sc.id '
+                    . 'WHERE si.eleve_id = el.id AND sc.ecole_id = :section_school AND sc.section_id = :section_id) ';
+                $legacyParams[':section_school'] = (int) ($user['ecole_id'] ?? 0);
+                $legacyParams[':section_id'] = $sectionScopeId;
             }
             $lstmt = $db->prepare($legacySql);
             foreach ($legacyParams as $key => $value) {
@@ -258,6 +286,7 @@ class PaiementsController extends Controller
     private function fetchPaymentsForUser(array $user, int $limit = 0, ?int $eleveId = null, ?int $fraisId = null): array
     {
         $db = \App\Core\Database::getConnection();
+        $sectionScopeId = $this->getSectionScopeForUser($user);
         $sql = 'SELECT ece.id, ece.frais_id, ece.reference_recu, ece.date_operation, ece.montant, ece.libelle, ce.eleve_id, el.nom, el.postnom, el.prenom, COALESCE(NULLIF(us.nom_complet, \'\'), NULLIF(CONCAT_WS(\' \', a.nom, a.postnom, a.prenom), \'\'), u.nom_complet, \'Agent non identifié\') AS agent_nom, COALESCE(ra.titre_role, us.role, u.role, \'Agent\') AS agent_fonction, fs.devise AS frais_devise, COALESCE(fs.devise, ecole.devise_principale, \'USD\') AS transaction_devise '
             . 'FROM ecritures_comptables_eleves ece '
             . 'INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id '
@@ -278,6 +307,12 @@ class PaiementsController extends Controller
                 OR EXISTS (SELECT 1 FROM frais_scolaires fs2 INNER JOIN classes c2 ON c2.id = fs2.classe_id WHERE fs2.id = ece.frais_id AND c2.ecole_id = :ecole)
             ) ';
             $params[':ecole'] = (int) ($user['ecole_id'] ?? 0);
+        }
+        if ($sectionScopeId !== null) {
+            $sql .= 'AND EXISTS (SELECT 1 FROM inscriptions si INNER JOIN classes sc ON si.classe_id = sc.id '
+                . 'WHERE si.eleve_id = el.id AND sc.ecole_id = :section_school AND sc.section_id = :section_id) ';
+            $params[':section_school'] = (int) ($user['ecole_id'] ?? 0);
+            $params[':section_id'] = $sectionScopeId;
         }
         if ($eleveId !== null) {
             $sql .= 'AND ce.eleve_id = :eleveId ';
@@ -320,6 +355,12 @@ class PaiementsController extends Controller
                     OR EXISTS (SELECT 1 FROM frais_scolaires fs2 INNER JOIN classes c2 ON c2.id = fs2.classe_id WHERE fs2.id = pe.frais_id AND c2.ecole_id = :ecole)
                 ) ';
                 $legacyParams[':ecole'] = (int) ($user['ecole_id'] ?? 0);
+            }
+            if ($sectionScopeId !== null) {
+                $legacySql .= 'AND EXISTS (SELECT 1 FROM inscriptions si INNER JOIN classes sc ON si.classe_id = sc.id '
+                    . 'WHERE si.eleve_id = el.id AND sc.ecole_id = :section_school AND sc.section_id = :section_id) ';
+                $legacyParams[':section_school'] = (int) ($user['ecole_id'] ?? 0);
+                $legacyParams[':section_id'] = $sectionScopeId;
             }
             if ($eleveId !== null) {
                 $legacySql .= 'AND el.id = :eleveId ';
@@ -588,10 +629,12 @@ class PaiementsController extends Controller
         $students = [];
         $feeDebtDetails = [];
         if ($eleveId > 0) {
-            if (($user['role'] ?? '') !== 'super_admin' && (int) ($user['ecole_id'] ?? 0) > 0) {
-                $eleve = Eleve::findByIdAndSchool($eleveId, (int) $user['ecole_id']);
-            } else {
+            if (($user['role'] ?? '') === 'super_admin') {
                 $eleve = Eleve::findById($eleveId);
+            } elseif ((int) ($user['ecole_id'] ?? 0) > 0) {
+                $eleve = Eleve::findByIdAndSchool($eleveId, (int) $user['ecole_id'], $this->getSectionScopeForUser($user));
+            } else {
+                $eleve = null;
             }
             if (!$eleve) {
                 header('Location: ' . BASE_URL . '/error/notFound');
@@ -615,7 +658,9 @@ class PaiementsController extends Controller
         } else {
             // No specific eleve requested: show all students from the school, but visually separate those already settled.
             $userSchool = (int) ($user['ecole_id'] ?? 0);
-            $allStudents = $userSchool > 0 ? Eleve::getAllBySchool($userSchool) : Eleve::getAll();
+            $allStudents = $userSchool > 0
+                ? Eleve::getAllBySchool($userSchool, null, $this->getSectionScopeForUser($user))
+                : ((($user['role'] ?? '') === 'super_admin') ? Eleve::getAll() : []);
             $students = [];
             foreach ($allStudents as $student) {
                 $studentId = (int) ($student['id'] ?? 0);
@@ -799,9 +844,11 @@ class PaiementsController extends Controller
         if ($eleveId <= 0) {
             $errors[] = 'Élève invalide.';
         } else {
-            $eleve = ($userSchool > 0 && ($user['role'] ?? '') !== 'super_admin')
-                ? Eleve::findByIdAndSchool($eleveId, $userSchool)
-                : Eleve::findById($eleveId);
+            $eleve = ($user['role'] ?? '') === 'super_admin'
+                ? Eleve::findById($eleveId)
+                : ($userSchool > 0
+                    ? Eleve::findByIdAndSchool($eleveId, $userSchool, $this->getSectionScopeForUser($user))
+                    : null);
             if (!$eleve) {
                 $errors[] = 'Élève invalide ou hors périmètre.';
             }
@@ -1212,7 +1259,7 @@ class PaiementsController extends Controller
                 if (
                     $userSchool <= 0
                     || !$student
-                    || !Eleve::findByIdAndSchool($paymentEleveId, $userSchool)
+                    || !Eleve::findByIdAndSchool($paymentEleveId, $userSchool, $this->getSectionScopeForUser($user))
                     || (
                         $userRole === 'parent_ecole'
                         && (int) ($student['parent_id'] ?? 0) !== (int) ($user['reference_id'] ?? 0)
@@ -1392,7 +1439,7 @@ class PaiementsController extends Controller
             }
         } elseif ($role !== 'super_admin') {
             $schoolId = (int) ($user['ecole_id'] ?? 0);
-            if ($schoolId <= 0 || !Eleve::findByIdAndSchool($eleveId, $schoolId)) {
+            if ($schoolId <= 0 || !Eleve::findByIdAndSchool($eleveId, $schoolId, $this->getSectionScopeForUser($user))) {
                 header('Location: ' . BASE_URL . '/error/notFound');
                 exit;
             }

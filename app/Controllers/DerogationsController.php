@@ -30,8 +30,9 @@ class DerogationsController extends Controller
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
-        $students = $ecoleId > 0 ? Eleve::getAllBySchool($ecoleId) : [];
-        $financialSummary = $ecoleId > 0 ? Exoneration::getFinancialSummaryBySchool($ecoleId) : [];
+        $sectionScopeId = $this->getSectionScopeForUser($user);
+        $students = $ecoleId > 0 ? Eleve::getAllBySchool($ecoleId, null, $sectionScopeId) : [];
+        $financialSummary = $ecoleId > 0 ? Exoneration::getFinancialSummaryBySchool($ecoleId, $sectionScopeId) : [];
 
         $this->view('derogations/index', [
             'title' => APP_NAME . ' - Dérogations',
@@ -41,7 +42,7 @@ class DerogationsController extends Controller
             'modules' => $this->getModulesForRole($role),
             'students' => $students,
             'financialSummary' => $financialSummary,
-            'requests' => Derogation::getAllBySchool($ecoleId),
+            'requests' => Derogation::getAllBySchool($ecoleId, $sectionScopeId),
             'canRequest' => in_array($role, self::REQUEST_ROLES, true),
             'canValidate' => in_array($role, self::VALIDATION_ROLES, true),
         ]);
@@ -53,15 +54,16 @@ class DerogationsController extends Controller
         Auth::requireRoles(self::REQUEST_ROLES);
         $user = Auth::refresh() ?: Auth::user();
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        $sectionScopeId = $this->getSectionScopeForUser($user);
         $eleveId = (int) ($_POST['eleve_id'] ?? 0);
         $dateFin = trim((string) ($_POST['date_fin'] ?? ''));
         $motif = trim((string) ($_POST['motif'] ?? ''));
-        $student = $ecoleId > 0 ? Eleve::findByIdAndSchool($eleveId, $ecoleId) : null;
+        $student = $ecoleId > 0 ? Eleve::findByIdAndSchool($eleveId, $ecoleId, $sectionScopeId) : null;
         $errors = [];
         $date = \DateTimeImmutable::createFromFormat('Y-m-d', $dateFin);
         $dateErrors = \DateTimeImmutable::getLastErrors();
         if (!$student) $errors[] = 'Élève invalide pour cette école.';
-        $studentFinancial = $student ? (Exoneration::getFinancialSummaryBySchool($ecoleId)[$eleveId] ?? []) : [];
+        $studentFinancial = $student ? (Exoneration::getFinancialSummaryBySchool($ecoleId, $sectionScopeId)[$eleveId] ?? []) : [];
         $hasCurrentDebt = (bool) array_filter(
             array_column($studentFinancial, 'remaining'),
             static fn ($amount): bool => (float) $amount > 0.005
@@ -93,7 +95,14 @@ class DerogationsController extends Controller
         Auth::requireRoles(self::VALIDATION_ROLES);
         $user = Auth::refresh() ?: Auth::user();
         $status = ($_POST['decision'] ?? '') === 'Approuvee' ? 'Approuvee' : 'Refusee';
-        $ok = Derogation::decide((int) ($_POST['id'] ?? 0), (int) ($user['ecole_id'] ?? 0), (int) ($user['id'] ?? 0), $status, trim((string) ($_POST['commentaire'] ?? '')));
+        $ok = Derogation::decide(
+            (int) ($_POST['id'] ?? 0),
+            (int) ($user['ecole_id'] ?? 0),
+            (int) ($user['id'] ?? 0),
+            $status,
+            trim((string) ($_POST['commentaire'] ?? '')),
+            $this->getSectionScopeForUser($user)
+        );
         $_SESSION[$ok ? 'derogations_success' : 'derogations_errors'] = $ok
             ? ($status === 'Approuvee' ? 'Dérogation approuvée : l’élève est protégé jusqu’à la date indiquée.' : 'Demande de dérogation refusée.')
             : ['La décision n’a pas pu être enregistrée.'];

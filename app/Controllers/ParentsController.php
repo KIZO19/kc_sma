@@ -17,16 +17,21 @@ class ParentsController extends Controller
         $user = Auth::refresh() ?: Auth::user();
         $parentId = (int) ($_GET['id'] ?? 0);
         $schoolId = (int) ($user['ecole_id'] ?? 0);
+        $sectionScopeId = $this->getSectionScopeForUser($user);
         $parent = ($user['role'] ?? '') === 'super_admin'
             ? ParentModel::findById($parentId)
-            : ($schoolId > 0 ? ParentModel::findByIdAndSchool($parentId, $schoolId) : null);
+            : ($schoolId > 0 ? ParentModel::findByIdAndSchool($parentId, $schoolId, $sectionScopeId) : null);
 
         if (!$parent) {
             $this->redirect('/error/notFound');
         }
 
         $role = $user['role'] ?? 'default';
-        $children = ParentModel::getChildren($parentId);
+        $children = ParentModel::getChildren(
+            $parentId,
+            ($user['role'] ?? '') === 'super_admin' ? null : $schoolId,
+            $sectionScopeId
+        );
         $this->view('parents/show', [
             'title' => APP_NAME . ' - Profil parent',
             'user' => $user,

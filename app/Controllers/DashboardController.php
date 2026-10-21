@@ -371,10 +371,13 @@ class DashboardController extends Controller
             return [];
         }
 
-        $studentCount = $this->countSchoolStudents($schoolId);
-        $teacherCount = $this->countSchoolUsers($schoolId, ['enseignant_école']);
+        $sectionScopeId = in_array($role, ['préfet_école', 'DE_école', 'DD_école'], true)
+            ? $this->getSectionScopeForUser($user)
+            : null;
+        $studentCount = $this->countSchoolStudents($schoolId, $sectionScopeId);
+        $teacherCount = $this->countSchoolUsers($schoolId, ['enseignant_école'], $sectionScopeId);
         $parentCount = $this->countSchoolUsers($schoolId, ['parent_ecole']);
-        $classCount = $this->countSchoolClasses($schoolId);
+        $classCount = $this->countSchoolClasses($schoolId, $sectionScopeId);
         $eventCount = $this->countSchoolEvents($schoolId);
         $debtTotal = $this->sumOutstandingDebt($schoolId);
         $payments30d = $this->sumPaymentsLast30Days($schoolId);
@@ -387,9 +390,9 @@ class DashboardController extends Controller
                 ['title' => 'Paiements 30j', 'value' => $this->formatCurrencyCompact($payments30d), 'icon' => 'bi-wallet2', 'bg' => 'bg-success', 'hint' => 'Reçus récemment'],
             ],
             'promoteur_école', 'DE_école', 'DD_école', 'DA_école' => [
-                ['title' => 'Élèves inscrits', 'value' => $studentCount, 'icon' => 'bi-people-fill', 'bg' => 'bg-primary', 'hint' => 'Effectif de l’école'],
-                ['title' => 'Classes', 'value' => $classCount, 'icon' => 'bi-diagram-3', 'bg' => 'bg-info', 'hint' => 'Organisation scolaire'],
-                ['title' => 'Enseignants', 'value' => $teacherCount, 'icon' => 'bi-person-workspace', 'bg' => 'bg-success', 'hint' => 'Comptes enseignants'],
+                ['title' => 'Élèves inscrits', 'value' => $studentCount, 'icon' => 'bi-people-fill', 'bg' => 'bg-primary', 'hint' => $sectionScopeId !== null ? 'Effectif du secondaire' : 'Effectif de l’école'],
+                ['title' => 'Classes', 'value' => $classCount, 'icon' => 'bi-diagram-3', 'bg' => 'bg-info', 'hint' => $sectionScopeId !== null ? 'Classes du secondaire' : 'Organisation scolaire'],
+                ['title' => 'Enseignants', 'value' => $teacherCount, 'icon' => 'bi-person-workspace', 'bg' => 'bg-success', 'hint' => $sectionScopeId !== null ? 'Enseignants du secondaire' : 'Comptes enseignants'],
                 ['title' => 'Événements', 'value' => $eventCount, 'icon' => 'bi-calendar-event', 'bg' => 'bg-warning', 'hint' => 'Activités enregistrées'],
             ],
             'comptable_école' => [
@@ -405,10 +408,10 @@ class DashboardController extends Controller
                 ['title' => 'Événements', 'value' => $eventCount, 'icon' => 'bi-calendar3', 'bg' => 'bg-warning', 'hint' => 'Activités enregistrées'],
             ],
             'préfet_école' => [
-                ['title' => 'Élèves inscrits', 'value' => $studentCount, 'icon' => 'bi-people-fill', 'bg' => 'bg-primary', 'hint' => 'Effectif de l’école'],
-                ['title' => 'Classes', 'value' => $classCount, 'icon' => 'bi-diagram-3', 'bg' => 'bg-info', 'hint' => 'Organisation scolaire'],
-                ['title' => 'Options actives', 'value' => $schoolId > 0 ? $this->countSchoolOptions($schoolId) : 0, 'icon' => 'bi-grid-1x2', 'bg' => 'bg-success', 'hint' => 'Rattachées aux classes'],
-                ['title' => 'Enseignants', 'value' => $schoolId > 0 ? $this->countSchoolUsers($schoolId, ['enseignant_école']) : 0, 'icon' => 'bi-person-workspace', 'bg' => 'bg-warning', 'hint' => 'Comptes enseignants'],
+                ['title' => 'Élèves inscrits', 'value' => $studentCount, 'icon' => 'bi-people-fill', 'bg' => 'bg-primary', 'hint' => 'Effectif du secondaire'],
+                ['title' => 'Classes', 'value' => $classCount, 'icon' => 'bi-diagram-3', 'bg' => 'bg-info', 'hint' => 'Classes du secondaire'],
+                ['title' => 'Options actives', 'value' => $schoolId > 0 ? $this->countSchoolOptions($schoolId, $sectionScopeId) : 0, 'icon' => 'bi-grid-1x2', 'bg' => 'bg-success', 'hint' => 'Options du secondaire'],
+                ['title' => 'Enseignants', 'value' => $schoolId > 0 ? $this->countSchoolUsers($schoolId, ['enseignant_école'], $sectionScopeId) : 0, 'icon' => 'bi-person-workspace', 'bg' => 'bg-warning', 'hint' => 'Enseignants du secondaire'],
             ],
             'DP_école' => [
                 ['title' => 'Élèves inscrits', 'value' => $studentCount, 'icon' => 'bi-people-fill', 'bg' => 'bg-primary', 'hint' => 'Effectif de l’école'],
@@ -561,12 +564,15 @@ class DashboardController extends Controller
             return ['title' => 'Vue synthétique', 'items' => []];
         }
 
-        $students = $this->countSchoolStudents($schoolId);
+        $sectionScopeId = $role === 'préfet_école'
+            ? $this->getSectionScopeForUser($user)
+            : null;
+        $students = $this->countSchoolStudents($schoolId, $sectionScopeId);
         $items = match ($role) {
             'préfet_école' => [
-                ['label' => 'Effectif scolaire', 'value' => (string) $students, 'color' => 'bg-primary'],
-                ['label' => 'Classes organisées', 'value' => (string) $this->countSchoolClasses($schoolId), 'color' => 'bg-info'],
-                ['label' => 'Options rattachées', 'value' => (string) $this->countSchoolOptions($schoolId), 'color' => 'bg-success'],
+                ['label' => 'Effectif du secondaire', 'value' => (string) $students, 'color' => 'bg-primary'],
+                ['label' => 'Classes du secondaire', 'value' => (string) $this->countSchoolClasses($schoolId, $sectionScopeId), 'color' => 'bg-info'],
+                ['label' => 'Options du secondaire', 'value' => (string) $this->countSchoolOptions($schoolId, $sectionScopeId), 'color' => 'bg-success'],
             ],
             'DP_école' => [
                 ['label' => 'Effectif scolaire', 'value' => (string) $students, 'color' => 'bg-primary'],
@@ -582,12 +588,18 @@ class DashboardController extends Controller
         ];
     }
 
-    private function countSchoolStudents(int $schoolId): int
+    private function countSchoolStudents(int $schoolId, ?int $sectionId = null): int
     {
         try {
             $db = Database::getConnection();
-            $stmt = $db->prepare('SELECT COUNT(DISTINCT i.eleve_id) AS total FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id WHERE c.ecole_id = :ecole');
-            $stmt->execute([':ecole' => $schoolId]);
+            $sql = 'SELECT COUNT(DISTINCT i.eleve_id) AS total FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id WHERE c.ecole_id = :ecole';
+            $params = [':ecole' => $schoolId];
+            if ($sectionId !== null) {
+                $sql .= ' AND c.section_id = :section_id';
+                $params[':section_id'] = $sectionId;
+            }
+            $stmt = $db->prepare($sql);
+            $stmt->execute($params);
             return (int) ($stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
         } catch (\Throwable $e) {
             error_log('DashboardController::countSchoolStudents failed: ' . $e->getMessage());
@@ -595,24 +607,36 @@ class DashboardController extends Controller
         }
     }
 
-    private function countSchoolClasses(int $schoolId): int
+    private function countSchoolClasses(int $schoolId, ?int $sectionId = null): int
     {
         try {
             $db = Database::getConnection();
-            $stmt = $db->prepare('SELECT COUNT(*) AS total FROM classes WHERE ecole_id = :ecole');
-            $stmt->execute([':ecole' => $schoolId]);
+            $sql = 'SELECT COUNT(*) AS total FROM classes WHERE ecole_id = :ecole';
+            $params = [':ecole' => $schoolId];
+            if ($sectionId !== null) {
+                $sql .= ' AND section_id = :section_id';
+                $params[':section_id'] = $sectionId;
+            }
+            $stmt = $db->prepare($sql);
+            $stmt->execute($params);
             return (int) ($stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
         } catch (\Throwable $e) {
             return 0;
         }
     }
 
-    private function countSchoolOptions(int $schoolId): int
+    private function countSchoolOptions(int $schoolId, ?int $sectionId = null): int
     {
         try {
             $db = Database::getConnection();
-            $stmt = $db->prepare('SELECT COUNT(DISTINCT option_id) FROM classes WHERE ecole_id = :ecole AND option_id IS NOT NULL');
-            $stmt->execute([':ecole' => $schoolId]);
+            $sql = 'SELECT COUNT(DISTINCT option_id) FROM classes WHERE ecole_id = :ecole AND option_id IS NOT NULL';
+            $params = [':ecole' => $schoolId];
+            if ($sectionId !== null) {
+                $sql .= ' AND section_id = :section_id';
+                $params[':section_id'] = $sectionId;
+            }
+            $stmt = $db->prepare($sql);
+            $stmt->execute($params);
 
             return (int) $stmt->fetchColumn();
         } catch (\Throwable $e) {
@@ -633,7 +657,7 @@ class DashboardController extends Controller
         }
     }
 
-    private function countSchoolUsers(int $schoolId, array $roles): int
+    private function countSchoolUsers(int $schoolId, array $roles, ?int $sectionId = null): int
     {
         if (empty($roles)) {
             return 0;
@@ -643,8 +667,20 @@ class DashboardController extends Controller
             $db = Database::getConnection();
             $inClause = implode(',', array_fill(0, count($roles), '?'));
             $sql = 'SELECT COUNT(*) AS total FROM utilisateurs WHERE ecole_id = :ecole AND role IN (' . $inClause . ')';
+            if ($sectionId !== null && in_array('enseignant_école', $roles, true)) {
+                $sql .= ' AND EXISTS (
+                    SELECT 1 FROM attribution_cours ac
+                    INNER JOIN classes c ON c.id = ac.classe_id AND c.ecole_id = ac.ecole_id
+                    WHERE ac.agent_id = utilisateurs.reference_id
+                      AND c.ecole_id = :section_school AND c.section_id = :section_id
+                )';
+            }
             $stmt = $db->prepare($sql);
             $stmt->bindValue(':ecole', $schoolId, PDO::PARAM_INT);
+            if ($sectionId !== null && in_array('enseignant_école', $roles, true)) {
+                $stmt->bindValue(':section_school', $schoolId, PDO::PARAM_INT);
+                $stmt->bindValue(':section_id', $sectionId, PDO::PARAM_INT);
+            }
             foreach ($roles as $index => $role) {
                 $stmt->bindValue($index + 1, $role, PDO::PARAM_STR);
             }
