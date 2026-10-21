@@ -11,6 +11,9 @@ class Controller
             \App\Models\EvenementNotification::deliverDueForUser($user);
             $data['eventNotifications'] = \App\Models\EvenementNotification::getForUser((int) $user['id']);
             $data['eventNotificationsCount'] = \App\Models\EvenementNotification::countUnreadForUser((int) $user['id']);
+            if (($user['role'] ?? '') === 'comptable_école') {
+                \App\Models\UserMessage::notifyAccountantsOfExpiredDerogations((int) ($user['ecole_id'] ?? 0));
+            }
             $data['userMessages'] = \App\Models\UserMessage::getUnreadForUser((int) $user['id']);
             $data['userMessagesCount'] = \App\Models\UserMessage::countUnreadForUser((int) $user['id']);
             if (($user['role'] ?? '') === 'comptable_école') {

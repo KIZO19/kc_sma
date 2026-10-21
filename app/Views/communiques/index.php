@@ -73,7 +73,7 @@
                 </div>
               <?php endforeach; ?>
             </div>
-          </div>
+          </fieldset>
           <button type="submit" class="btn btn-primary" id="sendCommunique">
             <i class="bi bi-send me-1"></i>Envoyer le communiqué
           </button>

@@ -75,12 +75,13 @@ $formatFinancialText = static function (array $financial, string $key) use ($for
         <?php else: ?>
           <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
-              <thead class="table-light"><tr><th>Élève</th><th>Protégé jusqu’au</th><th class="text-end">Déjà payé</th><th class="text-end">Exonéré</th><th class="text-end">Reste dû</th><th>Motif</th><th>Statut</th><?php if (!empty($canValidate)): ?><th>Décision</th><?php endif; ?></tr></thead>
+              <thead class="table-light"><tr><th>Élève</th><th>Demandeur</th><th>Protégé jusqu’au</th><th class="text-end">Déjà payé</th><th class="text-end">Exonéré</th><th class="text-end">Reste dû</th><th>Motif</th><th>Statut</th><?php if (!empty($canValidate)): ?><th>Décision</th><?php endif; ?></tr></thead>
               <tbody>
                 <?php foreach ($requests as $request): ?>
                   <?php $status = $request['statut'] ?? 'En_attente'; ?>
                   <tr id="derogation-<?= (int) $request['id'] ?>">
                     <td><strong><?= htmlspecialchars($request['eleve_nom'] ?? '') ?></strong><br><small class="text-muted"><?= htmlspecialchars($request['matricule'] ?? '') ?></small></td>
+                    <td><?= htmlspecialchars($request['demandeur_nom'] ?? 'Compte indisponible', ENT_QUOTES, 'UTF-8') ?></td>
                     <td><?= htmlspecialchars(date('d/m/Y', strtotime($request['date_fin'] ?? 'now'))) ?></td>
                     <td class="text-end text-nowrap"><?= $formatFinancial($request['financial_summary'] ?? [], 'paid') ?></td>
                     <td class="text-end text-nowrap"><?= $formatFinancial($request['financial_summary'] ?? [], 'exonerated') ?></td>

@@ -150,10 +150,14 @@ class CommuniquesController extends Controller
         }
 
         $allowedRoles = array_keys(array_diff_key(Roles::list(), ['super_admin' => true]));
-        $roles = array_values(array_unique(array_map('strval', $submitted)));
-        if (array_diff($roles, $allowedRoles) !== []) {
-            return null;
+        $roles = [];
+        foreach ($submitted as $role) {
+            if (!is_string($role) || !in_array($role, $allowedRoles, true)) {
+                return null;
+            }
+            $roles[] = $role;
         }
+        $roles = array_values(array_unique($roles));
         sort($roles);
 
         return $roles;
@@ -169,20 +173,25 @@ class CommuniquesController extends Controller
         }
 
         if (!isset($_POST['destinataires_sections'])) {
-            return $scopeId !== null ? [$scopeId] : [];
+            return $scopeId !== null ? [$scopeId] : $allowedIds;
         }
         $submitted = $_POST['destinataires_sections'];
         if (!is_array($submitted)) {
             return null;
         }
         if ($submitted === []) {
-            return $scopeId !== null ? [$scopeId] : [];
+            return $scopeId !== null ? [$scopeId] : $allowedIds;
         }
 
-        $ids = array_values(array_unique(array_map('intval', $submitted)));
-        if (in_array(0, $ids, true) || array_diff($ids, $allowedIds) !== []) {
-            return null;
+        $ids = [];
+        foreach ($submitted as $sectionId) {
+            $sectionId = filter_var($sectionId, FILTER_VALIDATE_INT);
+            if ($sectionId === false || $sectionId <= 0 || !in_array($sectionId, $allowedIds, true)) {
+                return null;
+            }
+            $ids[] = $sectionId;
         }
+        $ids = array_values(array_unique($ids));
         sort($ids);
 
         return $ids;

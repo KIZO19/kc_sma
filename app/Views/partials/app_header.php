@@ -414,9 +414,13 @@ if (!empty($schoolContext['logo_url'])) {
               <?php if (empty($userMessages) && !isset($pendingDerogationMessages) && !isset($derogationDecisionMessages)): ?>
                 <span class="dropdown-item-text text-muted small">Aucun nouveau message.</span>
               <?php endif; ?>
-              <?php if (isset($pendingDerogationMessages) || isset($derogationDecisionMessages) || (int) ($userMessagesCount ?? 0) > 0): ?>
+              <?php if (!empty($user['id'])): ?>
                 <div class="dropdown-divider"></div>
                 <a href="<?= BASE_URL ?>/messages" class="dropdown-item text-center">Ouvrir les messages</a>
+              <?php endif; ?>
+              <?php if (isset($pendingDerogationMessages) || isset($derogationDecisionMessages)): ?>
+                <div class="dropdown-divider"></div>
+                <a href="<?= BASE_URL ?>/derogations" class="dropdown-item text-center">Ouvrir les dérogations</a>
               <?php endif; ?>
             </div>
           </li>

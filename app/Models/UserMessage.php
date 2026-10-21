@@ -33,6 +33,34 @@ class UserMessage
         return count($userIds);
     }
 
+    public static function notifyAccountantsOfExpiredDerogations(int $schoolId): void
+    {
+        if ($schoolId <= 0) {
+            return;
+        }
+
+        self::ensureTable();
+        $stmt = Database::getConnection()->prepare(
+            "INSERT IGNORE INTO messages_utilisateurs
+                (utilisateur_id, type, reference_id, title, body)
+             SELECT u.id, 'derogation_expiree', d.id, 'Dérogation arrivée à échéance',
+                    CONCAT(
+                        'La dérogation accordée à ',
+                        TRIM(CONCAT_WS(' ', e.nom, e.postnom, e.prenom)),
+                        ' a pris fin le ',
+                        DATE_FORMAT(d.date_fin, '%d/%m/%Y'),
+                        '.'
+                    )
+             FROM derogations d
+             INNER JOIN eleves e ON e.id = d.eleve_id
+             INNER JOIN utilisateurs u ON u.ecole_id = d.ecole_id
+                AND u.role = 'comptable_école' AND u.statut = 'Actif'
+             WHERE d.ecole_id = :ecole_id
+               AND d.statut = 'Approuvee' AND d.date_fin <= CURDATE()"
+        );
+        $stmt->execute([':ecole_id' => $schoolId]);
+    }
+
     public static function notifyCommunique(
         int $schoolId,
         int $communiqueId,
@@ -168,6 +196,7 @@ class UserMessage
             $stmt = Database::getConnection()->prepare(
                 'SELECT 1 FROM eleves e
                  INNER JOIN inscriptions i ON i.eleve_id = e.id
+                 INNER JOIN annees_scolaires a ON a.id = i.annee_scolaire_id AND a.est_active = 1
                  INNER JOIN classes c ON c.id = i.classe_id
                  WHERE ' . $studentCondition . ' AND c.ecole_id = :ecole_id
                    AND c.section_id IN (' . implode(',', array_map('intval', array_keys($selectedSections))) . ')
@@ -179,16 +208,34 @@ class UserMessage
         }
 
         $userSectionId = (int) ($user['section_id'] ?? 0);
+        if ($userSectionId <= 0) {
+            $userSectionId = User::getDefaultSectionIdForRole($role) ?? 0;
+        }
         if ($userSectionId > 0) {
             return isset($selectedSections[$userSectionId]);
         }
 
-        return in_array($role, [
-            'ecole_admin',
-            'comptable_école',
-            'sec_école',
-            'promoteur_école',
-        ], true);
+        if ($role === 'enseignant_école') {
+            $agentId = (int) ($user['reference_id'] ?? 0);
+            if ($agentId <= 0) {
+                return false;
+            }
+            $stmt = Database::getConnection()->prepare(
+                'SELECT 1
+                 FROM attribution_cours ac
+                 INNER JOIN classes c ON c.id = ac.classe_id AND c.ecole_id = ac.ecole_id
+                 INNER JOIN annees_scolaires a ON a.id = ac.annee_scolaire_id
+                   AND a.ecole_id = ac.ecole_id AND a.est_active = 1
+                 WHERE ac.ecole_id = :ecole_id AND ac.agent_id = :agent_id
+                   AND c.section_id IN (' . implode(',', array_map('intval', array_keys($selectedSections))) . ')
+                 LIMIT 1'
+            );
+            $stmt->execute([':ecole_id' => $schoolId, ':agent_id' => $agentId]);
+
+            return (bool) $stmt->fetchColumn();
+        }
+
+        return true;
     }
 
     private static function ensureTable(): void

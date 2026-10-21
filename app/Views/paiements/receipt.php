@@ -36,9 +36,9 @@ unset($_SESSION['payment_notification_status']);
               default => 'alert-danger',
             };
             $notificationTitle = match ($notificationStatus['status'] ?? '') {
-              'success' => 'Demande acceptée par le fournisseur',
-              'partial' => 'Demande partiellement acceptée',
-              default => 'Notification non envoyée',
+              'success' => 'Message interne créé',
+              'partial' => 'Message interne créé partiellement',
+              default => 'Message interne au parent non créé',
             };
           ?>
           <div class="alert <?= $notificationClass ?> alert-dismissible fade show" role="alert">

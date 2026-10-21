@@ -115,8 +115,8 @@ require __DIR__ . '/../partials/app_header.php';
               $registrationStatus = $registrationNotification['status'] ?? '';
               $registrationAlertClass = $registrationStatus === 'success' ? 'alert-success' : ($registrationStatus === 'partial' ? 'alert-warning' : 'alert-danger');
               $registrationTitle = $registrationStatus === 'success'
-                  ? 'Notification d’inscription envoyée'
-                  : ($registrationStatus === 'partial' ? 'Notification d’inscription partielle' : 'Notification d’inscription non envoyée');
+                  ? 'Message de confirmation créé'
+                  : ($registrationStatus === 'partial' ? 'Message de confirmation partiel' : 'Message au parent non créé');
             ?>
             <div class="alert <?= $registrationAlertClass ?> alert-dismissible">
               <strong><?= htmlspecialchars($registrationTitle, ENT_QUOTES, 'UTF-8') ?></strong><br>
