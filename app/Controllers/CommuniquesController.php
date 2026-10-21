@@ -5,8 +5,11 @@ namespace App\Controllers;
 use App\Core\Auth;
 use App\Core\Controller;
 use App\Models\Communique;
+use App\Models\Section;
+use App\Models\UserMessage;
 use App\Models\User;
 use App\Services\PaymentParentNotifier;
+use App\Entities\Roles;
 
 class CommuniquesController extends Controller
 {
@@ -35,6 +38,14 @@ class CommuniquesController extends Controller
         }
 
         $role = (string) ($user['role'] ?? 'default');
+        $sectionScopeId = $this->getSectionScopeForUser($user);
+        $sections = Section::getAllForSchool($ecoleId);
+        if ($sectionScopeId !== null) {
+            $sections = array_values(array_filter(
+                $sections,
+                static fn (array $section): bool => (int) $section['id'] === $sectionScopeId
+            ));
+        }
         $this->view('communiques/index', [
             'title' => APP_NAME . ' - Communiqués aux parents',
             'user' => $user,
@@ -42,6 +53,8 @@ class CommuniquesController extends Controller
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $this->getModulesForRole($role),
             'communiques' => Communique::latestBySchool($ecoleId),
+            'audienceRoles' => array_diff_key(Roles::list(), ['super_admin' => true]),
+            'sections' => $sections,
             'formToken' => $_SESSION['communique_form_token'],
             'success' => $_SESSION['communique_success'] ?? null,
             'error' => $_SESSION['communique_error'] ?? null,
@@ -65,6 +78,8 @@ class CommuniquesController extends Controller
 
         $title = trim((string) ($_POST['titre'] ?? ''));
         $message = trim((string) ($_POST['message'] ?? ''));
+        $audienceRoles = $this->readAudienceRoles();
+        $sectionIds = $this->readSectionIds($user);
         $errors = [];
         if ($ecoleId <= 0) {
             $errors[] = 'Aucune école n’est associée à votre compte.';
@@ -75,23 +90,45 @@ class CommuniquesController extends Controller
         if ($message === '' || mb_strlen($message) > 5000) {
             $errors[] = 'Le communiqué est obligatoire et ne peut dépasser 5 000 caractères.';
         }
+        if ($audienceRoles === null) {
+            $errors[] = 'La liste des rôles destinataires est invalide.';
+        } elseif ($audienceRoles === []) {
+            $errors[] = 'Sélectionnez au moins un rôle destinataire.';
+        }
+        if ($sectionIds === null) {
+            $errors[] = 'Une section destinataire est invalide ou hors de votre périmètre.';
+        }
         if ($errors !== []) {
             $_SESSION['communique_error'] = implode(' ', $errors);
             $this->redirect('/communiques');
         }
 
         try {
-            $result = (new PaymentParentNotifier())->sendSchoolAnnouncement($ecoleId, $title, $message);
-            Communique::record([
+            if (in_array('parent_ecole', $audienceRoles, true)) {
+                $result = (new PaymentParentNotifier())->sendSchoolAnnouncement($ecoleId, $title, $message, $sectionIds);
+            } else {
+                $result = [
+                    'status' => 'success',
+                    'message' => 'Aucun SMS envoyé : les parents ne font pas partie des destinataires.',
+                    'details' => '',
+                    'recipients_total' => 0,
+                    'recipients_delivered' => 0,
+                    'recipients_failed' => 0,
+                ];
+            }
+            $communiqueId = Communique::record([
                 'ecole_id' => $ecoleId,
                 'auteur_user_id' => (int) ($user['id'] ?? 0),
                 'titre' => $title,
                 'message' => $message,
+                'destinataires_roles' => $audienceRoles,
+                'destinataires_sections' => $sectionIds,
                 'destinataires_total' => (int) ($result['recipients_total'] ?? 0),
                 'destinataires_livres' => (int) ($result['recipients_delivered'] ?? 0),
                 'destinataires_echec' => (int) ($result['recipients_failed'] ?? 0),
                 'statut' => (string) ($result['status'] ?? 'failed'),
             ]);
+            UserMessage::notifyCommunique($ecoleId, $communiqueId, $title, $message, $audienceRoles, $sectionIds);
             $_SESSION['communique_success'] = ($result['message'] ?? 'Résultat d’envoi indisponible.')
                 . ' ' . ($result['details'] ?? '');
         } catch (\Throwable $e) {
@@ -100,5 +137,54 @@ class CommuniquesController extends Controller
         }
 
         $this->redirect('/communiques');
+    }
+
+    private function readAudienceRoles(): ?array
+    {
+        if (!isset($_POST['destinataires_roles'])) {
+            return [];
+        }
+        $submitted = $_POST['destinataires_roles'];
+        if (!is_array($submitted)) {
+            return null;
+        }
+
+        $allowedRoles = array_keys(array_diff_key(Roles::list(), ['super_admin' => true]));
+        $roles = array_values(array_unique(array_map('strval', $submitted)));
+        if (array_diff($roles, $allowedRoles) !== []) {
+            return null;
+        }
+        sort($roles);
+
+        return $roles;
+    }
+
+    private function readSectionIds(array $user): ?array
+    {
+        $allowedSections = Section::getAllForSchool((int) ($user['ecole_id'] ?? 0));
+        $allowedIds = array_map('intval', array_column($allowedSections, 'id'));
+        $scopeId = $this->getSectionScopeForUser($user);
+        if ($scopeId !== null) {
+            $allowedIds = [$scopeId];
+        }
+
+        if (!isset($_POST['destinataires_sections'])) {
+            return $scopeId !== null ? [$scopeId] : [];
+        }
+        $submitted = $_POST['destinataires_sections'];
+        if (!is_array($submitted)) {
+            return null;
+        }
+        if ($submitted === []) {
+            return $scopeId !== null ? [$scopeId] : [];
+        }
+
+        $ids = array_values(array_unique(array_map('intval', $submitted)));
+        if (in_array(0, $ids, true) || array_diff($ids, $allowedIds) !== []) {
+            return null;
+        }
+        sort($ids);
+
+        return $ids;
     }
 }

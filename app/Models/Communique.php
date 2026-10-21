@@ -15,10 +15,10 @@ class Communique
         $stmt = Database::getConnection()->prepare(
             'INSERT INTO communiques
                 (ecole_id, auteur_user_id, titre, message, destinataires_total,
-                 destinataires_livres, destinataires_echec, statut)
+                 destinataires_livres, destinataires_echec, statut, destinataires_roles, destinataires_sections)
              VALUES
                 (:ecole_id, :auteur_user_id, :titre, :message, :destinataires_total,
-                 :destinataires_livres, :destinataires_echec, :statut)'
+                 :destinataires_livres, :destinataires_echec, :statut, :destinataires_roles, :destinataires_sections)'
         );
         $stmt->execute([
             ':ecole_id' => (int) $data['ecole_id'],
@@ -29,6 +29,8 @@ class Communique
             ':destinataires_livres' => (int) ($data['destinataires_livres'] ?? 0),
             ':destinataires_echec' => (int) ($data['destinataires_echec'] ?? 0),
             ':statut' => (string) ($data['statut'] ?? 'failed'),
+            ':destinataires_roles' => json_encode($data['destinataires_roles'] ?? [], JSON_UNESCAPED_UNICODE),
+            ':destinataires_sections' => json_encode($data['destinataires_sections'] ?? [], JSON_UNESCAPED_UNICODE),
         ]);
 
         return (int) Database::getConnection()->lastInsertId();
@@ -69,10 +71,26 @@ class Communique
                 destinataires_livres INT NOT NULL DEFAULT 0,
                 destinataires_echec INT NOT NULL DEFAULT 0,
                 statut VARCHAR(20) NOT NULL DEFAULT \'failed\',
+                destinataires_roles TEXT DEFAULT NULL,
+                destinataires_sections TEXT DEFAULT NULL,
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 KEY idx_communiques_ecole_created (ecole_id, created_at)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
         );
+        $columns = [
+            'destinataires_roles' => 'TEXT DEFAULT NULL',
+            'destinataires_sections' => 'TEXT DEFAULT NULL',
+        ];
+        foreach ($columns as $columnName => $definition) {
+            $column = Database::getConnection()->query(
+                "SHOW COLUMNS FROM communiques LIKE '" . $columnName . "'"
+            )->fetch();
+            if (!$column) {
+                Database::getConnection()->exec(
+                    'ALTER TABLE communiques ADD COLUMN ' . $columnName . ' ' . $definition
+                );
+            }
+        }
         self::$tableEnsured = true;
     }
 }

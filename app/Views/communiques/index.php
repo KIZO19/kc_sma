@@ -35,7 +35,7 @@
       <div class="card-header"><h3 class="card-title">Nouveau communiqué</h3></div>
       <div class="card-body">
         <div class="alert alert-warning">
-          L’envoi est immédiat à tous les numéros de parents connus de l’école. Vérifiez attentivement le texte avant l’envoi.
+          Le communiqué sera visible dans la messagerie des rôles sélectionnés. Les parents ciblés recevront également un SMS/WhatsApp si leurs coordonnées sont disponibles.
         </div>
         <form method="post" action="<?= BASE_URL ?>/communiques/send" id="communiqueForm">
           <input type="hidden" name="communique_form_token" value="<?= htmlspecialchars($formToken, ENT_QUOTES, 'UTF-8') ?>">
@@ -46,10 +46,36 @@
           <div class="mb-3">
             <label for="message" class="form-label">Message</label>
             <textarea class="form-control" id="message" name="message" rows="5" maxlength="5000" required></textarea>
-            <div class="form-text">Le nom de l’école sera automatiquement ajouté au message.</div>
+          </div>
+          <fieldset class="border rounded p-3 mb-3">
+            <legend class="float-none w-auto px-2 fs-6">Rôles destinataires <span class="text-danger">*</span></legend>
+            <div class="row g-2">
+              <?php foreach ($audienceRoles as $roleKey => $roleLabel): ?>
+                <div class="col-12 col-sm-6 col-lg-4">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="destinataires_roles[]" id="communique-role-<?= htmlspecialchars($roleKey, ENT_QUOTES, 'UTF-8') ?>" value="<?= htmlspecialchars($roleKey, ENT_QUOTES, 'UTF-8') ?>" <?= $roleKey === 'parent_ecole' ? 'checked' : '' ?>>
+                    <label class="form-check-label" for="communique-role-<?= htmlspecialchars($roleKey, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($roleLabel, ENT_QUOTES, 'UTF-8') ?></label>
+                  </div>
+                </div>
+              <?php endforeach; ?>
+            </div>
+          </fieldset>
+          <fieldset class="border rounded p-3 mb-3">
+            <legend class="float-none w-auto px-2 fs-6">Sections concernées</legend>
+            <p class="small text-muted">Laissez vide pour toutes les sections auxquelles vous avez accès.</p>
+            <div class="row g-2">
+              <?php foreach ($sections as $section): ?>
+                <div class="col-12 col-sm-6 col-lg-4">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="destinataires_sections[]" id="communique-section-<?= (int) $section['id'] ?>" value="<?= (int) $section['id'] ?>" <?= count($sections) === 1 ? 'checked' : '' ?>>
+                    <label class="form-check-label" for="communique-section-<?= (int) $section['id'] ?>"><?= htmlspecialchars($section['nom_section'], ENT_QUOTES, 'UTF-8') ?></label>
+                  </div>
+                </div>
+              <?php endforeach; ?>
+            </div>
           </div>
           <button type="submit" class="btn btn-primary" id="sendCommunique">
-            <i class="bi bi-send me-1"></i>Envoyer aux parents
+            <i class="bi bi-send me-1"></i>Envoyer le communiqué
           </button>
         </form>
       </div>
@@ -101,7 +127,7 @@
 
 <script>
 document.getElementById('communiqueForm')?.addEventListener('submit', function (event) {
-  if (!window.confirm('Envoyer immédiatement ce communiqué à tous les parents de l’école ?')) {
+  if (!window.confirm('Envoyer ce communiqué aux rôles et sections sélectionnés ?')) {
     event.preventDefault();
   }
 });

@@ -12,7 +12,6 @@ use App\Models\Classe;
 use App\Models\User;
 use App\Models\Eleve as EleveModel;
 use App\Models\PaiementAutorisation;
-use App\Services\PaymentParentNotifier;
 
 class PaiementsController extends Controller
 {
@@ -947,21 +946,30 @@ class PaiementsController extends Controller
         }
 
         try {
-            $notifier = new PaymentParentNotifier();
-            $_SESSION['payment_notification_status'] = $notifier->notifyAfterPayment(
+            $studentName = \App\Core\PersonName::format($eleve);
+            $currency = strtoupper(trim((string) ($fee['devise'] ?? 'USD'))) ?: 'USD';
+            $recipientCount = \App\Models\UserMessage::notifyParentForStudent(
                 $eleveId,
-                (int) $fraisId,
-                $montant,
-                $libelle,
-                $fee['devise'] ?? 'USD'
+                'paiement',
+                $ecritureId,
+                'Paiement reçu pour ' . $studentName,
+                'Un paiement de ' . number_format($montant, 2, ',', ' ') . ' ' . $currency
+                    . ' a été enregistré pour ' . $studentName . '. Frais : ' . $libelle . '.'
             );
+            $_SESSION['payment_notification_status'] = [
+                'sent' => $recipientCount > 0,
+                'status' => $recipientCount > 0 ? 'success' : 'failed',
+                'message' => $recipientCount > 0
+                    ? 'Un message a été ajouté à la messagerie du parent.'
+                    : 'Aucun compte parent actif n’a été trouvé pour recevoir le message.',
+            ];
         } catch (\Throwable $e) {
             $_SESSION['payment_notification_status'] = [
                 'sent' => false,
                 'status' => 'failed',
-                'reason' => 'controller_exception',
-                'message' => 'Échec de l’envoi du message au parent.',
-                'details' => $e->getMessage(),
+                'reason' => 'in_app_message_error',
+                'message' => 'Le paiement est enregistré, mais le message interne au parent n’a pas pu être créé.',
+                'details' => 'Consultez les journaux du serveur.',
             ];
             error_log('PaiementsController::store notification failed: ' . $e->getMessage());
         }

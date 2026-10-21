@@ -354,14 +354,27 @@ if (!empty($schoolContext['logo_url'])) {
               <i class="bi bi-chat-text"></i>
               <?php
                 $messageCount = (int) ($pendingDerogationMessagesCount ?? 0)
-                  + (int) ($derogationDecisionMessagesCount ?? 0);
+                  + (int) ($derogationDecisionMessagesCount ?? 0)
+                  + (int) ($userMessagesCount ?? 0);
               ?>
               <?php if ($messageCount > 0): ?>
                 <span class="navbar-badge badge text-bg-danger"><?= $messageCount ?></span>
               <?php endif; ?>
             </a>
             <div class="dropdown-menu dropdown-menu-lg dropdown-menu-end p-2">
+              <?php if (!empty($userMessages)): ?>
+                <span class="dropdown-item-text fw-bold">Nouveaux messages</span>
+                <div class="dropdown-divider"></div>
+                <?php foreach ($userMessages as $userMessage): ?>
+                  <a href="<?= BASE_URL ?>/messages/open?id=<?= (int) $userMessage['id'] ?>" class="dropdown-item text-wrap">
+                    <i class="bi bi-envelope-fill me-2 text-primary"></i>
+                    <strong><?= htmlspecialchars((string) $userMessage['title'], ENT_QUOTES, 'UTF-8') ?></strong>
+                    <span class="d-block ms-4 small text-muted"><?= htmlspecialchars(mb_strimwidth((string) $userMessage['body'], 0, 100, '…', 'UTF-8'), ENT_QUOTES, 'UTF-8') ?></span>
+                  </a>
+                <?php endforeach; ?>
+              <?php endif; ?>
               <?php if (isset($pendingDerogationMessages)): ?>
+                <?php if (!empty($userMessages)): ?><div class="dropdown-divider"></div><?php endif; ?>
                 <span class="dropdown-item-text fw-bold">Demandes à valider</span>
                 <div class="dropdown-divider"></div>
               <?php endif; ?>
@@ -380,7 +393,7 @@ if (!empty($schoolContext['logo_url'])) {
                 <span class="dropdown-item-text text-muted small">Aucune demande de dérogation à valider.</span>
               <?php endif; ?>
               <?php if (!empty($derogationDecisionMessages)): ?>
-                <?php if (isset($pendingDerogationMessages)): ?><div class="dropdown-divider"></div><?php endif; ?>
+                <?php if (isset($pendingDerogationMessages) || !empty($userMessages)): ?><div class="dropdown-divider"></div><?php endif; ?>
                 <span class="dropdown-item-text fw-bold">Décisions sur vos demandes</span>
                 <div class="dropdown-divider"></div>
                 <?php foreach ($derogationDecisionMessages as $decisionMessage): ?>
@@ -395,15 +408,15 @@ if (!empty($schoolContext['logo_url'])) {
                   </a>
                 <?php endforeach; ?>
               <?php elseif (isset($derogationDecisionMessages)): ?>
-                <?php if (isset($pendingDerogationMessages)): ?><div class="dropdown-divider"></div><?php endif; ?>
+                <?php if (isset($pendingDerogationMessages) || !empty($userMessages)): ?><div class="dropdown-divider"></div><?php endif; ?>
                 <span class="dropdown-item-text text-muted small">Aucune nouvelle décision sur vos demandes.</span>
               <?php endif; ?>
-              <?php if (!isset($pendingDerogationMessages) && !isset($derogationDecisionMessages)): ?>
+              <?php if (empty($userMessages) && !isset($pendingDerogationMessages) && !isset($derogationDecisionMessages)): ?>
                 <span class="dropdown-item-text text-muted small">Aucun nouveau message.</span>
               <?php endif; ?>
-              <?php if (isset($pendingDerogationMessages) || isset($derogationDecisionMessages)): ?>
+              <?php if (isset($pendingDerogationMessages) || isset($derogationDecisionMessages) || (int) ($userMessagesCount ?? 0) > 0): ?>
                 <div class="dropdown-divider"></div>
-                <a href="<?= BASE_URL ?>/derogations" class="dropdown-item text-center">Ouvrir les dérogations</a>
+                <a href="<?= BASE_URL ?>/messages" class="dropdown-item text-center">Ouvrir les messages</a>
               <?php endif; ?>
             </div>
           </li>

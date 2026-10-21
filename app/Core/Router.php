@@ -78,6 +78,7 @@ class Router
                 'App\\Controllers\\PresencesController' => ['index'],
                 'App\\Controllers\\NotesController' => ['index'],
                 'App\\Controllers\\ElevesController' => ['index', 'show'],
+                'App\\Controllers\\MessagesController' => ['index', 'open'],
                 'App\\Controllers\\ProfileController' => ['index', 'update'],
                 'App\\Controllers\\AuthController' => ['logout'],
                 'App\\Controllers\\EcolesController' => ['subscriptionrequired'],

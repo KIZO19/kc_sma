@@ -15,7 +15,6 @@ use App\Models\OriginesRDC;
 use App\Models\ParentModel;
 use App\Models\Section;
 use App\Models\User;
-use App\Services\PaymentParentNotifier;
 
 class InscriptionsController extends Controller
 {
@@ -885,21 +884,27 @@ class InscriptionsController extends Controller
                     } elseif (Eleve::approve($eleveId)) {
                         $_SESSION['inscriptions_success'] = 'Inscription validée par le personnel autorisé.';
                         try {
-                            $notification = (new PaymentParentNotifier())->notifyAfterRegistration($eleveId);
-                            $_SESSION['inscriptions_notification'] = $notification;
-                            if (empty($notification['sent'])) {
-                                error_log(
-                                    'InscriptionsController::approve notification was not sent for student ID '
-                                    . $eleveId . ': ' . ($notification['reason'] ?? 'unknown')
-                                );
-                            }
+                            $studentName = \App\Core\PersonName::format($student);
+                            $recipientCount = \App\Models\UserMessage::notifyParentForStudent(
+                                $eleveId,
+                                'inscription',
+                                $eleveId,
+                                'Inscription confirmée pour ' . $studentName,
+                                'L’inscription de ' . $studentName . ' a été confirmée par le secrétariat.'
+                            );
+                            $_SESSION['inscriptions_notification'] = [
+                                'status' => $recipientCount > 0 ? 'success' : 'failed',
+                                'message' => $recipientCount > 0
+                                    ? 'Un message de confirmation a été envoyé dans la messagerie du parent.'
+                                    : 'Aucun compte parent actif n’a été trouvé pour recevoir le message.',
+                            ];
                         } catch (\Throwable $e) {
                             error_log('InscriptionsController::approve notification failed: ' . $e->getMessage());
                             $_SESSION['inscriptions_notification'] = [
                                 'sent' => false,
                                 'status' => 'failed',
-                                'message' => 'L’inscription est validée, mais la notification au parent a échoué.',
-                                'details' => 'Consultez les journaux du serveur pour le détail de l’erreur.',
+                                'message' => 'L’inscription est validée, mais le message interne au parent n’a pas pu être créé.',
+                                'details' => 'Consultez les journaux du serveur.',
                             ];
                         }
                     } else {

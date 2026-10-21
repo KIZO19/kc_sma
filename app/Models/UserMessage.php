@@ -15,7 +15,7 @@ class UserMessage
         int $referenceId,
         string $title,
         string $body
-    ): void {
+    ): int {
         self::ensureTable();
         $stmt = Database::getConnection()->prepare(
             "SELECT u.id
@@ -25,9 +25,12 @@ class UserMessage
              WHERE e.id = :eleve_id AND u.statut = 'Actif'"
         );
         $stmt->execute([':eleve_id' => $studentId]);
-        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $userId) {
+        $userIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($userIds as $userId) {
             self::create((int) $userId, $type, $referenceId, $title, $body);
         }
+
+        return count($userIds);
     }
 
     public static function notifyCommunique(

@@ -208,7 +208,7 @@ class PaymentParentNotifier
         );
     }
 
-    public function sendSchoolAnnouncement(int $ecoleId, string $title, string $body): array
+    public function sendSchoolAnnouncement(int $ecoleId, string $title, string $body, array $sectionIds = []): array
     {
         if ($ecoleId <= 0) {
             return ['sent' => false, 'status' => 'failed', 'reason' => 'invalid_school', 'message' => 'Envoi impossible : école invalide.', 'details' => 'Aucune école valide n’a été sélectionnée.'];
@@ -233,16 +233,24 @@ class PaymentParentNotifier
         $recipientStmt = $db->prepare(
             'SELECT DISTINCT p.id, p.telephone FROM parents p '
             . 'INNER JOIN eleves e ON e.parent_id = p.id '
-            . 'LEFT JOIN inscriptions i ON i.eleve_id = e.id '
-            . 'LEFT JOIN classes c ON c.id = i.classe_id '
             . 'WHERE p.telephone IS NOT NULL AND TRIM(p.telephone) <> \'\' '
-            . 'AND (p.ecole_id = :parent_school OR e.ecole_id = :student_school OR c.ecole_id = :class_school)'
+            . 'AND (p.ecole_id = :parent_school OR e.ecole_id = :student_school OR EXISTS ('
+            . 'SELECT 1 FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id '
+            . 'WHERE i.eleve_id = e.id AND c.ecole_id = :class_school))'
+            . ($sectionIds !== [] ? ' AND EXISTS ('
+                . 'SELECT 1 FROM inscriptions si INNER JOIN classes sc ON sc.id = si.classe_id '
+                . 'WHERE si.eleve_id = e.id AND sc.ecole_id = :target_school '
+                . 'AND sc.section_id IN (' . implode(',', array_map('intval', $sectionIds)) . '))' : '')
         );
-        $recipientStmt->execute([
+        $recipientParams = [
             ':parent_school' => $ecoleId,
             ':student_school' => $ecoleId,
             ':class_school' => $ecoleId,
-        ]);
+        ];
+        if ($sectionIds !== []) {
+            $recipientParams[':target_school'] = $ecoleId;
+        }
+        $recipientStmt->execute($recipientParams);
 
         $phones = [];
         foreach ($recipientStmt->fetchAll(PDO::FETCH_ASSOC) as $recipient) {
