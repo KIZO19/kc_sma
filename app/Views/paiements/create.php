@@ -14,20 +14,22 @@ if ($oldStudentId > 0) {
 }
 unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
 ?>
-<div class="modal-backdrop fade show"></div>
-<div class="modal fade show d-block" id="paymentCreateModal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="paymentCreateModalLabel">
-  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
-    <div class="modal-content">
-      <div class="modal-header">
-        <div>
-          <h1 class="modal-title fs-5" id="paymentCreateModalLabel">Enregistrer un paiement</h1>
-          <?php if (!empty($eleve)): ?>
-            <div class="text-muted small"><?= htmlspecialchars(\App\Core\PersonName::format($eleve), ENT_QUOTES, 'UTF-8') ?></div>
-          <?php endif; ?>
-        </div>
-        <a href="<?= BASE_URL ?><?= !empty($eleve) ? '/eleves/show?id=' . (int) $eleve['id'] : '/paiements' ?>" class="btn-close" aria-label="Fermer"></a>
-      </div>
-      <div class="modal-body">
+<section class="content-header">
+  <div class="container-fluid d-flex flex-wrap justify-content-between align-items-center gap-3">
+    <div>
+      <h1 class="mb-1">Enregistrer un paiement</h1>
+      <?php if (!empty($eleve)): ?>
+        <p class="text-muted mb-0"><?= htmlspecialchars(\App\Core\PersonName::format($eleve), ENT_QUOTES, 'UTF-8') ?></p>
+      <?php else: ?>
+        <p class="text-muted mb-0">Sélectionnez un élève, vérifiez son solde, puis enregistrez le paiement.</p>
+      <?php endif; ?>
+    </div>
+    <a href="<?= BASE_URL ?><?= !empty($eleve) ? '/eleves/show?id=' . (int) $eleve['id'] : '/paiements' ?>" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Retour</a>
+  </div>
+</section>
+
+<section class="content">
+  <div class="container-fluid">
         <?php if (!empty($paymentSuccess)): ?>
           <div class="alert alert-success" role="status">
             <?= htmlspecialchars($paymentSuccess, ENT_QUOTES, 'UTF-8') ?>
@@ -80,9 +82,8 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
           </div>
         <?php endif; ?>
-        <div class="container-fluid p-0">
-          <div class="row">
-            <div class="col-12">
+        <div class="row g-3 align-items-start">
+            <div class="col-12 col-xl-7">
             <div class="card card-outline card-primary">
           <div class="card-header"><h3 class="card-title">Détails paiement</h3></div>
           <div class="card-body">
@@ -143,13 +144,7 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
               </div>
 
               <div class="mb-3">
-                <label class="form-label">Montant</label>
-                <input type="number" step="0.01" name="montant" class="form-control" required value="<?= htmlspecialchars($oldInput['montant'] ?? '') ?>">
-                <div class="form-text" id="montantHint">Veuillez saisir le montant du paiement. Si un motif est sélectionné, le montant ne doit pas dépasser le montant du frais.</div>
-              </div>
-
-              <div class="mb-3">
-                <label class="form-label">Motif / Frais</label>
+                <label class="form-label" for="fraisSelect">Frais à régler</label>
                 <select name="frais_id" id="fraisSelect" class="form-select" required <?= empty($eleve) ? 'disabled' : '' ?> data-initial-fee-id="<?= (int) ($oldInput['frais_id'] ?? 0) ?>" data-initial-student-id="<?= $oldStudent ? (int) $oldStudent['id'] : 0 ?>" data-preserve-amount="<?= !empty($oldInput['montant']) ? '1' : '0' ?>">
                   <option value="">-- Sélectionner le motif --</option>
                   <?php if (!empty($eleve)): ?>
@@ -161,6 +156,12 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
               </div>
 
               <div id="feeSummary" class="alert alert-info py-2 mb-3 d-none"></div>
+
+              <div class="mb-3">
+                <label class="form-label" for="paymentAmount">Montant du paiement</label>
+                <input id="paymentAmount" type="number" step="0.01" min="0" name="montant" class="form-control" required value="<?= htmlspecialchars($oldInput['montant'] ?? '') ?>">
+                <div class="form-text" id="montantHint">Sélectionnez un frais pour connaître le montant restant et le maximum autorisé.</div>
+              </div>
 
               <div class="mb-3">
                 <label class="form-label">Libellé (optionnel)</label>
@@ -184,7 +185,9 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
           </div>
         </div>
 
+          </div>
         <?php if (!empty($compte)): ?>
+          <div class="col-12 col-xl-5">
         <div class="card card-outline card-secondary">
           <div class="card-header"><h3 class="card-title">Compte élève</h3></div>
           <div class="card-body">
@@ -211,19 +214,15 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
             <?php endif; ?>
           </div>
         </div>
+            </div>
         <?php endif; ?>
 
-          </div>
         </div>
-      </div>
-    </div>
   </div>
-</div>
-</div>
+</section>
 <?php require __DIR__ . '/../partials/app_footer.php'; ?>
 <script>
   document.addEventListener('DOMContentLoaded', function () {
-    document.body.classList.add('modal-open');
     const studentSearch = document.getElementById('studentSearch');
     const studentId = document.getElementById('studentId');
     const studentSearchResults = document.getElementById('studentSearchResults');

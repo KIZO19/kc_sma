@@ -3,6 +3,9 @@
 namespace App\Models;
 
 use App\Core\Database;
+use App\Models\AnneeScolaire;
+use App\Models\DetteEleve;
+use App\Models\FraisScolaire;
 use PDO;
 
 class Exoneration
@@ -31,8 +34,8 @@ class Exoneration
     {
         $db = Database::getConnection();
         $stmt = $db->prepare(
-            'SELECT x.*, CONCAT_WS(\' \', e.nom, e.postnom, e.prenom) AS eleve_nom,
-                    e.matricule, f.type_frais,
+                'SELECT x.*, e.nom, e.postnom, e.prenom, e.matricule,
+                    f.type_frais, f.devise AS frais_devise,
                     u.nom_complet AS demandeur_nom,
                     v.nom_complet AS validateur_nom
              FROM exonerations x
@@ -44,41 +47,213 @@ class Exoneration
              ORDER BY x.created_at DESC, x.id DESC'
         );
         $stmt->execute([':ecole_id' => $ecoleId]);
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $financialByStudent = self::getFinancialSummaryBySchool($ecoleId);
+        foreach ($requests as &$request) {
+            $request['financial_summary'] = $financialByStudent[(int) $request['eleve_id']] ?? [];
+        }
+        unset($request);
+        return $requests;
     }
 
-    public static function decide(int $id, int $validateurId, string $status, string $commentaire): bool
+    public static function getFinancialSummaryBySchool(int $ecoleId): array
     {
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            'SELECT fee_debts.eleve_id, fee_debts.devise,
+                    SUM(fee_debts.montant_initial) AS montant_initial,
+                    SUM(fee_debts.montant_paye) AS montant_paye,
+                    SUM(fee_debts.montant_exonere) AS montant_exonere,
+                    SUM(GREATEST(0, fee_debts.montant_initial - fee_debts.montant_paye - fee_debts.montant_exonere)) AS montant_restant
+             FROM (
+                 SELECT d.eleve_id, d.frais_id, UPPER(COALESCE(d.devise, \'USD\')) AS devise,
+                        MAX(d.montant_initial) AS montant_initial,
+                        GREATEST(
+                            COALESCE((SELECT SUM(ece.montant) FROM ecritures_comptables_eleves ece
+                                      INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
+                                      WHERE ce.eleve_id = d.eleve_id AND ece.frais_id = d.frais_id
+                                        AND ece.type_mouvement = \'CREDIT\'), 0),
+                            COALESCE((SELECT SUM(pe.montant_paye) FROM paiements_eleves pe
+                                      WHERE pe.eleve_id = d.eleve_id AND pe.frais_id = d.frais_id), 0)
+                        ) AS montant_paye,
+                        COALESCE((SELECT SUM(x.montant) FROM exonerations x
+                                  WHERE x.eleve_id = d.eleve_id AND x.frais_id = d.frais_id
+                                    AND x.statut = \'Approuvee\'
+                                    AND UPPER(x.devise) = UPPER(COALESCE(d.devise, \'USD\'))), 0) AS montant_exonere
+                 FROM dettes_eleves d
+                 INNER JOIN eleves e ON e.id = d.eleve_id AND e.ecole_id = :school
+                 INNER JOIN annees_scolaires a ON a.id = d.annee_scolaire_id AND a.ecole_id = e.ecole_id AND a.est_active = 1
+                 GROUP BY d.eleve_id, d.frais_id, UPPER(COALESCE(d.devise, \'USD\'))
+             ) fee_debts
+             GROUP BY fee_debts.eleve_id, fee_debts.devise'
+        );
+        $stmt->execute([':school' => $ecoleId]);
+
+        $summary = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $studentId = (int) $row['eleve_id'];
+            $currency = strtoupper((string) $row['devise']);
+            $summary[$studentId][$currency] = [
+                'initial' => (float) $row['montant_initial'],
+                'paid' => (float) $row['montant_paye'],
+                'exonerated' => (float) $row['montant_exonere'],
+                'remaining' => (float) $row['montant_restant'],
+            ];
+        }
+        return $summary;
+    }
+
+    public static function getAvailableFeesForStudent(int $eleveId, int $ecoleId): array
+    {
+        $enrollment = DetteEleve::getLatestEnrollmentForEleve($eleveId);
+        $activeYear = AnneeScolaire::getActiveBySchool($ecoleId);
+        if (
+            !$enrollment
+            || !$activeYear
+            || (int) ($enrollment['ecole_id'] ?? 0) !== $ecoleId
+            || (int) ($enrollment['annee_scolaire_id'] ?? 0) !== (int) ($activeYear['id'] ?? 0)
+        ) {
+            return [];
+        }
+
+        $availableFees = [];
+        foreach (FraisScolaire::getAllBySchool($ecoleId) as $fee) {
+            if (
+                (int) ($fee['annee_scolaire_id'] ?? 0) !== (int) $activeYear['id']
+                || !DetteEleve::isFeeApplicableToEnrollment($fee, $enrollment)
+            ) {
+                continue;
+            }
+
+            $fee['montant_restant'] = self::getRemainingAmount(
+                $eleveId,
+                (int) $fee['id'],
+                (float) $fee['montant_total'],
+                (string) ($fee['devise'] ?? 'USD')
+            );
+            if ($fee['montant_restant'] > 0.005) {
+                $availableFees[] = $fee;
+            }
+        }
+        return $availableFees;
+    }
+
+    private static function getRemainingAmount(int $eleveId, int $fraisId, float $feeTotal, string $devise): float
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            'SELECT GREATEST(0,
+                COALESCE((SELECT MAX(d.montant_initial) FROM dettes_eleves d
+                          WHERE d.eleve_id = :debt_student AND d.frais_id = :debt_fee), :fee_total)
+                - GREATEST(
+                    COALESCE((SELECT SUM(ece.montant) FROM ecritures_comptables_eleves ece
+                              INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
+                              WHERE ce.eleve_id = :ledger_student AND ece.frais_id = :ledger_fee
+                                AND ece.type_mouvement = \'CREDIT\'), 0),
+                    COALESCE((SELECT SUM(pe.montant_paye) FROM paiements_eleves pe
+                              WHERE pe.eleve_id = :legacy_student AND pe.frais_id = :legacy_fee), 0)
+                )
+                - COALESCE((SELECT SUM(x.montant) FROM exonerations x
+                            WHERE x.eleve_id = :exemption_student AND x.frais_id = :exemption_fee
+                              AND x.statut = \'Approuvee\' AND UPPER(x.devise) = :currency), 0)
+            ) AS montant_restant'
+        );
+        $stmt->execute([
+            ':debt_student' => $eleveId,
+            ':debt_fee' => $fraisId,
+            ':fee_total' => $feeTotal,
+            ':ledger_student' => $eleveId,
+            ':ledger_fee' => $fraisId,
+            ':legacy_student' => $eleveId,
+            ':legacy_fee' => $fraisId,
+            ':exemption_student' => $eleveId,
+            ':exemption_fee' => $fraisId,
+            ':currency' => strtoupper(trim($devise)),
+        ]);
+        return (float) ($stmt->fetchColumn() ?: 0);
+    }
+
+    public static function decide(int $id, int $ecoleId, int $validateurId, string $status, string $commentaire): bool
+    {
+        if (!in_array($status, ['Approuvee', 'Refusee'], true) || $ecoleId <= 0 || $validateurId <= 0) {
+            return false;
+        }
+
         $db = Database::getConnection();
         $db->beginTransaction();
 
         try {
-            $stmt = $db->prepare('SELECT * FROM exonerations WHERE id = :id AND statut = :statut LIMIT 1 FOR UPDATE');
-            $stmt->execute([':id' => $id, ':statut' => 'En_attente']);
+            $stmt = $db->prepare(
+                'SELECT * FROM exonerations
+                 WHERE id = :id AND ecole_id = :ecole_id AND statut = :statut
+                 LIMIT 1 FOR UPDATE'
+            );
+            $stmt->execute([':id' => $id, ':ecole_id' => $ecoleId, ':statut' => 'En_attente']);
             $request = $stmt->fetch(PDO::FETCH_ASSOC);
-            if (!$request) {
+            if (!$request || (int) $request['demandeur_id'] === $validateurId) {
                 $db->rollBack();
                 return false;
             }
 
             if ($status === 'Approuvee') {
-                $debtStmt = $db->prepare(
-                    'SELECT id, montant_restant FROM dettes_eleves
-                     WHERE eleve_id = :eleve_id AND frais_id = :frais_id AND montant_restant > 0
-                     ORDER BY date_creation ASC, id ASC LIMIT 1 FOR UPDATE'
-                );
-                $debtStmt->execute([
-                    ':eleve_id' => $request['eleve_id'],
-                    ':frais_id' => $request['frais_id'],
-                ]);
-                $debt = $debtStmt->fetch(PDO::FETCH_ASSOC);
-                if (!$debt || (float) $request['montant'] > (float) $debt['montant_restant']) {
+                $studentLock = $db->prepare('SELECT id FROM eleves WHERE id = :id AND ecole_id = :ecole_id FOR UPDATE');
+                $studentLock->execute([':id' => (int) $request['eleve_id'], ':ecole_id' => $ecoleId]);
+                if (!$studentLock->fetchColumn()) {
                     $db->rollBack();
                     return false;
                 }
 
-                $reduce = $db->prepare('UPDATE dettes_eleves SET montant_restant = GREATEST(0, montant_restant - :montant) WHERE id = :id');
-                $reduce->execute([':montant' => $request['montant'], ':id' => $debt['id']]);
+                $fee = FraisScolaire::findByIdAndSchool((int) $request['frais_id'], $ecoleId);
+                $availableFee = null;
+                foreach (self::getAvailableFeesForStudent((int) $request['eleve_id'], $ecoleId) as $candidate) {
+                    if ((int) $candidate['id'] === (int) $request['frais_id']) {
+                        $availableFee = $candidate;
+                        break;
+                    }
+                }
+                if (
+                    !$fee
+                    || !$availableFee
+                    || strtoupper((string) $request['devise']) !== strtoupper((string) ($fee['devise'] ?? 'USD'))
+                    || (float) $request['montant'] > (float) $availableFee['montant_restant'] + 0.005
+                ) {
+                    $db->rollBack();
+                    return false;
+                }
+
+                $enrollment = DetteEleve::getLatestEnrollmentForEleve((int) $request['eleve_id']);
+                $debtStmt = $db->prepare(
+                    'SELECT id FROM dettes_eleves
+                     WHERE eleve_id = :eleve_id AND frais_id = :frais_id AND annee_scolaire_id = :year_id
+                     ORDER BY id ASC LIMIT 1 FOR UPDATE'
+                );
+                $debtStmt->execute([
+                    ':eleve_id' => $request['eleve_id'],
+                    ':frais_id' => $request['frais_id'],
+                    ':year_id' => (int) ($enrollment['annee_scolaire_id'] ?? 0),
+                ]);
+                $debtId = (int) ($debtStmt->fetchColumn() ?: 0);
+                $newRemaining = max(0, (float) $availableFee['montant_restant'] - (float) $request['montant']);
+                if ($debtId > 0) {
+                    $reduce = $db->prepare(
+                        'UPDATE dettes_eleves SET montant_restant = :remaining WHERE id = :id'
+                    );
+                    $reduce->execute([':remaining' => $newRemaining, ':id' => $debtId]);
+                } else {
+                    $insert = $db->prepare(
+                        'INSERT INTO dettes_eleves
+                            (eleve_id, frais_id, annee_scolaire_id, montant_initial, montant_restant, devise)
+                         VALUES (:eleve_id, :frais_id, :year_id, :initial, :remaining, :devise)'
+                    );
+                    $insert->execute([
+                        ':eleve_id' => $request['eleve_id'],
+                        ':frais_id' => $request['frais_id'],
+                        ':year_id' => (int) ($enrollment['annee_scolaire_id'] ?? 0),
+                        ':initial' => (float) $availableFee['montant_total'],
+                        ':remaining' => $newRemaining,
+                        ':devise' => $fee['devise'] ?? 'USD',
+                    ]);
+                }
             }
 
             $update = $db->prepare(
@@ -94,7 +269,7 @@ class Exoneration
             ]);
 
             $db->commit();
-            return true;
+            return $update->rowCount() > 0;
         } catch (\Throwable $e) {
             if ($db->inTransaction()) {
                 $db->rollBack();

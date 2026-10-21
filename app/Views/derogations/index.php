@@ -1,4 +1,21 @@
 <?php require __DIR__ . '/../partials/app_header.php'; ?>
+<?php
+$formatMoney = static fn ($amount): string => number_format((float) $amount, 2, ',', ' ');
+$formatFinancial = static function (array $financial, string $key) use ($formatMoney): string {
+  $amounts = [];
+  foreach ($financial as $currency => $values) {
+    $amounts[] = $formatMoney($values[$key] ?? 0) . ' ' . $currency;
+  }
+  return $amounts ? implode('<br>', array_map(static fn (string $amount): string => htmlspecialchars($amount, ENT_QUOTES, 'UTF-8'), $amounts)) : '<span class="text-muted">—</span>';
+};
+$formatFinancialText = static function (array $financial, string $key) use ($formatMoney): string {
+  $amounts = [];
+  foreach ($financial as $currency => $values) {
+    $amounts[] = $formatMoney($values[$key] ?? 0) . ' ' . $currency;
+  }
+  return $amounts ? implode(' · ', $amounts) : '0,00';
+};
+?>
 <section class="content-header">
   <div class="container-fluid">
     <h1>Dérogations</h1>
@@ -28,9 +45,13 @@
               <select class="form-select" id="derogationEleve" name="eleve_id" required>
                 <option value="">Sélectionner un élève</option>
                 <?php foreach (($students ?? []) as $student): ?>
-                  <option value="<?= (int) $student['id'] ?>"><?= htmlspecialchars(\App\Core\PersonName::format($student)) ?> (<?= htmlspecialchars($student['matricule'] ?? 'sans matricule') ?>)</option>
+                  <?php $studentFinancial = $financialSummary[(int) $student['id']] ?? []; ?>
+                  <option value="<?= (int) $student['id'] ?>" data-paid="<?= htmlspecialchars($formatFinancialText($studentFinancial, 'paid'), ENT_QUOTES, 'UTF-8') ?>" data-exonerated="<?= htmlspecialchars($formatFinancialText($studentFinancial, 'exonerated'), ENT_QUOTES, 'UTF-8') ?>" data-remaining="<?= htmlspecialchars($formatFinancialText($studentFinancial, 'remaining'), ENT_QUOTES, 'UTF-8') ?>">
+                    <?= htmlspecialchars(\App\Core\PersonName::format($student)) ?> (<?= htmlspecialchars($student['matricule'] ?? 'sans matricule') ?>)
+                  </option>
                 <?php endforeach; ?>
               </select>
+              <div id="derogationFinancialSummary" class="form-text mt-2" aria-live="polite">Sélectionnez un élève pour consulter les montants déjà payés et le solde dû.</div>
             </div>
             <div class="col-12 col-lg-4">
               <label class="form-label" for="derogationDateFin">Protégé jusqu’au</label>
@@ -54,13 +75,16 @@
         <?php else: ?>
           <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
-              <thead class="table-light"><tr><th>Élève</th><th>Protégé jusqu’au</th><th>Motif</th><th>Statut</th><?php if (!empty($canValidate)): ?><th>Décision</th><?php endif; ?></tr></thead>
+              <thead class="table-light"><tr><th>Élève</th><th>Protégé jusqu’au</th><th class="text-end">Déjà payé</th><th class="text-end">Exonéré</th><th class="text-end">Reste dû</th><th>Motif</th><th>Statut</th><?php if (!empty($canValidate)): ?><th>Décision</th><?php endif; ?></tr></thead>
               <tbody>
                 <?php foreach ($requests as $request): ?>
                   <?php $status = $request['statut'] ?? 'En_attente'; ?>
                   <tr>
                     <td><strong><?= htmlspecialchars($request['eleve_nom'] ?? '') ?></strong><br><small class="text-muted"><?= htmlspecialchars($request['matricule'] ?? '') ?></small></td>
                     <td><?= htmlspecialchars(date('d/m/Y', strtotime($request['date_fin'] ?? 'now'))) ?></td>
+                    <td class="text-end text-nowrap"><?= $formatFinancial($request['financial_summary'] ?? [], 'paid') ?></td>
+                    <td class="text-end text-nowrap"><?= $formatFinancial($request['financial_summary'] ?? [], 'exonerated') ?></td>
+                    <td class="text-end text-nowrap fw-semibold text-danger"><?= $formatFinancial($request['financial_summary'] ?? [], 'remaining') ?></td>
                     <td><?= htmlspecialchars($request['motif'] ?? '') ?></td>
                     <td><span class="badge <?= $status === 'Approuvee' ? 'bg-success' : ($status === 'Refusee' ? 'bg-danger' : 'bg-warning text-dark') ?>"><?= htmlspecialchars(str_replace('_', ' ', $status)) ?></span></td>
                     <?php if (!empty($canValidate)): ?>
@@ -84,4 +108,23 @@
     </div>
   </div>
 </section>
+<script>
+  (() => {
+    const studentSelect = document.getElementById('derogationEleve');
+    const financialSummary = document.getElementById('derogationFinancialSummary');
+    if (!studentSelect || !financialSummary) return;
+
+    const updateFinancialSummary = () => {
+      const selected = studentSelect.selectedOptions[0];
+      if (!selected || !selected.value) {
+        financialSummary.textContent = 'Sélectionnez un élève pour consulter les montants déjà payés et le solde dû.';
+        return;
+      }
+      financialSummary.textContent = `Déjà payé : ${selected.dataset.paid || '0,00'} · Exonéré : ${selected.dataset.exonerated || '0,00'} · Reste dû : ${selected.dataset.remaining || '0,00'}`;
+    };
+
+    studentSelect.addEventListener('change', updateFinancialSummary);
+    updateFinancialSummary();
+  })();
+</script>
 <?php require __DIR__ . '/../partials/app_footer.php'; ?>

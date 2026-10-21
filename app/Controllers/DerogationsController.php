@@ -5,8 +5,8 @@ namespace App\Controllers;
 use App\Core\Auth;
 use App\Core\Controller;
 use App\Models\Derogation;
-use App\Models\DetteEleve;
 use App\Models\Eleve;
+use App\Models\Exoneration;
 use App\Models\User;
 
 class DerogationsController extends Controller
@@ -31,6 +31,7 @@ class DerogationsController extends Controller
         $role = $user['role'] ?? 'default';
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
         $students = $ecoleId > 0 ? Eleve::getAllBySchool($ecoleId) : [];
+        $financialSummary = $ecoleId > 0 ? Exoneration::getFinancialSummaryBySchool($ecoleId) : [];
 
         $this->view('derogations/index', [
             'title' => APP_NAME . ' - Dérogations',
@@ -39,6 +40,7 @@ class DerogationsController extends Controller
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $this->getModulesForRole($role),
             'students' => $students,
+            'financialSummary' => $financialSummary,
             'requests' => Derogation::getAllBySchool($ecoleId),
             'canRequest' => in_array($role, self::REQUEST_ROLES, true),
             'canValidate' => in_array($role, self::VALIDATION_ROLES, true),
@@ -59,7 +61,12 @@ class DerogationsController extends Controller
         $date = \DateTimeImmutable::createFromFormat('Y-m-d', $dateFin);
         $dateErrors = \DateTimeImmutable::getLastErrors();
         if (!$student) $errors[] = 'Élève invalide pour cette école.';
-        if ($student && DetteEleve::getTotalOutstandingByEleve($eleveId) <= 0) $errors[] = 'Cet élève n’a aucune dette restante.';
+        $studentFinancial = $student ? (Exoneration::getFinancialSummaryBySchool($ecoleId)[$eleveId] ?? []) : [];
+        $hasCurrentDebt = (bool) array_filter(
+            array_column($studentFinancial, 'remaining'),
+            static fn ($amount): bool => (float) $amount > 0.005
+        );
+        if ($student && !$hasCurrentDebt) $errors[] = 'Cet élève n’a aucune dette restante après paiements et exonérations.';
         if (!$date || ($dateErrors !== false && ($dateErrors['warning_count'] > 0 || $dateErrors['error_count'] > 0))) $errors[] = 'La date de fin est invalide.';
         if ($date && $date < new \DateTimeImmutable('today')) $errors[] = 'La date de fin doit être aujourd’hui ou une date future.';
         if ($motif === '') $errors[] = 'Le motif est obligatoire.';

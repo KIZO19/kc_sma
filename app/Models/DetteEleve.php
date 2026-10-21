@@ -245,7 +245,24 @@ class DetteEleve
             } catch (\Throwable $e) {
             }
 
-            $remaining = max(0.0, $feeAmount - max($paidAccounting, $paidLegacy));
+            $approvedExoneration = 0.0;
+            try {
+                $exonerationStmt = $db->prepare(
+                    'SELECT COALESCE(SUM(montant), 0) FROM exonerations
+                     WHERE eleve_id = :eleve AND frais_id = :frais AND statut = :statut
+                       AND UPPER(devise) = :devise'
+                );
+                $exonerationStmt->execute([
+                    ':eleve' => $eleveId,
+                    ':frais' => $feeId,
+                    ':statut' => 'Approuvee',
+                    ':devise' => $devise,
+                ]);
+                $approvedExoneration = (float) ($exonerationStmt->fetchColumn() ?: 0);
+            } catch (\Throwable $e) {
+            }
+
+            $remaining = max(0.0, $feeAmount - max($paidAccounting, $paidLegacy) - $approvedExoneration);
             if ($remaining <= 0) {
                 continue;
             }

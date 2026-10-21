@@ -257,6 +257,7 @@ $exportQuery = static function (string $format, array $columns) use ($filters): 
                     </td>
                     <td class="text-end text-nowrap">
                       <a class="btn btn-sm btn-outline-primary" href="<?= BASE_URL ?>/paiements?eleve_id=<?= (int) $debt['eleve_id'] ?>" title="Voir les paiements" aria-label="Voir les paiements de <?= htmlspecialchars($name, ENT_QUOTES, 'UTF-8') ?>"><i class="bi bi-wallet2"></i></a>
+                      <a class="btn btn-sm btn-outline-info" href="<?= BASE_URL ?>/exonerations?eleve_id=<?= (int) $debt['eleve_id'] ?>" title="Demander ou consulter une exonération" aria-label="Exonérations de <?= htmlspecialchars($name, ENT_QUOTES, 'UTF-8') ?>"><i class="bi bi-shield-minus"></i></a>
                       <a class="btn btn-sm btn-outline-secondary" href="<?= BASE_URL ?>/derogations" title="Voir ou valider les dérogations" aria-label="Voir les dérogations de <?= htmlspecialchars($name, ENT_QUOTES, 'UTF-8') ?>"><i class="bi bi-file-earmark-check"></i></a>
                       <button class="btn btn-sm btn-outline-secondary" type="button" data-detail-toggle aria-controls="<?= $detailsId ?>" aria-expanded="false" title="Détail des frais" aria-label="Détail des frais de <?= htmlspecialchars($name, ENT_QUOTES, 'UTF-8') ?>"><i class="bi bi-list-ul"></i></button>
                     </td>

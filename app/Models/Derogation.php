@@ -40,7 +40,13 @@ class Derogation
              ORDER BY d.date_fin ASC, d.created_at DESC, d.id DESC'
         );
         $stmt->execute([':ecole_id' => $ecoleId]);
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $financialByStudent = Exoneration::getFinancialSummaryBySchool($ecoleId);
+        foreach ($requests as &$request) {
+            $request['financial_summary'] = $financialByStudent[(int) $request['eleve_id']] ?? [];
+        }
+        unset($request);
+        return $requests;
     }
 
     public static function hasPendingOrActive(int $eleveId, int $ecoleId): bool

@@ -1,0 +1,78 @@
+.app-datagrid-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+  padding: .75rem 1rem;
+  border-bottom: 1px solid var(--border, rgba(0, 0, 0, .08));
+  background: var(--surface, #fff);
+}
+
+.app-datagrid-toolbar .app-grid-search {
+  flex: 1 1 14rem;
+  max-width: 24rem;
+}
+
+.app-datagrid-toolbar .app-grid-size {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 8rem;
+}
+
+.app-datagrid-toolbar .app-grid-info {
+  margin-left: auto;
+  color: var(--text-muted, #6c757d);
+  font-size: .8125rem;
+  white-space: nowrap;
+}
+
+.app-datagrid-toolbar .app-grid-pagination {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: .25rem;
+}
+
+.app-data-grid thead th[data-grid-sort] {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.app-data-grid thead th[data-grid-sort]:hover,
+.app-data-grid thead th[aria-sort="ascending"],
+.app-data-grid thead th[aria-sort="descending"] {
+  color: #0d6efd;
+}
+
+.app-data-grid thead th[data-grid-sort] .app-grid-sort-icon {
+  margin-left: .3rem;
+  opacity: .5;
+  font-size: .75em;
+}
+
+.app-data-grid tbody tr[hidden] {
+  display: none !important;
+}
+
+@media (max-width: 575.98px) {
+  .app-datagrid-toolbar .app-grid-search,
+  .app-datagrid-toolbar .app-grid-size,
+  .app-datagrid-toolbar .app-grid-info,
+  .app-datagrid-toolbar .app-grid-pagination {
+    width: 100%;
+    max-width: none;
+  }
+
+  .app-datagrid-toolbar .app-grid-info {
+    margin-left: 0;
+  }
+
+  .app-datagrid-toolbar .app-grid-pagination {
+    justify-content: space-between;
+  }
+}
+
+[data-theme="dark"] .app-datagrid-toolbar {
+  border-color: rgba(255, 255, 255, .12);
+  background: var(--surface, #1e293b);
+}

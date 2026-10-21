@@ -273,6 +273,18 @@ class FraisController extends Controller
             $legacyPaidByStudent[(int) $payment['eleve_id']] = (float) $payment['total_paye'];
         }
 
+        $exoneratedByStudent = [];
+        $stmt = $db->prepare(
+            'SELECT eleve_id, COALESCE(SUM(montant), 0) AS total_exonere
+             FROM exonerations
+             WHERE frais_id = :fee_id AND statut = :status AND UPPER(devise) = :currency
+             GROUP BY eleve_id'
+        );
+        $stmt->execute([':fee_id' => $feeId, ':status' => 'Approuvee', ':currency' => strtoupper($currency)]);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $exoneration) {
+            $exoneratedByStudent[(int) $exoneration['eleve_id']] = (float) $exoneration['total_exonere'];
+        }
+
         $agentId = $this->resolveAgentId($db, $user, $ecoleId);
         $insertEntry = $db->prepare(
             'INSERT INTO ecritures_comptables_eleves
@@ -291,7 +303,8 @@ class FraisController extends Controller
                 (float) $ledger['credits'],
                 (float) ($legacyPaidByStudent[$studentId] ?? 0.0)
             );
-            $targetDue = $isTargeted ? max(0.0, $amount - $paid) : 0.0;
+            $exonerated = (float) ($exoneratedByStudent[$studentId] ?? 0.0);
+            $targetDue = $isTargeted ? max(0.0, $amount - $paid - $exonerated) : 0.0;
             $targetAccounts = [];
 
             foreach ($ledger['accounts'] as $accountId => $account) {
