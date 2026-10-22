@@ -1,16 +1,6 @@
 <?php require __DIR__ . '/../partials/app_header.php'; ?>
 <?php
 $dayNames = $days ?? [];
-$periodStart = static function (int $period): array {
-  $minutes = 7 * 60 + 30;
-  for ($current = 1; $current < $period; $current++) {
-    $minutes += 50;
-    if ($current === 3) {
-      $minutes += 15;
-    }
-  }
-  return [$minutes, $minutes + 50];
-};
 $formatTime = static fn (int $minutes): string => sprintf('%02d:%02d', intdiv($minutes, 60), $minutes % 60);
 $selectedClass = null;
 foreach (($classes ?? []) as $class) {
@@ -19,75 +9,149 @@ foreach (($classes ?? []) as $class) {
     break;
   }
 }
-$editingAssignment = $editingAssignment ?? null;
 ?>
 <section class="content-header">
   <div class="container-fluid">
     <h1>Gestion des horaires</h1>
-    <p class="text-muted mb-0">Section secondaire · Les périodes durent 50 minutes. La récréation est prévue à 10 h pendant 15 minutes.</p>
+    <p class="text-muted mb-0"><?= htmlspecialchars((string) ($sectionName ?? 'Section'), ENT_QUOTES, 'UTF-8') ?> · Chaque heure dure <?= (int) ($hourDuration ?? 50) ?> minutes.</p>
   </div>
 </section>
 <section class="content">
   <div class="container-fluid">
     <?php if (!empty($success)): ?><div class="alert alert-success"><?= htmlspecialchars((string) $success, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
     <?php if (!empty($error)): ?><div class="alert alert-danger"><?= htmlspecialchars((string) $error, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
+    <div class="card card-outline card-info">
+      <div class="card-header"><h2 class="card-title">Paramètres horaires de la section</h2></div>
+      <div class="card-body">
+        <form method="post" action="<?= BASE_URL ?>/horaires/save-duration" class="row g-3 align-items-end">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+          <div class="col-12 col-md-5">
+            <label class="form-label" for="hourDuration">Durée d’une heure de cours (minutes)</label>
+            <input class="form-control" id="hourDuration" name="duree_heure_minutes" type="number" min="20" max="120" value="<?= (int) ($hourDuration ?? 50) ?>" required>
+            <div class="form-text">Valeur propre à cette section. Autorisé : 20 à 120 minutes.</div>
+          </div>
+          <div class="col-auto"><button class="btn btn-info" type="submit">Enregistrer la durée</button></div>
+        </form>
+      </div>
+    </div>
     <?php if (empty($year)): ?>
       <div class="alert alert-warning">Aucune année scolaire active n’est configurée pour cette école.</div>
     <?php else: ?>
       <div class="alert alert-info">
         Année scolaire active : <strong><?= htmlspecialchars((string) $year['annee'], ENT_QUOTES, 'UTF-8') ?></strong>.
-        Première période à 7 h 30; trois périodes précèdent la récréation de 10 h.
+        Première heure à 7 h 30. La récréation dure 15 minutes après l’heure qui atteint ou dépasse 10 h, sans interrompre un cours.
       </div>
 
       <div class="card card-outline card-primary">
-        <div class="card-header"><h2 class="card-title">Affectations des cours</h2></div>
+        <div class="card-header"><h2 class="card-title"><?= !empty($editingCoursePlan) ? 'Modifier le cours et son programme' : 'Créer un cours et définir son volume' ?></h2></div>
         <div class="card-body">
-          <form method="post" action="<?= BASE_URL ?>/horaires/save-assignment" class="row g-3 align-items-end">
+          <form method="post" action="<?= BASE_URL ?>/horaires/save-course-plan" class="row g-3">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $csrfToken, ENT_QUOTES, 'UTF-8') ?>">
-            <input type="hidden" name="assignment_id" value="<?= (int) ($editingAssignment['id'] ?? 0) ?>">
+            <input type="hidden" name="programme_id" value="<?= (int) ($editingCoursePlan['id'] ?? 0) ?>">
+            <div class="col-12 col-md-4">
+              <label class="form-label" for="courseName">Nom du cours</label>
+              <input class="form-control" id="courseName" name="nom_cours" maxlength="100" value="<?= htmlspecialchars((string) ($editingCoursePlan['nom_cours'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" required>
+            </div>
+            <div class="col-12 col-md-2">
+              <label class="form-label" for="courseCode">Code du cours</label>
+              <input class="form-control" id="courseCode" name="code_cours" maxlength="15" value="<?= htmlspecialchars((string) ($editingCoursePlan['code_cours'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" required>
+            </div>
             <div class="col-12 col-md-3">
-              <label class="form-label" for="assignmentClass">Classe</label>
-              <select class="form-select" id="assignmentClass" name="classe_id" required>
-                <option value="">Choisir une classe</option>
+              <label class="form-label" for="courseNature">Type de cours</label>
+              <select class="form-select" id="courseNature" name="nature_cours" required>
+                <option value="commun" <?= ($editingCoursePlan['nature_cours'] ?? 'commun') === 'commun' ? 'selected' : '' ?>>Tronc commun (plusieurs classes possibles)</option>
+                <option value="option" <?= ($editingCoursePlan['nature_cours'] ?? '') === 'option' ? 'selected' : '' ?>>Cours d’option (une seule classe)</option>
+              </select>
+            </div>
+            <div class="col-12 col-md-3">
+              <label class="form-label" for="courseHours">Heures par semaine et par classe</label>
+              <input class="form-control" id="courseHours" name="volume_horaire_hebdo" type="number" min="1" max="35" value="<?= (int) ($editingCoursePlan['volume_horaire_hebdo'] ?? 2) ?>" required>
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="courseClasses">Classes concernées</label>
+              <select class="form-select" id="courseClasses" name="classe_ids[]" size="<?= ($editingCoursePlan['nature_cours'] ?? 'commun') === 'option' ? 1 : 5 ?>" <?= ($editingCoursePlan['nature_cours'] ?? 'commun') === 'option' ? '' : 'multiple' ?> required>
                 <?php foreach (($classes ?? []) as $class): ?>
-                  <option value="<?= (int) $class['id'] ?>" <?= (int) ($editingAssignment['classe_id'] ?? $classId) === (int) $class['id'] ? 'selected' : '' ?>>
-                    <?= htmlspecialchars((string) $class['nom_classe'], ENT_QUOTES, 'UTF-8') ?>
+                  <?php $isCourseClass = false; foreach (($editingCoursePlan['classes'] ?? []) as $courseClass) { if ((int) $courseClass['id'] === (int) $class['id']) { $isCourseClass = true; break; } } ?>
+                  <option value="<?= (int) $class['id'] ?>" <?= $isCourseClass ? 'selected' : '' ?>>
+                    <?= htmlspecialchars((string) $class['nom_classe'], ENT_QUOTES, 'UTF-8') ?><?= !empty($class['nom_option']) ? ' · ' . htmlspecialchars((string) $class['nom_option'], ENT_QUOTES, 'UTF-8') : '' ?>
                   </option>
                 <?php endforeach; ?>
               </select>
+              <div class="form-text">Un cours de tronc commun peut être rattaché à plusieurs classes. Un cours d’option doit être rattaché à une seule classe ayant une option.</div>
             </div>
-            <div class="col-12 col-md-3">
-              <label class="form-label" for="assignmentCourse">Cours</label>
-              <select class="form-select" id="assignmentCourse" name="cours_id" required>
-                <option value="">Choisir un cours</option>
-                <?php foreach (($courses ?? []) as $course): ?>
-                  <option value="<?= (int) $course['id'] ?>" <?= (int) ($editingAssignment['cours_id'] ?? 0) === (int) $course['id'] ? 'selected' : '' ?>>
-                    <?= htmlspecialchars((string) $course['nom_cours'], ENT_QUOTES, 'UTF-8') ?>
-                  </option>
-                <?php endforeach; ?>
-              </select>
-            </div>
-            <div class="col-12 col-md-3">
-              <label class="form-label" for="assignmentTeacher">Enseignant</label>
-              <select class="form-select" id="assignmentTeacher" name="agent_id" required>
-                <option value="">Choisir un enseignant</option>
-                <?php foreach (($teachers ?? []) as $teacher): ?>
-                  <option value="<?= (int) $teacher['id'] ?>" <?= (int) ($editingAssignment['agent_id'] ?? 0) === (int) $teacher['id'] ? 'selected' : '' ?>>
-                    <?= htmlspecialchars(\App\Core\PersonName::format($teacher), ENT_QUOTES, 'UTF-8') ?>
-                  </option>
-                <?php endforeach; ?>
-              </select>
-            </div>
-            <div class="col-6 col-md-1">
-              <label class="form-label" for="assignmentVolume">Périodes / sem.</label>
-              <input class="form-control" id="assignmentVolume" name="volume_horaire_hebdo" type="number" min="1" max="42" value="<?= (int) ($editingAssignment['volume_horaire_hebdo'] ?? 2) ?>" required>
-            </div>
-            <div class="col-6 col-md-2 d-flex gap-2">
-              <button class="btn btn-primary flex-grow-1" type="submit"><?= $editingAssignment ? 'Modifier' : 'Affecter' ?></button>
-              <?php if ($editingAssignment): ?><a class="btn btn-outline-secondary" href="<?= BASE_URL ?>/horaires?classe_id=<?= (int) $classId ?>">Annuler</a><?php endif; ?>
+            <div class="col-12">
+              <button class="btn btn-primary" type="submit"><?= !empty($editingCoursePlan) ? 'Enregistrer les modifications' : 'Créer le cours' ?></button>
+              <?php if (!empty($editingCoursePlan)): ?><a class="btn btn-outline-secondary" href="<?= BASE_URL ?>/horaires">Annuler</a><?php endif; ?>
             </div>
           </form>
-          <p class="form-text mb-0 mt-2">Le volume indiqué correspond au nombre de périodes hebdomadaires de 50 minutes.</p>
+        </div>
+      </div>
+
+      <div class="card card-outline card-info">
+        <div class="card-header"><h2 class="card-title">Cours de la section et attribution des enseignants</h2></div>
+        <div class="card-body p-0">
+          <?php if (empty($coursePlans)): ?>
+            <div class="p-4 text-muted">Aucun cours n’est encore configuré pour cette section.</div>
+          <?php else: ?>
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0">
+                <thead class="table-light"><tr><th>Cours</th><th>Type</th><th>Classes</th><th>Volume / classe</th><th>Charge hebdomadaire de l’enseignant</th><th>Enseignant commun</th><th>Action</th></tr></thead>
+                <tbody>
+                  <?php foreach ($coursePlans as $plan): ?>
+                    <tr>
+                      <td>
+                        <strong><?= htmlspecialchars((string) $plan['nom_cours'], ENT_QUOTES, 'UTF-8') ?></strong>
+                        <span class="d-block small text-muted"><?= htmlspecialchars((string) $plan['code_cours'], ENT_QUOTES, 'UTF-8') ?></span>
+                      </td>
+                      <td><?= $plan['nature_cours'] === 'commun' ? 'Tronc commun' : 'Cours d’option' ?></td>
+                      <td>
+                        <?php foreach ($plan['classes'] as $courseClass): ?>
+                          <span class="badge text-bg-light border"><?= htmlspecialchars((string) $courseClass['nom_classe'], ENT_QUOTES, 'UTF-8') ?><?= !empty($courseClass['nom_option']) ? ' · ' . htmlspecialchars((string) $courseClass['nom_option'], ENT_QUOTES, 'UTF-8') : '' ?></span>
+                        <?php endforeach; ?>
+                      </td>
+                      <td><?= (int) $plan['volume_horaire_hebdo'] ?> heures</td>
+                      <td>
+                        <?php if (!empty($plan['agent_id'])): ?>
+                          <?= (int) $plan['teacher_weekly_load'] ?> heures / semaine
+                        <?php else: ?>
+                          <span class="text-muted">Non calculée — aucun enseignant attribué</span>
+                        <?php endif; ?>
+                      </td>
+                      <td>
+                        <?php if (!empty($plan['agent_id'])): ?>
+                          <?= htmlspecialchars(\App\Core\PersonName::format($plan), ENT_QUOTES, 'UTF-8') ?>
+                          <span class="d-block small text-muted">Indice <?= (int) $plan['teacher_index'] ?></span>
+                        <?php else: ?>
+                          <span class="text-muted">À attribuer</span>
+                        <?php endif; ?>
+                      </td>
+                      <td>
+                        <form method="post" action="<?= BASE_URL ?>/horaires/assign-course-teacher" class="d-flex gap-2 mb-2">
+                          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+                          <input type="hidden" name="programme_id" value="<?= (int) $plan['id'] ?>">
+                          <select class="form-select form-select-sm" name="agent_id" aria-label="Enseignant pour <?= htmlspecialchars((string) $plan['nom_cours'], ENT_QUOTES, 'UTF-8') ?>" required>
+                            <option value="">Choisir un enseignant</option>
+                            <?php foreach (($teachers ?? []) as $teacher): ?>
+                              <option value="<?= (int) $teacher['id'] ?>" <?= (int) ($plan['agent_id'] ?? 0) === (int) $teacher['id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars(\App\Core\PersonName::format($teacher), ENT_QUOTES, 'UTF-8') ?>
+                              </option>
+                            <?php endforeach; ?>
+                          </select>
+                          <button class="btn btn-sm btn-outline-primary text-nowrap" type="submit"><?= empty($plan['agent_id']) ? 'Attribuer' : 'Changer' ?></button>
+                        </form>
+                        <a class="btn btn-sm btn-outline-secondary" href="<?= BASE_URL ?>/horaires?edit_plan=<?= (int) $plan['id'] ?>">Modifier</a>
+                        <form method="post" action="<?= BASE_URL ?>/horaires/delete-course-plan" class="d-inline" onsubmit="return confirm('Supprimer ce cours de cette section ? Les heures planifiées seront retirées. La suppression sera refusée si des évaluations ont déjà été saisies.');">
+                          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+                          <input type="hidden" name="programme_id" value="<?= (int) $plan['id'] ?>">
+                          <button class="btn btn-sm btn-outline-danger" type="submit">Supprimer</button>
+                        </form>
+                      </td>
+                    </tr>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
+            </div>
+          <?php endif; ?>
         </div>
       </div>
 
@@ -99,7 +163,7 @@ $editingAssignment = $editingAssignment ?? null;
             <select class="form-select form-select-sm" id="timetableClass" name="classe_id" onchange="this.form.submit()">
               <?php foreach (($classes ?? []) as $class): ?>
                 <option value="<?= (int) $class['id'] ?>" <?= (int) $classId === (int) $class['id'] ? 'selected' : '' ?>>
-                  <?= htmlspecialchars((string) $class['nom_classe'], ENT_QUOTES, 'UTF-8') ?>
+                  <?= htmlspecialchars((string) $class['nom_classe'], ENT_QUOTES, 'UTF-8') ?><?= !empty($class['nom_option']) ? ' · ' . htmlspecialchars((string) $class['nom_option'], ENT_QUOTES, 'UTF-8') : '' ?>
                 </option>
               <?php endforeach; ?>
             </select>
@@ -107,24 +171,25 @@ $editingAssignment = $editingAssignment ?? null;
         </div>
         <div class="card-body p-0">
           <?php if (!$selectedClass): ?>
-            <div class="p-4 text-muted">Aucune classe n’est disponible dans votre section secondaire.</div>
+            <div class="p-4 text-muted">Aucune classe n’est disponible dans votre section.</div>
           <?php elseif (!$classAssignments): ?>
             <div class="p-4 text-muted">Aucun cours n’est affecté à cette classe. Créez d’abord ses affectations ci-dessus.</div>
           <?php else: ?>
             <div class="table-responsive">
               <table class="table table-bordered table-sm align-middle text-center mb-0">
                 <thead class="table-light">
-                  <tr><th>Période</th><?php foreach ($dayNames as $day): ?><th><?= htmlspecialchars($day, ENT_QUOTES, 'UTF-8') ?></th><?php endforeach; ?></tr>
+                  <tr><th>Heure</th><?php foreach ($dayNames as $day): ?><th><?= htmlspecialchars($day, ENT_QUOTES, 'UTF-8') ?></th><?php endforeach; ?></tr>
                 </thead>
                 <tbody>
-                  <?php for ($period = 1; $period <= 7; $period++): ?>
-                    <?php [$startMinute, $endMinute] = $periodStart($period); ?>
-                    <?php if ($period === 4): ?>
-                      <tr class="table-warning"><th colspan="7">Récréation · 10:00–10:15</th></tr>
+                  <?php foreach (($dailySchedule['timeline'] ?? []) as $timelineItem): ?>
+                    <?php if ($timelineItem['type'] === 'recess'): ?>
+                      <tr class="table-warning"><th colspan="7">Récréation · <?= $formatTime((int) $timelineItem['start']) ?>–<?= $formatTime((int) $timelineItem['end']) ?></th></tr>
+                      <?php continue; ?>
                     <?php endif; ?>
+                    <?php $period = (int) $timelineItem['hour']; ?>
                     <tr>
                       <th class="text-nowrap">
-                        <?= $period ?><br><small class="text-muted"><?= $formatTime($startMinute) ?>–<?= $formatTime($endMinute) ?></small>
+                        <?= $period ?><br><small class="text-muted"><?= $formatTime((int) $timelineItem['start']) ?>–<?= $formatTime((int) $timelineItem['end']) ?></small>
                       </th>
                       <?php foreach ($dayNames as $dayId => $day): ?>
                         <?php $slot = $schedule[$dayId][$period] ?? null; ?>
@@ -144,7 +209,7 @@ $editingAssignment = $editingAssignment ?? null;
                               <input type="hidden" name="classe_id" value="<?= (int) $classId ?>">
                               <input type="hidden" name="jour_id" value="<?= (int) $dayId ?>">
                               <input type="hidden" name="periode" value="<?= $period ?>">
-                              <select class="form-select form-select-sm" name="attribution_id" aria-label="Cours et enseignant pour <?= htmlspecialchars($day . ' période ' . $period, ENT_QUOTES, 'UTF-8') ?>" required>
+                              <select class="form-select form-select-sm" name="attribution_id" aria-label="Cours et enseignant pour <?= htmlspecialchars($day . ' heure ' . $period, ENT_QUOTES, 'UTF-8') ?>" required>
                                 <option value="">Cours · indice</option>
                                 <?php foreach ($classAssignments as $assignment): ?>
                                   <option value="<?= (int) $assignment['id'] ?>">
@@ -158,7 +223,7 @@ $editingAssignment = $editingAssignment ?? null;
                         </td>
                       <?php endforeach; ?>
                     </tr>
-                  <?php endfor; ?>
+                  <?php endforeach; ?>
                 </tbody>
               </table>
             </div>
@@ -182,7 +247,7 @@ $editingAssignment = $editingAssignment ?? null;
                       <td><span class="badge text-bg-primary"><?= (int) $workload['indice'] ?></span></td>
                       <td><?= htmlspecialchars(\App\Core\PersonName::format($workload), ENT_QUOTES, 'UTF-8') ?></td>
                       <td class="<?= $hasWeeklyDayOff ? 'fw-semibold text-success' : '' ?>">
-                        <?= (int) $workload['volume_total'] ?> périodes<?= $hasWeeklyDayOff ? ' · temps plein' : '' ?>
+                        <?= (int) $workload['volume_total'] ?> heures<?= $hasWeeklyDayOff ? ' · temps plein' : '' ?>
                       </td>
                       <td>
                         <?php if (!$hasWeeklyDayOff): ?>
@@ -220,16 +285,27 @@ $editingAssignment = $editingAssignment ?? null;
           <?php else: ?>
             <div class="table-responsive">
               <table class="table table-striped align-middle mb-0">
-                <thead><tr><th>Classe</th><th>Cours</th><th>Enseignant</th><th>Indice</th><th>Volume / semaine</th><th></th></tr></thead>
+                <thead><tr><th>Classe</th><th>Cours</th><th>Enseignant</th><th>Indice</th><th>Volume / semaine</th><th>Actions</th></tr></thead>
                 <tbody>
                   <?php foreach ($assignments as $assignment): ?>
                     <tr>
-                      <td><?= htmlspecialchars((string) $assignment['nom_classe'], ENT_QUOTES, 'UTF-8') ?></td>
+                      <td><?= htmlspecialchars((string) $assignment['nom_classe'], ENT_QUOTES, 'UTF-8') ?><?= !empty($assignment['nom_option']) ? ' · ' . htmlspecialchars((string) $assignment['nom_option'], ENT_QUOTES, 'UTF-8') : '' ?></td>
                       <td><?= htmlspecialchars((string) $assignment['nom_cours'], ENT_QUOTES, 'UTF-8') ?></td>
                       <td><?= htmlspecialchars(\App\Core\PersonName::format($assignment), ENT_QUOTES, 'UTF-8') ?></td>
                       <td><span class="badge text-bg-primary"><?= (int) $assignment['indice'] ?></span></td>
-                      <td><?= (int) $assignment['volume_horaire_hebdo'] ?> périodes</td>
-                      <td><a class="btn btn-sm btn-outline-secondary" href="<?= BASE_URL ?>/horaires?classe_id=<?= (int) $assignment['classe_id'] ?>&amp;edit_id=<?= (int) $assignment['id'] ?>">Modifier</a></td>
+                      <td><?= (int) $assignment['volume_horaire_hebdo'] ?> heures</td>
+                      <td class="text-nowrap">
+                        <?php if (!empty($assignment['programme_id'])): ?>
+                          <span class="text-muted">Géré depuis le programme du cours</span>
+                        <?php else: ?>
+                          <form method="post" action="<?= BASE_URL ?>/horaires/delete-assignment" class="d-inline" onsubmit="return confirm('Supprimer cette affectation et ses créneaux ? Les affectations ayant déjà des évaluations ne peuvent pas être supprimées.');">
+                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+                            <input type="hidden" name="assignment_id" value="<?= (int) $assignment['id'] ?>">
+                            <input type="hidden" name="classe_id" value="<?= (int) $assignment['classe_id'] ?>">
+                            <button class="btn btn-sm btn-outline-danger" type="submit">Supprimer</button>
+                          </form>
+                        <?php endif; ?>
+                      </td>
                     </tr>
                   <?php endforeach; ?>
                 </tbody>
@@ -241,4 +317,25 @@ $editingAssignment = $editingAssignment ?? null;
     <?php endif; ?>
   </div>
 </section>
+<script>
+  (() => {
+    const nature = document.getElementById('courseNature');
+    const classes = document.getElementById('courseClasses');
+    if (!nature || !classes) return;
+
+    const syncClassSelection = () => {
+      const isOptionCourse = nature.value === 'option';
+      if (isOptionCourse && classes.selectedOptions.length > 1) {
+        Array.from(classes.options).forEach((option) => {
+          if (option !== classes.selectedOptions[0]) option.selected = false;
+        });
+      }
+      classes.multiple = !isOptionCourse;
+      classes.size = isOptionCourse ? 1 : 5;
+    };
+
+    nature.addEventListener('change', syncClassSelection);
+    syncClassSelection();
+  })();
+</script>
 <?php require __DIR__ . '/../partials/app_footer.php'; ?>

@@ -1,20 +1,17 @@
 <?php require __DIR__ . '/../partials/app_header.php'; ?>
 <?php
-$periodStart = static function (int $period): array {
-  $minutes = 7 * 60 + 30;
-  for ($current = 1; $current < $period; $current++) {
-    $minutes += 50;
-    if ($current === 3) {
-      $minutes += 15;
-    }
-  }
-  return [$minutes, $minutes + 50];
-};
 $formatTime = static fn (int $minutes): string => sprintf('%02d:%02d', intdiv($minutes, 60), $minutes % 60);
 $slotsByDay = [];
+$dailySchedules = [];
 foreach (($schedule ?? []) as $slot) {
   $slotsByDay[(int) $slot['jour_id']][(int) $slot['periode']] = $slot;
 }
+foreach (($hourDurations ?? []) as $sectionId => $duration) {
+  $dailySchedules[(int) $sectionId] = \App\Models\SchoolTimetable::getDailySchedule((int) $duration);
+}
+$studentDailySchedule = !empty($isStudent) && !empty($classSectionId)
+  ? ($dailySchedules[(int) $classSectionId] ?? null)
+  : null;
 ?>
 <section class="content-header">
   <div class="container-fluid">
@@ -39,23 +36,37 @@ foreach (($schedule ?? []) as $slot) {
           <div class="table-responsive">
             <table class="table table-bordered table-sm align-middle text-center mb-0">
               <thead class="table-light">
-                <tr><th>Période</th><?php foreach ($days as $day): ?><th><?= htmlspecialchars($day, ENT_QUOTES, 'UTF-8') ?></th><?php endforeach; ?></tr>
+                  <tr><th>Heure</th><?php foreach ($days as $dayId => $day): ?><th>
+                  <?= htmlspecialchars($day, ENT_QUOTES, 'UTF-8') ?>
+                  <?php if (empty($isStudent) && (int) ($weeklyDayOff ?? 0) === (int) $dayId): ?><span class="d-block badge text-bg-info">Journée hebdomadaire</span><?php endif; ?>
+                </th><?php endforeach; ?></tr>
               </thead>
               <tbody>
                 <?php for ($period = 1; $period <= 7; $period++): ?>
-                  <?php [$startMinute, $endMinute] = $periodStart($period); ?>
-                  <?php if ($period === 4): ?><tr class="table-warning"><th colspan="7">Récréation · 10:00–10:15</th></tr><?php endif; ?>
-                  <tr>
-                    <th class="text-nowrap"><?= $period ?><br><small class="text-muted"><?= $formatTime($startMinute) ?>–<?= $formatTime($endMinute) ?></small></th>
-                    <?php foreach ($days as $dayId => $day): ?>
-                      <?php $slot = $slotsByDay[$dayId][$period] ?? null; ?>
-                      <td>
-                        <?php if ($slot): ?>
-                          <strong><?= htmlspecialchars((string) $slot['nom_cours'], ENT_QUOTES, 'UTF-8') ?></strong>
+                    <?php if (!empty($studentDailySchedule) && (int) ($studentDailySchedule['recess_after_hour'] ?? 0) === $period): ?>
+                      <tr class="table-warning"><th colspan="7">Récréation · <?= $formatTime((int) $studentDailySchedule['recess_start']) ?>–<?= $formatTime((int) $studentDailySchedule['recess_end']) ?></th></tr>
+                    <?php endif; ?>
+                    <tr>
+                      <th class="text-nowrap">
+                        <?= $period ?>
+                        <?php if (!empty($studentDailySchedule)): ?>
+                          <?php $time = $studentDailySchedule['hours'][$period]; ?>
+                          <br><small class="text-muted"><?= $formatTime((int) $time['start']) ?>–<?= $formatTime((int) $time['end']) ?></small>
+                        <?php endif; ?>
+                      </th>
+                      <?php foreach ($days as $dayId => $day): ?>
+                        <?php $slot = $slotsByDay[$dayId][$period] ?? null; ?>
+                        <td>
+                          <?php if ($slot): ?>
+                            <?php if (empty($isStudent)): ?>
+                              <?php $time = $dailySchedules[(int) $slot['section_id']]['hours'][$period] ?? null; ?>
+                              <?php if ($time): ?><span class="d-block small text-muted"><?= $formatTime((int) $time['start']) ?>–<?= $formatTime((int) $time['end']) ?></span><?php endif; ?>
+                            <?php endif; ?>
+                            <strong><?= htmlspecialchars((string) $slot['nom_cours'], ENT_QUOTES, 'UTF-8') ?></strong>
                           <?php if (!empty($isStudent)): ?>
                             <span class="d-block small text-muted">Enseignant indice <?= (int) $slot['indice'] ?></span>
                           <?php else: ?>
-                            <span class="d-block small text-muted"><?= htmlspecialchars((string) $slot['nom_classe'], ENT_QUOTES, 'UTF-8') ?> · Indice <?= (int) $slot['indice'] ?></span>
+                            <span class="d-block small text-muted"><?= htmlspecialchars((string) $slot['nom_classe'], ENT_QUOTES, 'UTF-8') ?><?= !empty($slot['nom_option']) ? ' · ' . htmlspecialchars((string) $slot['nom_option'], ENT_QUOTES, 'UTF-8') : '' ?> · Indice <?= (int) $slot['indice'] ?></span>
                           <?php endif; ?>
                         <?php else: ?>
                           <span class="text-muted">—</span>

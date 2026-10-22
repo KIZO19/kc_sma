@@ -211,6 +211,7 @@ class Controller
                 ['name' => 'Inscriptions', 'path' => '/inscriptions', 'icon' => 'bi-person-plus'],
             ],
             'enseignant_école' => [
+                ['name' => 'Mon emploi du temps', 'path' => '/mon-emploi', 'icon' => 'bi-calendar2-week'],
                 ['name' => 'Présences des élèves', 'path' => '/presences', 'icon' => 'bi-calendar-check'],
                 ['name' => 'Notes de mes cours', 'path' => '/notes', 'icon' => 'bi-pencil-square'],
                 ['name' => 'Élèves inscrits', 'path' => '/eleves', 'icon' => 'bi-people'],
@@ -254,7 +255,7 @@ class Controller
         if (in_array($role, ['préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école'], true)) {
             array_unshift($modules, ['name' => 'Communiqués', 'path' => '/communiques', 'icon' => 'bi-megaphone']);
         }
-        if ($role === 'DE_école') {
+        if (in_array($role, ['DE_école', 'DP_école', 'DA_école'], true)) {
             array_unshift($modules, ['name' => 'Gestion des horaires', 'path' => '/horaires', 'icon' => 'bi-calendar-week']);
         }
 
