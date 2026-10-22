@@ -30,6 +30,8 @@ class RecouvrementsController extends Controller
             : [];
         $debts = $this->aggregateByStudent($this->fetchOutstandingDebts($user, $filters));
         $this->applyCollectionOrientation($debts, $thresholds, $this->fetchStudentProtection($user));
+        $this->applySolvencyStatus($debts, $thresholds);
+        $solvencyRankings = $this->buildSolvencyRankings($debts, $thresholds);
         $summary = $this->buildSummary($debts);
         $feeColumns = $this->getFeeColumns($debts);
 
@@ -40,6 +42,7 @@ class RecouvrementsController extends Controller
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $modules,
             'debts' => $debts,
+            'solvencyRankings' => $solvencyRankings,
             'summary' => $summary,
             'feeColumns' => $feeColumns,
             'filters' => $filters,
@@ -98,6 +101,10 @@ class RecouvrementsController extends Controller
         $user = Auth::refresh() ?: Auth::user();
         $filters = $this->getFilters();
         $debts = $this->aggregateByStudent($this->fetchOutstandingDebts($user, $filters));
+        $thresholds = (int) ($user['ecole_id'] ?? 0) > 0
+            ? SeuilRecouvrement::getBySchool((int) $user['ecole_id'])
+            : [];
+        $this->applySolvencyStatus($debts, $thresholds);
         $format = strtolower(trim((string) ($_GET['format'] ?? 'csv')));
         $columns = $this->getExportColumns();
 
@@ -205,6 +212,79 @@ class RecouvrementsController extends Controller
             $protectionByStudent[$studentId] ??= $request;
         }
         return $protectionByStudent;
+    }
+
+    private function applySolvencyStatus(array &$debts, array $thresholds): void
+    {
+        foreach ($debts as &$debt) {
+            $currencies = array_unique(array_merge(
+                array_keys($debt['initial_by_currency'] ?? []),
+                array_keys($debt['paid_by_currency'] ?? [])
+            ));
+            $belowThreshold = false;
+            $missingThreshold = false;
+
+            foreach ($currencies as $currency) {
+                $currency = strtoupper((string) $currency);
+                if (!array_key_exists($currency, $thresholds)) {
+                    $missingThreshold = true;
+                    continue;
+                }
+                if ((float) ($debt['paid_by_currency'][$currency] ?? 0) < (float) $thresholds[$currency]) {
+                    $belowThreshold = true;
+                }
+            }
+
+            if ($belowThreshold) {
+                $debt['solvency_status'] = 'Insolvable';
+                $debt['solvency_level'] = 'danger';
+            } elseif ($missingThreshold) {
+                $debt['solvency_status'] = 'Seuil à configurer';
+                $debt['solvency_level'] = 'secondary';
+            } else {
+                $debt['solvency_status'] = 'Seuil atteint';
+                $debt['solvency_level'] = 'success';
+            }
+        }
+        unset($debt);
+    }
+
+    private function buildSolvencyRankings(array $debts, array $thresholds): array
+    {
+        $rankings = [];
+        foreach ($thresholds as $currency => $threshold) {
+            $currency = strtoupper((string) $currency);
+            $solvent = [];
+            $insolvent = [];
+
+            foreach ($debts as $debt) {
+                if (!array_key_exists($currency, $debt['initial_by_currency'] ?? [])) {
+                    continue;
+                }
+
+                $student = [
+                    'name' => \App\Core\PersonName::format($debt),
+                    'class' => (string) ($debt['nom_classe'] ?? 'Classe non définie'),
+                    'paid' => (float) ($debt['paid_by_currency'][$currency] ?? 0),
+                ];
+                if ($student['paid'] >= (float) $threshold) {
+                    $solvent[] = $student;
+                } else {
+                    $insolvent[] = $student;
+                }
+            }
+
+            usort($solvent, static fn (array $left, array $right): int => $right['paid'] <=> $left['paid']);
+            usort($insolvent, static fn (array $left, array $right): int => $left['paid'] <=> $right['paid']);
+            $rankings[] = [
+                'currency' => $currency,
+                'threshold' => (float) $threshold,
+                'solvent' => array_slice($solvent, 0, 5),
+                'insolvent' => array_slice($insolvent, 0, 5),
+            ];
+        }
+
+        return $rankings;
     }
 
     private function applyCollectionOrientation(array &$debts, array $thresholds, array $protectionByStudent): void
@@ -481,7 +561,7 @@ class RecouvrementsController extends Controller
 
     private function getExportColumns(): array
     {
-        $allowed = ['classe', 'eleve', 'matricule', 'frais', 'initial', 'paye', 'exonere', 'restant'];
+        $allowed = ['classe', 'eleve', 'matricule', 'frais', 'initial', 'paye', 'exonere', 'restant', 'solvabilite'];
         $requested = array_map('trim', explode(',', (string) ($_GET['colonnes'] ?? '')));
         $columns = array_values(array_intersect($allowed, $requested));
         return $columns ?: $allowed;
@@ -492,7 +572,8 @@ class RecouvrementsController extends Controller
         return array_map(static fn (string $column): string => [
             'classe' => 'Classe', 'eleve' => 'Élève', 'matricule' => 'Matricule',
             'frais' => 'Frais', 'initial' => 'Montant initial',
-            'paye' => 'Montant déjà payé', 'exonere' => 'Montant exonéré', 'restant' => 'Dette restante',
+            'paye' => 'Total déjà payé', 'exonere' => 'Montant exonéré', 'restant' => 'Dette restante',
+            'solvabilite' => 'Solvabilité',
         ][$column], $columns);
     }
 
@@ -508,6 +589,7 @@ class RecouvrementsController extends Controller
             'paye' => $this->formatAmountsByCurrency($debt['paid_by_currency'] ?? []),
             'exonere' => $this->formatAmountsByCurrency($debt['exonerated_by_currency'] ?? []),
             'restant' => $this->formatAmountsByCurrency($debt['remaining_by_currency'] ?? []),
+            'solvabilite' => $debt['solvency_status'] ?? 'Seuil à configurer',
         ];
         return array_map(static fn (string $column): string => $values[$column], $columns);
     }

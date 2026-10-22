@@ -556,7 +556,7 @@ require __DIR__ . '/../partials/app_header.php';
             $workspaceProfile = match ($role ?? '') {
                 'ecole_admin' => ['title' => 'Pilotage de l’établissement', 'eyebrow' => 'ADMINISTRATION'],
                 'promoteur_école' => ['title' => 'Vue d’ensemble de l’établissement', 'eyebrow' => 'PROMOTEUR'],
-                'DE_école' => ['title' => 'Suivi de la direction des études', 'eyebrow' => 'DIRECTION DES ÉTUDES'],
+                'DE_école' => ['title' => 'Pilotage des études', 'eyebrow' => 'DIRECTION DES ÉTUDES', 'description' => 'Suivez les présences des enseignants et pilotez les activités pédagogiques.'],
                 'DD_école' => ['title' => 'Suivi des départements', 'eyebrow' => 'DIRECTION DÉPARTEMENTALE'],
                 'DA_école' => ['title' => 'Suivi de l’établissement', 'eyebrow' => 'DIRECTION ADJOINTE'],
                 'sec_école' => ['title' => 'Espace secrétariat', 'eyebrow' => 'SECRÉTARIAT'],
@@ -568,7 +568,8 @@ require __DIR__ . '/../partials/app_header.php';
             };
             $preferredPaths = match ($role ?? '') {
                 'ecole_admin' => ['/ecoles', '/agents', '/inscriptions', '/eleves', '/paiements', '/rapports', '/paiements/gestionAutorisations'],
-                'promoteur_école', 'DE_école', 'DD_école', 'DA_école' => ['/inscriptions', '/utilisateurs', '/classes', '/eleves', '/derogations', '/notes', '/bulletins', '/rapports'],
+                'DE_école' => ['/presences', '/evaluations', '/notes', '/bulletins', '/horaires', '/classes', '/eleves', '/inscriptions'],
+                'promoteur_école', 'DD_école', 'DA_école' => ['/inscriptions', '/utilisateurs', '/classes', '/eleves', '/derogations', '/notes', '/bulletins', '/rapports'],
                 'sec_école' => ['/inscriptions', '/parents', '/eleves', '/communiques', '/presences', '/rapports'],
                 'enseignant_école' => ['/presences', '/notes', '/eleves'],
                 'eleve_ecole' => ['/mes-notes', '/mon-emploi', '/mes-presences', '/mes-paiements'],
@@ -586,6 +587,10 @@ require __DIR__ . '/../partials/app_header.php';
                     $workspaceActions[$path] = $moduleByPath[$path];
                 }
             }
+            if (($role ?? '') === 'DE_école' && isset($workspaceActions['/presences'])) {
+              $workspaceActions['/presences']['name'] = 'Présence des enseignants';
+              $workspaceActions = ['/presences' => $workspaceActions['/presences']] + $workspaceActions;
+            }
             $workspaceActions = array_slice(array_values($workspaceActions), 0, 8);
             $primaryAction = count($workspaceActions) > 1 ? $workspaceActions[0] : null;
             $secondaryActions = $primaryAction ? array_slice($workspaceActions, 1) : $workspaceActions;
@@ -597,6 +602,9 @@ require __DIR__ . '/../partials/app_header.php';
                   <span class="badge rounded-pill text-bg-light mb-3"><?= htmlspecialchars($workspaceProfile['eyebrow']) ?></span>
                   <h2 class="h3 fw-bold mb-2"><?= htmlspecialchars($workspaceProfile['title']) ?></h2>
                   <p class="mb-0"><?= htmlspecialchars($user['nom_complet'] ?? ($roleLabel ?? 'Votre espace')) ?></p>
+                  <?php if (!empty($workspaceProfile['description'])): ?>
+                    <p class="small mb-0 mt-2"><?= htmlspecialchars($workspaceProfile['description']) ?></p>
+                  <?php endif; ?>
                 </div>
                 <?php if ($primaryAction): ?>
                   <a href="<?= BASE_URL . $primaryAction['path'] ?>" class="btn btn-light fw-semibold px-4 py-2 flex-shrink-0">

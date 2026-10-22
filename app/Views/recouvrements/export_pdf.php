@@ -6,7 +6,8 @@ $formatAmount = static fn ($amount) => number_format((float) $amount, 2, ',', ' 
 $headers = [
     'classe' => 'Classe', 'eleve' => 'Élève', 'matricule' => 'Matricule',
   'frais' => 'Frais', 'initial' => 'Montant initial',
-    'paye' => 'Montant déjà payé', 'exonere' => 'Montant exonéré', 'restant' => 'Dette restante',
+    'paye' => 'Total déjà payé par élève', 'exonere' => 'Montant exonéré', 'restant' => 'Dette restante',
+    'solvabilite' => 'Solvabilité',
 ];
 ?>
 <!doctype html>
@@ -15,7 +16,7 @@ $headers = [
   <meta charset="utf-8">
   <title><?= htmlspecialchars($title ?? 'Recouvrements') ?></title>
   <style>
-    @page { size: A4 portrait; margin: 12px; }
+    @page { size: A4 landscape; margin: 12px; }
     body { font-family: DejaVu Sans, sans-serif; font-size: 8px; color: #20252b; }
     h1 { font-size: 18px; margin: 0 0 12px; }
     table { border-collapse: collapse; table-layout: fixed; width: 100%; }
@@ -51,6 +52,7 @@ $headers = [
               'paye' => $formatAmounts($debt['paid_by_currency'] ?? []),
               'exonere' => $formatAmounts($debt['exonerated_by_currency'] ?? []),
               'restant' => $formatAmounts($debt['remaining_by_currency'] ?? []),
+              'solvabilite' => $debt['solvency_status'] ?? 'Seuil à configurer',
           ];
           $studentClass = $values['classe'];
         ?>

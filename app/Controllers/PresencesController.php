@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Core\Auth;
 use App\Core\Controller;
+use App\Models\PresenceAgent;
 use App\Models\PresenceEleve;
 use App\Models\User;
 
@@ -21,6 +22,7 @@ class PresencesController extends Controller
         $isTeacher = $role === 'enseignant_école';
         $teacherAgentId = $isTeacher ? (int) ($user['reference_id'] ?? 0) : null;
         $sectionScopeId = $this->getSectionScopeForUser($user);
+        $attendanceMode = (string) ($_GET['mode'] ?? $_POST['mode'] ?? ($role === 'DE_école' ? 'enseignants' : 'eleves'));
         $classes = ($role === 'super_admin' || $schoolId > 0)
             ? PresenceEleve::getAvailableClasses($role === 'super_admin' ? null : $schoolId, $teacherAgentId, $sectionScopeId)
             : [];
@@ -28,6 +30,61 @@ class PresencesController extends Controller
         if ($csrfToken === '') {
             $csrfToken = bin2hex(random_bytes(32));
             $_SESSION['attendance_csrf_token'] = $csrfToken;
+        }
+
+        if ($attendanceMode === 'enseignants') {
+            if (!in_array($role, ['ecole_admin', 'DE_école'], true)) {
+                $this->redirect('/error/accessDenied');
+            }
+
+            $date = (string) ($_POST['date_jour'] ?? $_GET['date'] ?? date('Y-m-d'));
+            $parsedDate = \DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+            if (!$parsedDate || $parsedDate->format('Y-m-d') !== $date || $parsedDate > new \DateTimeImmutable('today')) {
+                $date = date('Y-m-d');
+            }
+
+            if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+                $postedToken = (string) ($_POST['csrf_token'] ?? '');
+                if ($postedToken === '' || !hash_equals($csrfToken, $postedToken)) {
+                    $_SESSION['presence_error'] = 'Votre session a expiré. Rechargez la page puis réessayez.';
+                    $this->redirect('/presences?mode=enseignants');
+                }
+
+                try {
+                    $savedCount = PresenceAgent::saveForDate(
+                        $schoolId,
+                        $sectionScopeId,
+                        $date,
+                        (array) ($_POST['attendance'] ?? []),
+                        (array) ($_POST['justification'] ?? [])
+                    );
+                    $_SESSION['presence_success'] = $savedCount . ' présence(s) enseignante(s) enregistrée(s).';
+                } catch (\Throwable $exception) {
+                    error_log('PresencesController teacher attendance save failed: ' . $exception->getMessage());
+                    $_SESSION['presence_error'] = 'Impossible d’enregistrer les présences des enseignants.';
+                }
+                $_SESSION['attendance_csrf_token'] = bin2hex(random_bytes(32));
+                $this->redirect('/presences?mode=enseignants&date=' . rawurlencode($date));
+            }
+
+            $teachers = PresenceAgent::getTeachersForDate($schoolId, $sectionScopeId, $date);
+            $success = (string) ($_SESSION['presence_success'] ?? '');
+            $error = (string) ($_SESSION['presence_error'] ?? '');
+            unset($_SESSION['presence_success'], $_SESSION['presence_error']);
+
+            $this->view('presences/teachers', [
+                'title' => APP_NAME . ' - Présences des enseignants',
+                'user' => $user,
+                'role' => $role,
+                'roleLabel' => User::getRoleLabel($role),
+                'modules' => $modules,
+                'date' => $date,
+                'teachers' => $teachers,
+                'csrfToken' => $csrfToken,
+                'success' => $success,
+                'error' => $error,
+            ]);
+            return;
         }
 
         $selectedClassId = (int) ($_POST['class_id'] ?? $_GET['class_id'] ?? 0);

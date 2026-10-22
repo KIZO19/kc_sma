@@ -18,7 +18,7 @@ $formatAmount = static fn ($amount) => number_format((float) $amount, 2, ',', ' 
 $exportColumns = [
   'classe' => 'Classe', 'eleve' => 'Élève', 'matricule' => 'Matricule',
   'frais' => 'Frais', 'initial' => 'Montant initial', 'exonere' => 'Montant exonéré',
-  'paye' => 'Montant déjà payé', 'restant' => 'Dette restante',
+  'paye' => 'Total déjà payé', 'restant' => 'Dette restante', 'solvabilite' => 'Solvabilité',
 ];
 $exportQuery = static function (string $format, array $columns) use ($filters): string {
    $query = array_filter([
@@ -117,6 +117,50 @@ $exportQuery = static function (string $format, array $columns) use ($filters): 
       </div>
     </div>
 
+    <?php if (!empty($solvencyRankings)): ?>
+      <section class="card card-outline card-info mb-3" aria-labelledby="solvencyRankingTitle">
+        <div class="card-header">
+          <h2 id="solvencyRankingTitle" class="h5 mb-1">Classement selon les montants déjà payés</h2>
+          <p class="small text-muted mb-0">Classement par devise et selon les filtres actifs. Les élèves n’ayant pas de frais dans une devise sont exclus de son classement.</p>
+        </div>
+        <div class="card-body">
+          <?php foreach ($solvencyRankings as $ranking): ?>
+            <div class="mb-4">
+              <h3 class="h6 fw-bold">Seuil <?= htmlspecialchars($ranking['currency'], ENT_QUOTES, 'UTF-8') ?> : <?= $formatAmount($ranking['threshold']) ?> <?= htmlspecialchars($ranking['currency'], ENT_QUOTES, 'UTF-8') ?></h3>
+              <div class="row g-3">
+                <div class="col-12 col-xl-6">
+                  <h4 class="h6 text-success">Les plus solvables</h4>
+                  <?php if (empty($ranking['solvent'])): ?>
+                    <p class="small text-muted mb-0">Aucun élève n’a atteint ce seuil.</p>
+                  <?php else: ?>
+                    <div class="table-responsive"><table class="table table-sm align-middle mb-0">
+                      <thead><tr><th>Élève</th><th>Classe</th><th class="text-end">Total payé</th></tr></thead>
+                      <tbody><?php foreach ($ranking['solvent'] as $student): ?>
+                        <tr><td><?= htmlspecialchars($student['name'], ENT_QUOTES, 'UTF-8') ?></td><td><?= htmlspecialchars($student['class'], ENT_QUOTES, 'UTF-8') ?></td><td class="text-end text-success fw-semibold"><?= $formatAmount($student['paid']) ?> <?= htmlspecialchars($ranking['currency'], ENT_QUOTES, 'UTF-8') ?></td></tr>
+                      <?php endforeach; ?></tbody>
+                    </table></div>
+                  <?php endif; ?>
+                </div>
+                <div class="col-12 col-xl-6">
+                  <h4 class="h6 text-danger">Les plus insolvables</h4>
+                  <?php if (empty($ranking['insolvent'])): ?>
+                    <p class="small text-muted mb-0">Aucun élève n’est sous ce seuil.</p>
+                  <?php else: ?>
+                    <div class="table-responsive"><table class="table table-sm align-middle mb-0">
+                      <thead><tr><th>Élève</th><th>Classe</th><th class="text-end">Total payé</th></tr></thead>
+                      <tbody><?php foreach ($ranking['insolvent'] as $student): ?>
+                        <tr><td><?= htmlspecialchars($student['name'], ENT_QUOTES, 'UTF-8') ?></td><td><?= htmlspecialchars($student['class'], ENT_QUOTES, 'UTF-8') ?></td><td class="text-end text-danger fw-semibold"><?= $formatAmount($student['paid']) ?> <?= htmlspecialchars($ranking['currency'], ENT_QUOTES, 'UTF-8') ?></td></tr>
+                      <?php endforeach; ?></tbody>
+                    </table></div>
+                  <?php endif; ?>
+                </div>
+              </div>
+            </div>
+          <?php endforeach; ?>
+        </div>
+      </section>
+    <?php endif; ?>
+
     <?php if (!empty($_SESSION['recouvrements_success'])): ?>
       <div class="alert alert-success"><?= htmlspecialchars($_SESSION['recouvrements_success']) ?></div>
       <?php unset($_SESSION['recouvrements_success']); ?>
@@ -128,9 +172,9 @@ $exportQuery = static function (string $format, array $columns) use ($filters): 
 
     <?php if (!empty($currencies) && in_array(($role ?? ''), ['ecole_admin', 'comptable_école'], true)): ?>
       <div class="card card-outline card-secondary mb-3">
-        <div class="card-header"><h3 class="card-title mb-0">Seuil d’orientation du recouvrement</h3></div>
+        <div class="card-header"><h3 class="card-title mb-0">Seuil de paiement par devise</h3></div>
         <div class="card-body">
-          <p class="small text-muted mb-3">Le seuil s’applique par élève et par devise. Le dépassement propose une orientation ; seule une autorité scolaire décide du renvoi.</p>
+          <p class="small text-muted mb-3">Le seuil s’applique par élève et par devise : un total payé inférieur est marqué « Insolvable ». L’orientation de recouvrement reste indicative ; seule une autorité scolaire décide du renvoi.</p>
           <form method="post" action="<?= BASE_URL ?>/recouvrements/saveThresholds" class="row g-3 align-items-end">
             <?php foreach ($currencies as $currency): ?>
               <div class="col-6 col-md-3 col-xl-2">
@@ -207,6 +251,7 @@ $exportQuery = static function (string $format, array $columns) use ($filters): 
                   <th class="text-end">Exonéré</th>
                   <th class="text-end">Reste à payer</th>
                   <th class="text-center grid-sortable" data-sort-key="status">Statut <i class="bi bi-arrow-down-up small"></i></th>
+                  <th class="text-center">Solvabilité</th>
                   <th class="text-center">Orientation</th>
                   <th class="text-end">Actions</th>
                 </tr>
@@ -251,6 +296,7 @@ $exportQuery = static function (string $format, array $columns) use ($filters): 
                       <?php elseif ($status === 'partiel'): ?><span class="badge rounded-pill text-bg-warning rec-status">Partiel</span>
                       <?php else: ?><span class="badge rounded-pill text-bg-danger rec-status">Impayé</span><?php endif; ?>
                     </td>
+                    <td class="text-center"><span class="badge rounded-pill text-bg-<?= htmlspecialchars($debt['solvency_level'] ?? 'secondary') ?>"><?= htmlspecialchars($debt['solvency_status'] ?? 'Seuil à configurer') ?></span></td>
                     <td class="text-center">
                       <span class="badge rounded-pill text-bg-<?= htmlspecialchars($debt['collection_level'] ?? 'secondary') ?>" title="<?= htmlspecialchars($debt['collection_reason'] ?? '') ?>"><?= htmlspecialchars($debt['collection_status'] ?? 'Seuil à configurer') ?></span>
                       <?php if (!empty($debt['derogation'])): ?><a class="d-block small mt-1" href="<?= BASE_URL ?>/derogations">Voir la dérogation</a><?php endif; ?>
@@ -263,7 +309,7 @@ $exportQuery = static function (string $format, array $columns) use ($filters): 
                     </td>
                   </tr>
                   <tr id="<?= $detailsId ?>" class="rec-fee-detail" hidden>
-                    <td colspan="11">
+                    <td colspan="12">
                       <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
                         <div><strong>Détail des frais</strong><span class="text-muted small ms-2"><?= htmlspecialchars($name) ?></span></div>
                         <details class="text-start">

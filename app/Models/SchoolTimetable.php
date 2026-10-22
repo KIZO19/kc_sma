@@ -242,6 +242,8 @@ class SchoolTimetable
         self::ensureTables();
         $sql =
             'SELECT ac.id, ac.classe_id, ac.cours_id, ac.agent_id, ac.volume_horaire_hebdo,
+                    (SELECT COUNT(*) FROM horaires_cours h
+                     WHERE h.attribution_cours_id = ac.id) AS planned_hours,
                     c.nom_classe, o.nom_option, co.nom_cours, a.nom, a.postnom, a.prenom, r.titre_role,
                     ti.indice, pc.id AS programme_id
              FROM attribution_cours ac
@@ -1163,7 +1165,7 @@ class SchoolTimetable
     {
         self::ensureTables();
         $stmt = Database::getConnection()->prepare(
-            'SELECT h.id, h.jour_id, h.periode, c.section_id, co.nom_cours, c.nom_classe, o.nom_option,
+            'SELECT h.id, h.attribution_cours_id, h.jour_id, h.periode, c.section_id, co.nom_cours, c.nom_classe, o.nom_option,
                     ti.indice, a.nom, a.postnom, a.prenom
              FROM horaires_cours h
              INNER JOIN attribution_cours ac ON ac.id = h.attribution_cours_id
@@ -1190,7 +1192,8 @@ class SchoolTimetable
             'SELECT h.id, h.attribution_cours_id, h.agent_id, h.jour_id, h.periode, c.id AS classe_id,
                     c.section_id, c.nom_classe, o.nom_option, co.nom_cours,
                     a.nom, a.postnom, a.prenom, ti.indice,
-                    CASE WHEN pcc.classe_id IS NOT NULL THEN pc.id ELSE NULL END AS programme_id
+                    CASE WHEN pc.nature_cours = \'commun\' AND pcc.classe_id IS NOT NULL
+                         THEN pc.id ELSE NULL END AS programme_id
              FROM horaires_cours h
              INNER JOIN attribution_cours ac ON ac.id = h.attribution_cours_id
              INNER JOIN classes c ON c.id = h.classe_id AND c.ecole_id = h.ecole_id
@@ -1503,6 +1506,7 @@ class SchoolTimetable
         $alreadyScheduled = count($existingByClass) === count($targetAssignments);
         if (
             !$alreadyScheduled
+            && empty($existingByClass)
             && (int) $scheduledCount->fetchColumn() >= (int) $assignment['volume_horaire_hebdo']
         ) {
             throw new \InvalidArgumentException('Le volume horaire hebdomadaire de cette affectation est déjà entièrement planifié.');
@@ -1512,7 +1516,8 @@ class SchoolTimetable
         $candidateStart = (int) $candidateSchedule['hours'][$period]['start'];
         $candidateEnd = (int) $candidateSchedule['hours'][$period]['end'];
         $teacherConflict = $db->prepare(
-            'SELECT h.attribution_cours_id, h.periode, c.section_id, pc.id AS programme_id
+            'SELECT h.attribution_cours_id, h.periode, c.section_id,
+                    CASE WHEN pcc.classe_id IS NOT NULL THEN pc.id ELSE NULL END AS programme_id
              FROM horaires_cours h
              INNER JOIN classes c ON c.id = h.classe_id
              LEFT JOIN attribution_cours ac ON ac.id = h.attribution_cours_id
@@ -1584,11 +1589,22 @@ class SchoolTimetable
     public static function deleteSlot(int $schoolId, int $yearId, int $sectionId, int $slotId): bool
     {
         self::ensureTables();
-        $stmt = Database::getConnection()->prepare(
-            'DELETE h FROM horaires_cours h
-             INNER JOIN classes c ON c.id = h.classe_id
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            'SELECT h.jour_id, h.periode,
+                    CASE WHEN pcc.classe_id IS NOT NULL THEN pc.id ELSE NULL END AS programme_id,
+                    pc.nature_cours
+             FROM horaires_cours h
+             INNER JOIN classes c ON c.id = h.classe_id AND c.ecole_id = h.ecole_id
+             LEFT JOIN attribution_cours ac ON ac.id = h.attribution_cours_id
+             LEFT JOIN programmes_cours pc
+               ON pc.ecole_id = ac.ecole_id AND pc.annee_scolaire_id = ac.annee_scolaire_id
+              AND pc.section_id = c.section_id AND pc.cours_id = ac.cours_id
+             LEFT JOIN programmes_cours_classes pcc
+               ON pcc.programme_id = pc.id AND pcc.classe_id = c.id
              WHERE h.id = :id AND h.ecole_id = :ecole_id
-               AND h.annee_scolaire_id = :annee_scolaire_id AND c.section_id = :section_id'
+               AND h.annee_scolaire_id = :annee_scolaire_id AND c.section_id = :section_id
+             LIMIT 1'
         );
         $stmt->execute([
             ':id' => $slotId,
@@ -1596,8 +1612,41 @@ class SchoolTimetable
             ':annee_scolaire_id' => $yearId,
             ':section_id' => $sectionId,
         ]);
+        $slot = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$slot) {
+            return false;
+        }
+        if ($slot['nature_cours'] === 'commun' && !empty($slot['programme_id'])) {
+            $delete = $db->prepare(
+                'DELETE h FROM horaires_cours h
+                 INNER JOIN programmes_cours_classes pcc
+                   ON pcc.programme_id = :programme_id AND pcc.classe_id = h.classe_id
+                 INNER JOIN attribution_cours ac ON ac.id = h.attribution_cours_id
+                 WHERE h.ecole_id = :ecole_id AND h.annee_scolaire_id = :annee_scolaire_id
+                   AND h.jour_id = :jour_id AND h.periode = :periode
+                   AND ac.cours_id = (SELECT cours_id FROM programmes_cours WHERE id = :program_id)'
+            );
+            $delete->execute([
+                ':programme_id' => (int) $slot['programme_id'],
+                ':ecole_id' => $schoolId,
+                ':annee_scolaire_id' => $yearId,
+                ':jour_id' => (int) $slot['jour_id'],
+                ':periode' => (int) $slot['periode'],
+                ':program_id' => (int) $slot['programme_id'],
+            ]);
+        } else {
+            $delete = $db->prepare(
+                'DELETE FROM horaires_cours
+                 WHERE id = :id AND ecole_id = :ecole_id AND annee_scolaire_id = :annee_scolaire_id'
+            );
+            $delete->execute([
+                ':id' => $slotId,
+                ':ecole_id' => $schoolId,
+                ':annee_scolaire_id' => $yearId,
+            ]);
+        }
 
-        return $stmt->rowCount() > 0;
+        return $delete->rowCount() > 0;
     }
 
     public static function getTeacherWorkloads(int $schoolId, int $yearId, int $sectionId): array

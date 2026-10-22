@@ -7,6 +7,7 @@ use App\Core\Controller;
 use App\Core\Database;
 use App\Models\AdministrationAutorisation;
 use App\Models\Ecole;
+use App\Models\PresenceAgent;
 use App\Models\User;
 use PDO;
 
@@ -374,6 +375,9 @@ class DashboardController extends Controller
         $sectionScopeId = in_array($role, ['préfet_école', 'DE_école', 'DD_école'], true)
             ? $this->getSectionScopeForUser($user)
             : null;
+        $teacherAttendance = $role === 'DE_école'
+            ? PresenceAgent::getSummary($schoolId, $sectionScopeId, date('Y-m-d'))
+            : [];
         $studentCount = $this->countSchoolStudents($schoolId, $sectionScopeId);
         $teacherCount = $this->countSchoolUsers($schoolId, ['enseignant_école'], $sectionScopeId);
         $parentCount = $this->countSchoolUsers($schoolId, ['parent_ecole']);
@@ -389,7 +393,13 @@ class DashboardController extends Controller
                 ['title' => 'Classes', 'value' => $classCount, 'icon' => 'bi-diagram-3', 'bg' => 'bg-info', 'hint' => 'Organisées'],
                 ['title' => 'Paiements 30j', 'value' => $this->formatCurrencyCompact($payments30d), 'icon' => 'bi-wallet2', 'bg' => 'bg-success', 'hint' => 'Reçus récemment'],
             ],
-            'promoteur_école', 'DE_école', 'DD_école', 'DA_école' => [
+            'DE_école' => [
+                ['title' => 'Enseignants concernés', 'value' => $teacherAttendance['total'], 'icon' => 'bi-person-workspace', 'bg' => 'bg-primary', 'hint' => 'Cours attribués dans votre périmètre'],
+                ['title' => 'Présents aujourd’hui', 'value' => $teacherAttendance['present'], 'icon' => 'bi-person-check', 'bg' => 'bg-success', 'hint' => 'Pointages enregistrés'],
+                ['title' => 'Absents aujourd’hui', 'value' => $teacherAttendance['absent'], 'icon' => 'bi-person-x', 'bg' => 'bg-danger', 'hint' => 'Absences déclarées'],
+                ['title' => 'À pointer', 'value' => $teacherAttendance['pending'], 'icon' => 'bi-clock-history', 'bg' => 'bg-warning', 'hint' => $teacherAttendance['weekly_off'] > 0 ? $teacherAttendance['weekly_off'] . ' en journée hebdomadaire' : 'Présences non encore saisies'],
+            ],
+            'promoteur_école', 'DD_école', 'DA_école' => [
                 ['title' => 'Élèves inscrits', 'value' => $studentCount, 'icon' => 'bi-people-fill', 'bg' => 'bg-primary', 'hint' => $sectionScopeId !== null ? 'Effectif du secondaire' : 'Effectif de l’école'],
                 ['title' => 'Classes', 'value' => $classCount, 'icon' => 'bi-diagram-3', 'bg' => 'bg-info', 'hint' => $sectionScopeId !== null ? 'Classes du secondaire' : 'Organisation scolaire'],
                 ['title' => 'Enseignants', 'value' => $teacherCount, 'icon' => 'bi-person-workspace', 'bg' => 'bg-success', 'hint' => $sectionScopeId !== null ? 'Enseignants du secondaire' : 'Comptes enseignants'],
@@ -665,7 +675,14 @@ class DashboardController extends Controller
 
         try {
             $db = Database::getConnection();
-            $inClause = implode(',', array_fill(0, count($roles), '?'));
+            $rolePlaceholders = [];
+            $params = [':ecole' => $schoolId];
+            foreach ($roles as $index => $role) {
+                $placeholder = ':role_' . $index;
+                $rolePlaceholders[] = $placeholder;
+                $params[$placeholder] = $role;
+            }
+            $inClause = implode(',', $rolePlaceholders);
             $sql = 'SELECT COUNT(*) AS total FROM utilisateurs WHERE ecole_id = :ecole AND role IN (' . $inClause . ')';
             if ($sectionId !== null && in_array('enseignant_école', $roles, true)) {
                 $sql .= ' AND EXISTS (
@@ -674,17 +691,11 @@ class DashboardController extends Controller
                     WHERE ac.agent_id = utilisateurs.reference_id
                       AND c.ecole_id = :section_school AND c.section_id = :section_id
                 )';
+                $params[':section_school'] = $schoolId;
+                $params[':section_id'] = $sectionId;
             }
             $stmt = $db->prepare($sql);
-            $stmt->bindValue(':ecole', $schoolId, PDO::PARAM_INT);
-            if ($sectionId !== null && in_array('enseignant_école', $roles, true)) {
-                $stmt->bindValue(':section_school', $schoolId, PDO::PARAM_INT);
-                $stmt->bindValue(':section_id', $sectionId, PDO::PARAM_INT);
-            }
-            foreach ($roles as $index => $role) {
-                $stmt->bindValue($index + 1, $role, PDO::PARAM_STR);
-            }
-            $stmt->execute();
+            $stmt->execute($params);
             return (int) ($stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
         } catch (\Throwable $e) {
             return 0;

@@ -158,9 +158,14 @@ foreach (($classes ?? []) as $class) {
       <div class="card card-outline card-secondary">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
           <h2 class="card-title">Planning hebdomadaire</h2>
+          <div class="d-flex flex-wrap gap-2 align-items-center">
+          <a class="btn btn-sm btn-outline-danger" href="<?= BASE_URL ?>/horaires/export-pdf">
+            <i class="bi bi-file-earmark-pdf me-1"></i>Exporter l’horaire global en PDF
+          </a>
           <form method="get" action="<?= BASE_URL ?>/horaires" class="d-flex gap-2 align-items-center">
             <label for="timetableClass" class="form-label mb-0">Classe</label>
             <select class="form-select form-select-sm" id="timetableClass" name="classe_id" onchange="this.form.submit()">
+              <option value="0" <?= !empty($isGlobalSchedule) ? 'selected' : '' ?>>Toutes les classes</option>
               <?php foreach (($classes ?? []) as $class): ?>
                 <option value="<?= (int) $class['id'] ?>" <?= (int) $classId === (int) $class['id'] ? 'selected' : '' ?>>
                   <?= htmlspecialchars((string) $class['nom_classe'], ENT_QUOTES, 'UTF-8') ?><?= !empty($class['nom_option']) ? ' · ' . htmlspecialchars((string) $class['nom_option'], ENT_QUOTES, 'UTF-8') : '' ?>
@@ -168,13 +173,77 @@ foreach (($classes ?? []) as $class) {
               <?php endforeach; ?>
             </select>
           </form>
+          </div>
         </div>
         <div class="card-body p-0">
-          <?php if (!$selectedClass): ?>
+          <?php if (empty($classes)): ?>
+            <div class="p-4 text-muted">Aucune classe n’est disponible dans votre section.</div>
+          <?php elseif (!empty($isGlobalSchedule)): ?>
+            <div class="alert alert-info rounded-0 mb-0">
+              Vue globale en lecture seule : les classes sont en colonnes et les jours/heures en lignes. Les créneaux en rouge signalent un conflit d’enseignant. Pour modifier le planning, sélectionnez une classe.
+            </div>
+            <div class="table-responsive">
+              <table class="table table-bordered table-sm align-middle text-center mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th>Jour</th>
+                    <th>Heure</th>
+                    <?php foreach (($classes ?? []) as $class): ?>
+                      <th style="min-width: 120px">
+                        <?= htmlspecialchars((string) $class['nom_classe'], ENT_QUOTES, 'UTF-8') ?>
+                        <?= !empty($class['nom_option']) ? '<br>' . htmlspecialchars((string) $class['nom_option'], ENT_QUOTES, 'UTF-8') : '' ?>
+                      </th>
+                    <?php endforeach; ?>
+                  </tr>
+                </thead>
+                <tbody>
+                  <?php foreach ($dayNames as $dayId => $day): ?>
+                    <?php foreach (($dailySchedule['timeline'] ?? []) as $timelineItem): ?>
+                      <?php if ($timelineItem['type'] === 'recess'): ?>
+                        <tr class="table-warning">
+                          <th><?= htmlspecialchars($day, ENT_QUOTES, 'UTF-8') ?></th>
+                          <th><?= $formatTime((int) $timelineItem['start']) ?>–<?= $formatTime((int) $timelineItem['end']) ?></th>
+                          <td colspan="<?= max(1, count($classes)) ?>">Récréation</td>
+                        </tr>
+                        <?php continue; ?>
+                      <?php endif; ?>
+                      <?php $period = (int) $timelineItem['hour']; ?>
+                      <tr>
+                        <th><?= htmlspecialchars($day, ENT_QUOTES, 'UTF-8') ?></th>
+                        <th class="text-nowrap">
+                          <?= $period ?><br><small class="text-muted"><?= $formatTime((int) $timelineItem['start']) ?>–<?= $formatTime((int) $timelineItem['end']) ?></small>
+                        </th>
+                        <?php foreach (($classes ?? []) as $class): ?>
+                          <?php $slot = $schedule[$dayId][$period] ?? []; $slotForClass = null; ?>
+                          <?php foreach ($slot as $candidate) { if ((int) $candidate['classe_id'] === (int) $class['id']) { $slotForClass = $candidate; break; } } ?>
+                          <td class="text-start" style="min-width: 120px">
+                            <?php if ($slotForClass): ?>
+                              <div class="fw-semibold"><?= htmlspecialchars((string) $slotForClass['nom_cours'], ENT_QUOTES, 'UTF-8') ?></div>
+                              <span class="badge text-bg-primary">I<?= (int) $slotForClass['indice'] ?></span>
+                              <?php if (!empty($slotForClass['teacher_conflict'])): ?>
+                                <span class="badge text-bg-danger">Conflit</span>
+                              <?php endif; ?>
+                            <?php else: ?>
+                              <span class="text-muted">—</span>
+                            <?php endif; ?>
+                          </td>
+                        <?php endforeach; ?>
+                      </tr>
+                    <?php endforeach; ?>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
+            </div>
+          <?php elseif (!$selectedClass): ?>
             <div class="p-4 text-muted">Aucune classe n’est disponible dans votre section.</div>
           <?php elseif (!$classAssignments): ?>
             <div class="p-4 text-muted">Aucun cours n’est affecté à cette classe. Créez d’abord ses affectations ci-dessus.</div>
           <?php else: ?>
+            <?php if (!$plannableAssignments): ?>
+              <div class="alert alert-success rounded-0 mb-0">
+                Toutes les heures hebdomadaires sont planifiées. Les créneaux existants restent affichés et peuvent être retirés.
+              </div>
+            <?php endif; ?>
             <div class="table-responsive">
               <table class="table table-bordered table-sm align-middle text-center mb-0">
                 <thead class="table-light">
@@ -210,14 +279,20 @@ foreach (($classes ?? []) as $class) {
                               <input type="hidden" name="jour_id" value="<?= (int) $dayId ?>">
                               <input type="hidden" name="periode" value="<?= $period ?>">
                               <select class="form-select form-select-sm" name="attribution_id" aria-label="Cours et enseignant pour <?= htmlspecialchars($day . ' heure ' . $period, ENT_QUOTES, 'UTF-8') ?>" required>
-                                <option value="">Cours · indice</option>
-                                <?php foreach ($classAssignments as $assignment): ?>
-                                  <option value="<?= (int) $assignment['id'] ?>">
-                                    <?= htmlspecialchars((string) $assignment['nom_cours'], ENT_QUOTES, 'UTF-8') ?> · I<?= (int) $assignment['indice'] ?>
-                                  </option>
+                                <option value="">
+                                  <?= $plannableAssignments ? 'Cours · indice · heures restantes' : 'Aucune heure restante à planifier' ?>
+                                </option>
+                                <?php foreach ($plannableAssignments as $assignment): ?>
+                                  <option
+                                    value="<?= (int) $assignment['id'] ?>"
+                                    data-assignment-id="<?= (int) $assignment['id'] ?>"
+                                    data-course-name="<?= htmlspecialchars((string) $assignment['nom_cours'], ENT_QUOTES, 'UTF-8') ?>"
+                                    data-teacher-index="<?= (int) $assignment['indice'] ?>"
+                                    data-remaining="<?= max(0, (int) $assignment['volume_horaire_hebdo'] - (int) $assignment['planned_hours']) ?>"
+                                  ><?= htmlspecialchars((string) $assignment['nom_cours'], ENT_QUOTES, 'UTF-8') ?> · I<?= (int) $assignment['indice'] ?> · <?= max(0, (int) $assignment['volume_horaire_hebdo'] - (int) $assignment['planned_hours']) ?> h restantes</option>
                                 <?php endforeach; ?>
                               </select>
-                              <button class="btn btn-sm btn-outline-primary" type="submit">Planifier</button>
+                              <button class="btn btn-sm btn-outline-primary" type="submit" <?= !$plannableAssignments ? 'disabled' : '' ?>>Planifier</button>
                             </form>
                           <?php endif; ?>
                         </td>
@@ -336,6 +411,114 @@ foreach (($classes ?? []) as $class) {
 
     nature.addEventListener('change', syncClassSelection);
     syncClassSelection();
+  })();
+
+  (() => {
+    const updateCsrfTokens = (token) => {
+      if (!token) return;
+      document.querySelectorAll('input[name="csrf_token"]').forEach((input) => {
+        input.value = token;
+      });
+    };
+
+    const updateAssignmentOptions = (assignments) => {
+      const assignmentById = new Map(assignments.map((assignment) => [String(assignment.id), assignment]));
+      document.querySelectorAll('select[name="attribution_id"] option[data-assignment-id]').forEach((option) => {
+        const assignment = assignmentById.get(option.dataset.assignmentId);
+        if (!assignment || assignment.remaining <= 0) {
+          option.remove();
+          return;
+        }
+        option.dataset.remaining = String(assignment.remaining);
+        option.textContent = `${assignment.nom_cours} · I${assignment.indice} · ${assignment.remaining} h restantes`;
+      });
+
+      document.querySelectorAll('select[name="attribution_id"]').forEach((select) => {
+        if (select.options.length <= 1) {
+          select.options[0].textContent = 'Aucune heure restante à planifier';
+          const button = select.form?.querySelector('button[type="submit"]');
+          if (button) button.disabled = true;
+        }
+      });
+    };
+
+    const showScheduledSlot = (cell, slot, deleteAction, csrfToken) => {
+      const course = document.createElement('div');
+      course.className = 'fw-semibold';
+      course.textContent = slot.nom_cours;
+
+      const index = document.createElement('span');
+      index.className = 'badge text-bg-primary';
+      index.textContent = `Indice ${slot.indice}`;
+
+      const form = document.createElement('form');
+      form.method = 'post';
+      form.action = deleteAction;
+      form.className = 'mt-1';
+
+      [
+        ['csrf_token', csrfToken],
+        ['slot_id', slot.id],
+        ['classe_id', slot.classe_id],
+      ].forEach(([name, value]) => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name;
+        input.value = String(value);
+        form.append(input);
+      });
+
+      const button = document.createElement('button');
+      button.className = 'btn btn-sm btn-outline-danger';
+      button.type = 'submit';
+      button.setAttribute('aria-label', 'Supprimer le créneau');
+      button.textContent = 'Retirer';
+      form.append(button);
+      cell.replaceChildren(course, index, form);
+    };
+
+    document.addEventListener('submit', async (event) => {
+      const form = event.target.closest('form[action$="/horaires/save-slot"]');
+      if (!form) return;
+      event.preventDefault();
+
+      const cell = form.closest('.timetable-cell');
+      const button = form.querySelector('button[type="submit"]');
+      const originalButtonText = button.textContent;
+      button.disabled = true;
+      button.textContent = 'Enregistrement…';
+      form.querySelector('.js-schedule-error')?.remove();
+
+      try {
+        const response = await fetch(form.action, {
+          method: 'POST',
+          body: new FormData(form),
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+          },
+          credentials: 'same-origin',
+        });
+        const result = await response.json();
+        updateCsrfTokens(result.csrfToken);
+        if (!response.ok || !result.success) {
+          throw new Error(result.message || 'Impossible d’enregistrer ce créneau.');
+        }
+
+        const deleteUrl = new URL(form.action, window.location.href);
+        deleteUrl.pathname = deleteUrl.pathname.replace(/\/save-slot$/, '/delete-slot');
+        updateAssignmentOptions(result.assignments);
+        showScheduledSlot(cell, result.slot, deleteUrl.toString(), result.csrfToken);
+      } catch (error) {
+        const alert = document.createElement('div');
+        alert.className = 'alert alert-danger py-1 px-2 mt-2 mb-0 js-schedule-error';
+        alert.setAttribute('role', 'alert');
+        alert.textContent = error instanceof Error ? error.message : 'Une erreur est survenue lors de la planification.';
+        form.append(alert);
+        button.disabled = false;
+        button.textContent = originalButtonText;
+      }
+    });
   })();
 </script>
 <?php require __DIR__ . '/../partials/app_footer.php'; ?>
