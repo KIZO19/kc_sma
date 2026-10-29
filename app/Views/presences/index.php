@@ -54,7 +54,7 @@ $recordedCount = count(array_filter($students, static fn (array $student): bool 
             <label for="classId" class="form-label">Classe</label>
             <select class="form-select" id="classId" name="class_id" required <?= $classes === [] ? 'disabled' : '' ?>>
               <?php foreach ($classes as $class): ?>
-                <?php $classLabel = $class['nom_classe'] . (!empty($class['nom_etablissement']) && !$isTeacher && count($classes) > 1 ? ' · ' . $class['nom_etablissement'] : ''); ?>
+                <?php $classLabel = $class['nom_classe'] . (!empty($class['nom_option']) ? ' · ' . $class['nom_option'] : '') . (!empty($class['nom_etablissement']) && !$isTeacher && count($classes) > 1 ? ' · ' . $class['nom_etablissement'] : ''); ?>
                 <option value="<?= (int) $class['id'] ?>" <?= (int) $class['id'] === $selectedClassId ? 'selected' : '' ?>><?= $e($classLabel) ?></option>
               <?php endforeach; ?>
             </select>
@@ -81,7 +81,7 @@ $recordedCount = count(array_filter($students, static fn (array $student): bool 
         <div class="col-6 col-lg-3">
           <div class="attendance-summary p-3 h-100">
             <div class="small text-muted">Classe</div>
-            <div class="fw-semibold text-truncate" title="<?= $e($selectedClass['nom_classe']) ?>"><?= $e($selectedClass['nom_classe']) ?></div>
+            <div class="fw-semibold text-truncate" title="<?= $e($selectedClass['nom_classe'] . (!empty($selectedClass['nom_option']) ? ' · ' . $selectedClass['nom_option'] : '')) ?>"><?= $e($selectedClass['nom_classe']) ?><?= !empty($selectedClass['nom_option']) ? ' · ' . $e($selectedClass['nom_option']) : '' ?></div>
           </div>
         </div>
         <div class="col-6 col-lg-3">
@@ -112,7 +112,7 @@ $recordedCount = count(array_filter($students, static fn (array $student): bool 
           <div class="card-header bg-transparent d-flex flex-wrap justify-content-between align-items-center gap-2">
             <div>
               <h2 class="h5 mb-1">Registre de présence</h2>
-              <span class="small text-muted"><?= $e($selectedClass['nom_classe']) ?> · <?= $e(date('d/m/Y', strtotime($date))) ?></span>
+              <span class="small text-muted"><?= $e($selectedClass['nom_classe']) ?><?= !empty($selectedClass['nom_option']) ? ' · ' . $e($selectedClass['nom_option']) : '' ?> · <?= $e(date('d/m/Y', strtotime($date))) ?></span>
             </div>
             <button class="btn btn-primary" type="submit" <?= $students === [] ? 'disabled' : '' ?>>
               <i class="bi bi-check2-square me-2" aria-hidden="true"></i>Enregistrer les présences

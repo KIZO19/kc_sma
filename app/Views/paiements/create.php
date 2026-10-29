@@ -149,7 +149,7 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
                   <option value="">-- Sélectionner le motif --</option>
                   <?php if (!empty($eleve)): ?>
                     <?php foreach (($fees ?? []) as $f): ?>
-                      <option value="<?= (int) $f['id'] ?>" data-amount="<?= htmlspecialchars($f['montant_total'] ?? '') ?>" data-remaining="<?= htmlspecialchars($f['remaining'] ?? '') ?>" data-devise="<?= htmlspecialchars($f['devise'] ?? 'USD') ?>" <?= ((int) ($oldInput['frais_id'] ?? 0) === (int) $f['id']) ? 'selected' : '' ?>><?= htmlspecialchars($f['type_frais'] . ' - ' . ($f['nom_classe'] ?? '') ) ?> (<?= htmlspecialchars($f['devise'] ?? '') ?>)</option>
+                      <option value="<?= (int) $f['id'] ?>" data-amount="<?= htmlspecialchars($f['montant_total'] ?? '') ?>" data-remaining="<?= htmlspecialchars($f['remaining'] ?? '') ?>" data-devise="<?= htmlspecialchars($f['devise'] ?? 'USD') ?>" <?= ((int) ($oldInput['frais_id'] ?? 0) === (int) $f['id']) ? 'selected' : '' ?>><?= htmlspecialchars($f['type_frais'] . ' - ' . ($f['scope_label'] ?? (($f['nom_classe'] ?? '') . (!empty($f['class_option_name']) ? ' · ' . $f['class_option_name'] : '')))) ?> (<?= htmlspecialchars($f['devise'] ?? '') ?>)</option>
                     <?php endforeach; ?>
                   <?php endif; ?>
                 </select>

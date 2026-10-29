@@ -96,10 +96,11 @@ class TeacherAssignment
 
         $stmt = Database::getConnection()->prepare(
             'SELECT ac.id AS attribution_id, ac.classe_id, ac.cours_id, ac.annee_scolaire_id,
-                    ac.max_evaluation, ac.max_examen, c.nom_classe, co.nom_cours, a.annee
+                    ac.max_evaluation, ac.max_examen, c.nom_classe, o.nom_option, co.nom_cours, a.annee
              FROM attribution_cours ac
              INNER JOIN classes c ON c.id = ac.classe_id AND c.ecole_id = ac.ecole_id
              INNER JOIN cours co ON co.id = ac.cours_id AND co.ecole_id = ac.ecole_id
+             LEFT JOIN options o ON o.id = c.option_id
              INNER JOIN agents ag ON ag.id = ac.agent_id AND ag.ecole_id = ac.ecole_id
              INNER JOIN annees_scolaires a ON a.id = ac.annee_scolaire_id AND a.ecole_id = ac.ecole_id AND a.est_active = 1
              WHERE ac.ecole_id = :ecole_id AND ac.agent_id = :agent_id
@@ -147,12 +148,14 @@ class TeacherAssignment
     public static function findEvaluation(int $evaluationId, int $agentId): ?array
     {
         $stmt = Database::getConnection()->prepare(
-            'SELECT ev.*, ac.classe_id, ac.annee_scolaire_id, p.nom_periode, p.cloturee, c.nom_classe, co.nom_cours
+            'SELECT ev.*, ac.classe_id, ac.annee_scolaire_id, p.nom_periode, p.cloturee,
+                    c.nom_classe, o.nom_option, co.nom_cours
              FROM evaluations ev
              INNER JOIN attribution_cours ac ON ac.id = ev.attribution_cours_id AND ac.agent_id = :agent_id
              INNER JOIN annees_scolaires a ON a.id = ac.annee_scolaire_id AND a.est_active = 1
              INNER JOIN periodes p ON p.id = ev.periode_id AND p.annee_scolaire_id = a.id
              INNER JOIN classes c ON c.id = ac.classe_id
+             LEFT JOIN options o ON o.id = c.option_id
              INNER JOIN cours co ON co.id = ac.cours_id
              WHERE ev.id = :evaluation_id LIMIT 1'
         );

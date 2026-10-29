@@ -98,14 +98,18 @@ unset($_SESSION['payment_notification_status']);
                 $resteParDevise = is_array($reste_a_payer_par_devise ?? null) ? $reste_a_payer_par_devise : [];
                 $montantPaye = isset($ecriture['montant']) ? (float) $ecriture['montant'] : 0.0;
                 $devise = strtoupper(trim($ecriture['transaction_devise'] ?? $ecriture['frais_devise'] ?? 'USD')) ?: 'USD';
-                $qrRouteBase = \App\Core\Auth::getSchoolRouteBaseUrl() ?? BASE_URL;
+                $applicationBasePath = \App\Core\Auth::getApplicationBasePath();
+                $schoolSlug = \App\Core\Auth::getSchoolSlug();
+                $qrRouteBase = rtrim($applicationBasePath, '/')
+                    . ($schoolSlug !== null ? '/' . $schoolSlug : '/public');
                 $requestHost = (string) ($_SERVER['HTTP_HOST'] ?? '');
                 $isValidHost = preg_match('/^(?:[a-zA-Z0-9.-]+|\[[a-fA-F0-9:]+\])(?::\d{1,5})?$/D', $requestHost) === 1;
                 $scheme = !empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off'
                     ? 'https'
                     : 'http';
                 $qrOrigin = $isValidHost ? $scheme . '://' . $requestHost : '';
-                $qrPayload = $qrOrigin . $qrRouteBase . '/paiements/qrSummary?id=' . urlencode((string) ($ecriture['id'] ?? ''));
+                $qrPayload = $qrOrigin . $qrRouteBase . '/paiements/qrSummary?id='
+                    . urlencode((string) ($ecriture['id'] ?? ''));
                 $formatMontant = function (float $amount, ?string $currency = null) use ($devise) {
                     $currency = strtoupper(trim($currency ?? $devise)) ?: $devise;
                     $usdEquivalent = $currency !== 'USD'

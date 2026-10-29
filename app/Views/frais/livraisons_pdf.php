@@ -35,7 +35,7 @@ $formatAmount = static fn ($amount): string => number_format((float) $amount, 2,
         <tr>
           <td><?= htmlspecialchars(\App\Core\PersonName::format($item), ENT_QUOTES, 'UTF-8') ?></td>
           <td><?= htmlspecialchars($item['matricule'] ?? '', ENT_QUOTES, 'UTF-8') ?></td>
-          <td><?= htmlspecialchars($item['nom_classe'] ?? '', ENT_QUOTES, 'UTF-8') ?></td>
+          <td><?= htmlspecialchars(($item['nom_classe'] ?? '') . (!empty($item['nom_option']) ? ' · ' . $item['nom_option'] : ''), ENT_QUOTES, 'UTF-8') ?></td>
           <td><?= htmlspecialchars($item['type_frais'], ENT_QUOTES, 'UTF-8') ?></td>
           <td class="right"><?= $formatAmount($item['montant_initial']) ?> <?= htmlspecialchars($item['devise'], ENT_QUOTES, 'UTF-8') ?></td>
           <td class="status"><?= $isDelivered ? 'Livré' : 'Payé · à remettre' ?></td>

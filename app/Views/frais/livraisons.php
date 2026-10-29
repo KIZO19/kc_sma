@@ -52,7 +52,7 @@ $formatAmount = static fn ($amount): string => number_format((float) $amount, 2,
                   <?php $isDelivered = !empty($item['date_livraison']); $studentName = \App\Core\PersonName::format($item); ?>
                   <tr data-search="<?= htmlspecialchars(mb_strtolower($studentName . ' ' . ($item['matricule'] ?? '') . ' ' . ($item['nom_classe'] ?? '') . ' ' . ($item['type_frais'] ?? ''), 'UTF-8'), ENT_QUOTES, 'UTF-8') ?>">
                     <td class="ps-3"><strong><?= htmlspecialchars($studentName, ENT_QUOTES, 'UTF-8') ?></strong><small class="d-block text-muted"><?= htmlspecialchars($item['matricule'] ?? 'Sans matricule', ENT_QUOTES, 'UTF-8') ?></small></td>
-                    <td><?= htmlspecialchars($item['nom_classe'] ?? 'Classe non définie', ENT_QUOTES, 'UTF-8') ?></td>
+                    <td><?= htmlspecialchars(($item['nom_classe'] ?? 'Classe non définie') . (!empty($item['nom_option']) ? ' · ' . $item['nom_option'] : ''), ENT_QUOTES, 'UTF-8') ?></td>
                     <td><?= htmlspecialchars($item['type_frais'], ENT_QUOTES, 'UTF-8') ?></td>
                     <td class="text-end"><?= $formatAmount($item['montant_initial']) ?> <?= htmlspecialchars($item['devise'], ENT_QUOTES, 'UTF-8') ?></td>
                     <td><span class="badge text-bg-<?= $isDelivered ? 'success' : 'warning' ?>"><?= $isDelivered ? 'Livré' : 'Payé · à remettre' ?></span></td>

@@ -3,11 +3,14 @@
 <?php
 $title = $title ?? APP_NAME;
 $message = $message ?? '';
+$error = $error ?? '';
 $identifiant = $identifiant ?? '';
+$csrfToken = $csrfToken ?? '';
 ?>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
   <title>Mot de passe oublié - <?= htmlspecialchars($title) ?></title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" crossorigin="anonymous">
   <link rel="stylesheet" href="<?= BASE_URL ?>/assets/adminlte.min.css">
@@ -30,9 +33,14 @@ $identifiant = $identifiant ?? '';
       <?php if (!empty($message)): ?>
         <div class="alert alert-info"><?= htmlspecialchars($message) ?></div>
       <?php endif; ?>
+      <?php if (!empty($error)): ?>
+        <div class="alert alert-danger" role="alert"><?= htmlspecialchars($error) ?></div>
+      <?php endif; ?>
       <form action="<?= BASE_URL ?>/forgot-password" method="post">
+        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+        <p class="text-muted">Saisissez le courriel ou le téléphone associé à votre compte. Le lien sera envoyé à l’adresse courriel enregistrée.</p>
         <div class="input-group mb-3">
-          <input type="text" name="identifiant" class="form-control" placeholder="Email ou téléphone" value="<?= htmlspecialchars($identifiant ?? '') ?>" required>
+          <input type="text" name="identifiant" class="form-control" placeholder="Courriel ou téléphone" value="<?= htmlspecialchars($identifiant) ?>" autocomplete="username" maxlength="255" required>
           <div class="input-group-append"><div class="input-group-text"><span class="bi bi-person"></span></div></div>
         </div>
         <div class="row">

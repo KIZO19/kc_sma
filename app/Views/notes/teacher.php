@@ -63,7 +63,7 @@ foreach ($courses as $course) {
               <select class="form-select" id="courseAssignment" name="attribution_id" required>
                 <?php foreach ($courses as $course): ?>
                   <option value="<?= (int) $course['attribution_id'] ?>" <?= (int) $course['attribution_id'] === $assignmentId ? 'selected' : '' ?>>
-                    <?= $e($course['nom_cours'] . ' · ' . $course['nom_classe']) ?>
+                    <?= $e($course['nom_cours'] . ' · ' . $course['nom_classe'] . (!empty($course['nom_option']) ? ' · ' . $course['nom_option'] : '')) ?>
                   </option>
                 <?php endforeach; ?>
               </select>

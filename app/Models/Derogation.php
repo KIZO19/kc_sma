@@ -8,6 +8,140 @@ use PDO;
 class Derogation
 {
     private static bool $requesterMessageColumnReady = false;
+    private static bool $recipientTablesReady = false;
+
+    private const RECIPIENT_ROLES = ['comptable_école', 'préfet_école', 'DE_école', 'DP_école'];
+
+    public static function getRecipientOptions(int $ecoleId): array
+    {
+        if ($ecoleId <= 0) {
+            return [];
+        }
+
+        $rolePlaceholders = [];
+        $params = [':ecole_id' => $ecoleId];
+        foreach (self::RECIPIENT_ROLES as $index => $role) {
+            $key = ':role_' . $index;
+            $rolePlaceholders[] = $key;
+            $params[$key] = $role;
+        }
+        $stmt = Database::getConnection()->prepare(
+            'SELECT id, nom_complet, role FROM utilisateurs '
+            . 'WHERE ecole_id = :ecole_id AND statut = \'Actif\' '
+            . 'AND role IN (' . implode(', ', $rolePlaceholders) . ') '
+            . 'ORDER BY role ASC, nom_complet ASC'
+        );
+        $stmt->execute($params);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function getRecipientUserIds(int $ecoleId): array
+    {
+        if ($ecoleId <= 0) {
+            return [];
+        }
+        self::ensureRecipientTables();
+
+        $db = Database::getConnection();
+        $configured = $db->prepare('SELECT 1 FROM ecole_derogation_recipient_settings WHERE ecole_id = :ecole_id');
+        $configured->execute([':ecole_id' => $ecoleId]);
+        if ($configured->fetchColumn()) {
+            $stmt = $db->prepare(
+                'SELECT r.utilisateur_id FROM ecole_derogation_recipients r '
+                . 'INNER JOIN utilisateurs u ON u.id = r.utilisateur_id AND u.ecole_id = r.ecole_id '
+                . 'WHERE r.ecole_id = :ecole_id AND u.statut = \'Actif\' '
+                . 'ORDER BY r.utilisateur_id ASC'
+            );
+            $stmt->execute([':ecole_id' => $ecoleId]);
+            return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+        }
+
+        $stmt = $db->prepare(
+            'SELECT id FROM utilisateurs WHERE ecole_id = :ecole_id '
+            . 'AND statut = \'Actif\' AND role = \'comptable_école\' ORDER BY id ASC'
+        );
+        $stmt->execute([':ecole_id' => $ecoleId]);
+
+        return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    public static function saveRecipientUserIds(int $ecoleId, array $userIds, int $updatedBy): bool
+    {
+        if ($ecoleId <= 0 || $updatedBy <= 0) {
+            throw new \DomainException('École ou administrateur invalide.');
+        }
+
+        $userIds = array_values(array_unique(array_filter(array_map('intval', $userIds), static fn (int $id): bool => $id > 0)));
+        if ($userIds === []) {
+            throw new \DomainException('Sélectionnez au moins un destinataire pour ne manquer aucune demande.');
+        }
+
+        $optionsById = [];
+        foreach (self::getRecipientOptions($ecoleId) as $option) {
+            $optionsById[(int) $option['id']] = true;
+        }
+        foreach ($userIds as $userId) {
+            if (!isset($optionsById[$userId])) {
+                throw new \DomainException('Un des destinataires sélectionnés n’est pas un compte actif autorisé de cette école.');
+            }
+        }
+
+        self::ensureRecipientTables();
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        try {
+            $setting = $db->prepare(
+                'INSERT INTO ecole_derogation_recipient_settings (ecole_id, updated_by_user_id) '
+                . 'VALUES (:ecole_id, :updated_by) ON DUPLICATE KEY UPDATE '
+                . 'updated_by_user_id = VALUES(updated_by_user_id), updated_at = CURRENT_TIMESTAMP'
+            );
+            $setting->execute([':ecole_id' => $ecoleId, ':updated_by' => $updatedBy]);
+            $delete = $db->prepare('DELETE FROM ecole_derogation_recipients WHERE ecole_id = :ecole_id');
+            $delete->execute([':ecole_id' => $ecoleId]);
+            $insert = $db->prepare(
+                'INSERT INTO ecole_derogation_recipients (ecole_id, utilisateur_id) '
+                . 'VALUES (:ecole_id, :utilisateur_id)'
+            );
+            foreach ($userIds as $userId) {
+                $insert->execute([':ecole_id' => $ecoleId, ':utilisateur_id' => $userId]);
+            }
+            $db->commit();
+
+            return true;
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    private static function ensureRecipientTables(): void
+    {
+        if (self::$recipientTablesReady) {
+            return;
+        }
+
+        $db = Database::getConnection();
+        $db->exec(
+            'CREATE TABLE IF NOT EXISTS ecole_derogation_recipient_settings (
+                ecole_id INT NOT NULL PRIMARY KEY,
+                updated_by_user_id INT NULL,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                KEY idx_derogation_recipient_settings_updated_by (updated_by_user_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+        );
+        $db->exec(
+            'CREATE TABLE IF NOT EXISTS ecole_derogation_recipients (
+                ecole_id INT NOT NULL,
+                utilisateur_id INT NOT NULL,
+                PRIMARY KEY (ecole_id, utilisateur_id),
+                KEY idx_derogation_recipients_user (utilisateur_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+        );
+        self::$recipientTablesReady = true;
+    }
 
     private static function ensureRequesterMessageColumn(): void
     {
@@ -26,7 +160,7 @@ class Derogation
         self::$requesterMessageColumnReady = true;
     }
 
-    public static function create(array $data): bool
+    public static function create(array $data): int
     {
         $db = Database::getConnection();
         $stmt = $db->prepare(
@@ -34,7 +168,7 @@ class Derogation
              VALUES (:ecole_id, :eleve_id, :date_fin, :motif, :statut, :demandeur_id)'
         );
 
-        return (bool) $stmt->execute([
+        $stmt->execute([
             ':ecole_id' => $data['ecole_id'],
             ':eleve_id' => $data['eleve_id'],
             ':date_fin' => $data['date_fin'],
@@ -42,9 +176,11 @@ class Derogation
             ':statut' => 'En_attente',
             ':demandeur_id' => $data['demandeur_id'],
         ]);
+
+        return (int) $db->lastInsertId();
     }
 
-    public static function getAllBySchool(int $ecoleId, ?int $sectionId = null): array
+    public static function getAllBySchool(int $ecoleId, ?int $sectionId = null, ?int $parentId = null): array
     {
         $db = Database::getConnection();
         $sql =
@@ -57,6 +193,10 @@ class Derogation
              LEFT JOIN utilisateurs v ON v.id = d.validateur_id
              WHERE d.ecole_id = :ecole_id';
         $params = [':ecole_id' => $ecoleId];
+        if ($parentId !== null && $parentId > 0) {
+            $sql .= ' AND e.parent_id = :parent_id';
+            $params[':parent_id'] = $parentId;
+        }
         if ($sectionId !== null) {
             $sql .= ' AND EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id '
                 . 'WHERE i.eleve_id = d.eleve_id AND c.ecole_id = :section_school AND c.section_id = :section_id)';

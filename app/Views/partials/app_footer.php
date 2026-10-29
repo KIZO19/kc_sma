@@ -24,6 +24,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" crossorigin="anonymous"></script>
   <script src="<?= BASE_URL ?>/assets/adminlte.min.js"></script>
   <script src="<?= BASE_URL ?>/assets/app-datagrid.js"></script>
+  <script src="<?= BASE_URL ?>/assets/live-notifications.js" defer></script>
   <script>
     const themeCookieName = 'adminkc_theme_mode';
 
@@ -88,36 +89,61 @@
           document.body.classList.remove('sidebar-collapse');
         }
 
-        // Sidebar toggle: mobile overlay behavior
-        const sidebarToggle = document.querySelector('[data-lte-toggle="sidebar"]');
-        const sidebarBackdrop = document.getElementById('sidebarBackdrop');
-        if (sidebarToggle) {
-          sidebarToggle.addEventListener('click', function (e) {
-            e.preventDefault();
-            if (window.innerWidth < 768) {
-              document.body.classList.toggle('sidebar-open');
-              if (sidebarBackdrop) sidebarBackdrop.style.display = document.body.classList.contains('sidebar-open') ? 'block' : 'none';
-            } else {
-              document.body.classList.toggle('sidebar-collapse');
-            }
-          });
-        }
+      }
 
+      const sidebarToggle = document.querySelector('[data-sidebar-toggle]');
+      const appSidebar = document.querySelector('.app-sidebar');
+      const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+
+      function syncSidebarState(isOpen) {
+        const isMobile = window.innerWidth < 768;
+        if (isMobile) {
+          document.body.classList.toggle('sidebar-collapse', !isOpen);
+        }
         if (sidebarBackdrop) {
-          sidebarBackdrop.addEventListener('click', function () {
-            document.body.classList.remove('sidebar-open');
-            this.style.display = 'none';
-          });
+          sidebarBackdrop.style.display = isOpen && isMobile ? 'block' : 'none';
         }
+        if (sidebarToggle) {
+          sidebarToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        }
+        document.body.classList.toggle('sidebar-open', isOpen && isMobile);
+      }
 
-        // Close mobile sidebar on larger resize
-        window.addEventListener('resize', function () {
-          if (window.innerWidth >= 768) {
-            document.body.classList.remove('sidebar-open');
-            if (sidebarBackdrop) sidebarBackdrop.style.display = 'none';
+      if (sidebarToggle && appSidebar) {
+        sidebarToggle.addEventListener('click', function () {
+          if (window.innerWidth < 768) {
+            syncSidebarState(!document.body.classList.contains('sidebar-open'));
+          } else {
+            document.body.classList.toggle('sidebar-collapse');
+            syncSidebarState(false);
           }
         });
       }
+
+      if (sidebarBackdrop) {
+        sidebarBackdrop.addEventListener('click', function () {
+          if (sidebarToggle) {
+            sidebarToggle.click();
+          } else {
+            syncSidebarState(false);
+          }
+        });
+      }
+
+      window.addEventListener('resize', function () {
+        if (window.innerWidth >= 768) {
+          syncSidebarState(false);
+        } else {
+          document.body.classList.add('sidebar-collapse');
+          syncSidebarState(false);
+        }
+      });
+
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && document.body.classList.contains('sidebar-open')) {
+          syncSidebarState(false);
+        }
+      });
 
       if (searchClose && searchForm) {
         searchClose.addEventListener('click', function () {

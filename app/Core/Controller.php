@@ -16,11 +16,15 @@ class Controller
             }
             $data['userMessages'] = \App\Models\UserMessage::getUnreadForUser((int) $user['id']);
             $data['userMessagesCount'] = \App\Models\UserMessage::countUnreadForUser((int) $user['id']);
+            $data['directMessagesCount'] = \App\Models\SchoolMessage::countUnreadForUser(
+                (int) $user['id'],
+                (int) ($user['ecole_id'] ?? 0)
+            );
             if (($user['role'] ?? '') === 'comptable_école') {
                 $schoolId = (int) ($user['ecole_id'] ?? 0);
                 $data['pendingDerogationMessages'] = \App\Models\Derogation::getPendingForAccountant($schoolId);
                 $data['pendingDerogationMessagesCount'] = \App\Models\Derogation::countPendingForAccountant($schoolId);
-            } elseif (in_array($user['role'] ?? '', ['préfet_école', 'DE_école', 'DP_école'], true)) {
+            } elseif (in_array($user['role'] ?? '', ['préfet_école', 'DE_école', 'DP_école', 'parent_ecole', 'parent_école'], true)) {
                 $requesterId = (int) $user['id'];
                 $data['derogationDecisionMessages'] = \App\Models\Derogation::getUnreadDecisionMessages($requesterId);
                 $data['derogationDecisionMessagesCount'] = \App\Models\Derogation::countUnreadDecisionMessages($requesterId);
@@ -179,6 +183,7 @@ class Controller
                 ['name' => 'Admissions', 'path' => '/inscriptions', 'icon' => 'bi-person-plus'],
                 ['name' => 'Classes', 'path' => '/classes', 'icon' => 'bi-houses'],
                 ['name' => 'Options', 'path' => '/options', 'icon' => 'bi-grid-1x2'],
+                ['name' => 'Parents', 'path' => '/parents', 'icon' => 'bi-people'],
                 ['name' => 'Élèves', 'path' => '/eleves', 'icon' => 'bi-person-badge'],
                 ['name' => 'Exonérations', 'path' => '/exonerations', 'icon' => 'bi-shield-minus'],
                 ['name' => 'Notes', 'path' => '/notes', 'icon' => 'bi-pencil-square'],
@@ -189,6 +194,7 @@ class Controller
             ],
             'DP_école' => [
                 ['name' => 'Classes', 'path' => '/classes', 'icon' => 'bi-houses'],
+                ['name' => 'Parents', 'path' => '/parents', 'icon' => 'bi-people'],
                 ['name' => 'Élèves', 'path' => '/eleves', 'icon' => 'bi-person-badge'],
                 ['name' => 'Exonérations', 'path' => '/exonerations', 'icon' => 'bi-shield-minus'],
                 ['name' => 'Notes', 'path' => '/notes', 'icon' => 'bi-pencil-square'],
@@ -202,6 +208,7 @@ class Controller
                 ['name' => 'Utilisateurs', 'path' => '/utilisateurs', 'icon' => 'bi-person-check'],
                 ['name' => 'Classes', 'path' => '/classes', 'icon' => 'bi-houses'],
                 ['name' => 'Options', 'path' => '/options', 'icon' => 'bi-grid-1x2'],
+                ['name' => 'Parents', 'path' => '/parents', 'icon' => 'bi-people'],
                 ['name' => 'Élèves', 'path' => '/eleves', 'icon' => 'bi-person-badge'],
                 ['name' => 'Dérogations', 'path' => '/derogations', 'icon' => 'bi-file-earmark-check'],
                 ['name' => 'Exonérations', 'path' => '/exonerations', 'icon' => 'bi-shield-minus'],
@@ -214,6 +221,7 @@ class Controller
             ],
             'comptable_école' => [
                 ['name' => 'Inscriptions', 'path' => '/inscriptions', 'icon' => 'bi-person-plus'],
+                ['name' => 'Parents', 'path' => '/parents', 'icon' => 'bi-people'],
                 ['name' => 'Élèves', 'path' => '/eleves', 'icon' => 'bi-person-badge'],
                 ['name' => 'Facturation', 'path' => '/facturation', 'icon' => 'bi-receipt'],
                 ['name' => 'Frais', 'path' => '/frais', 'icon' => 'bi-tag'],
@@ -255,10 +263,11 @@ class Controller
                 ['name' => 'Mes présences', 'path' => '/mes-presences', 'icon' => 'bi-check2-square'],
                 ['name' => 'Mes paiements', 'path' => '/mes-paiements', 'icon' => 'bi-wallet2'],
             ],
-            'parent_ecole' => [
+            'parent_ecole', 'parent_école' => [
                 ['name' => 'Enfants', 'path' => '/mes-enfants', 'icon' => 'bi-people'],
-                ['name' => 'Bulletins', 'path' => '/bulletins-enfant', 'icon' => 'bi-file-earmark-text'],
+                ['name' => 'Notes et discipline', 'path' => '/mes-enfants', 'icon' => 'bi-journal-check'],
                 ['name' => 'Paiements', 'path' => '/paiements-enfant', 'icon' => 'bi-currency-dollar'],
+                ['name' => 'Dérogations', 'path' => '/derogations', 'icon' => 'bi-file-earmark-check'],
                 ['name' => 'Messages', 'path' => '/messages', 'icon' => 'bi-chat-dots'],
             ],
             default => [
@@ -277,6 +286,7 @@ class Controller
             'comptable_école',
             'sec_école',
             'parent_ecole',
+            'parent_école',
         ], true)) {
             array_unshift($modules, [
                 'name' => 'Vérifier solvabilité',

@@ -5,6 +5,11 @@ require_once dirname(__DIR__) . '/app/Core/Controller.php';
 require_once dirname(__DIR__) . '/app/Core/Database.php';
 require_once dirname(__DIR__) . '/app/Core/Router.php';
 
+$composerAutoload = dirname(__DIR__) . '/vendor/autoload.php';
+if (is_file($composerAutoload)) {
+    require_once $composerAutoload;
+}
+
 spl_autoload_register(function ($class) {
     $prefix = 'App\\';
     $baseDir = dirname(__DIR__) . '/app/';

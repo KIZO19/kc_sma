@@ -20,18 +20,19 @@ class FraisScolaire
         try {
             $stmt = $db->prepare(
                 "SELECT f.*, 
-                        c.nom_classe,
+                        c.nom_classe, co.nom_option AS class_option_name,
                         ao.nom_option AS option_scope_name,
                         ss.nom_section AS section_scope_name,
                         s.annee AS annee_scolaire,
                         CASE 
-                          WHEN f.scope = 'class' THEN COALESCE(c.nom_classe, 'N/A')
+                          WHEN f.scope = 'class' THEN COALESCE(CONCAT(c.nom_classe, CASE WHEN co.nom_option IS NOT NULL AND co.nom_option <> '' THEN CONCAT(' · ', co.nom_option) ELSE '' END), 'N/A')
                           WHEN f.scope = 'option' THEN COALESCE(ao.nom_option, 'N/A')
                           WHEN f.scope = 'section' THEN COALESCE(ss.nom_section, 'N/A')
                           WHEN f.scope = 'school' THEN 'Toutes les options'
                           ELSE 'N/A' END AS scope_label
                  FROM frais_scolaires f
                  LEFT JOIN classes c ON c.id = f.classe_id
+                 LEFT JOIN options co ON co.id = c.option_id
                  LEFT JOIN options ao ON (f.scope = 'option' AND ao.id = f.scope_id)
                  LEFT JOIN sections ss ON (f.scope = 'section' AND ss.id = f.scope_id)
                  LEFT JOIN annees_scolaires s ON s.id = f.annee_scolaire_id
@@ -58,9 +59,14 @@ class FraisScolaire
             // Fallback for older schema without 'scope' column: return basic fees for school's classes
             error_log('FraisScolaire::getAllBySchool fallback due to DB error: ' . $e->getMessage());
             $stmt = $db->prepare(
-                "SELECT f.*, c.nom_classe, s.annee AS annee_scolaire, 'N/A' AS scope_label
+                "SELECT f.*, c.nom_classe, co.nom_option AS class_option_name,
+                        s.annee AS annee_scolaire,
+                        CASE WHEN co.nom_option IS NOT NULL AND co.nom_option <> ''
+                          THEN CONCAT(c.nom_classe, ' · ', co.nom_option)
+                          ELSE COALESCE(c.nom_classe, 'N/A') END AS scope_label
                  FROM frais_scolaires f
                  LEFT JOIN classes c ON c.id = f.classe_id
+                 LEFT JOIN options co ON co.id = c.option_id
                  LEFT JOIN annees_scolaires s ON s.id = f.annee_scolaire_id
                  WHERE c.ecole_id = :class_school OR f.ecole_id = :fee_school
                  ORDER BY s.annee DESC, c.nom_classe ASC, f.type_frais ASC"
@@ -112,7 +118,15 @@ class FraisScolaire
     public static function findById(int $id): ?array
     {
         $db = Database::getConnection();
-        $stmt = $db->prepare('SELECT f.*, c.nom_classe, s.annee AS annee_scolaire FROM frais_scolaires f LEFT JOIN classes c ON c.id = f.classe_id LEFT JOIN annees_scolaires s ON s.id = f.annee_scolaire_id WHERE f.id = :id LIMIT 1');
+        $stmt = $db->prepare(
+            'SELECT f.*, c.nom_classe, co.nom_option AS class_option_name,
+                    s.annee AS annee_scolaire
+             FROM frais_scolaires f
+             LEFT JOIN classes c ON c.id = f.classe_id
+             LEFT JOIN options co ON co.id = c.option_id
+             LEFT JOIN annees_scolaires s ON s.id = f.annee_scolaire_id
+             WHERE f.id = :id LIMIT 1'
+        );
         $stmt->execute([':id' => $id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
@@ -122,10 +136,11 @@ class FraisScolaire
     {
         $db = Database::getConnection();
         $stmt = $db->prepare(
-            "SELECT f.*, c.nom_classe, o.nom_option AS option_scope_name,
+            "SELECT f.*, c.nom_classe, class_option.nom_option AS class_option_name,
+                    o.nom_option AS option_scope_name,
                     sec.nom_section AS section_scope_name, s.annee AS annee_scolaire,
                     CASE
-                      WHEN f.scope = 'class' THEN COALESCE(c.nom_classe, 'N/A')
+                      WHEN f.scope = 'class' THEN COALESCE(CONCAT(c.nom_classe, CASE WHEN class_option.nom_option IS NOT NULL AND class_option.nom_option <> '' THEN CONCAT(' · ', class_option.nom_option) ELSE '' END), 'N/A')
                       WHEN f.scope = 'option' THEN COALESCE(o.nom_option, 'N/A')
                       WHEN f.scope = 'section' THEN COALESCE(sec.nom_section, 'N/A')
                       WHEN f.scope = 'school' THEN 'École entière'
@@ -133,6 +148,7 @@ class FraisScolaire
                     END AS scope_label "
             . 'FROM frais_scolaires f '
             . 'LEFT JOIN classes c ON c.id = f.classe_id '
+            . 'LEFT JOIN options class_option ON class_option.id = c.option_id '
             . 'LEFT JOIN options o ON f.scope = \'option\' AND o.id = f.scope_id '
             . 'LEFT JOIN sections sec ON f.scope = \'section\' AND sec.id = f.scope_id '
             . 'LEFT JOIN annees_scolaires s ON s.id = f.annee_scolaire_id '

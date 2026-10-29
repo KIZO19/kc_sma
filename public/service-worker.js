@@ -6,6 +6,27 @@ self.addEventListener('activate', function (event) {
   event.waitUntil(self.clients.claim());
 });
 
+self.addEventListener('notificationclick', function (event) {
+  event.notification.close();
+  const targetUrl = new URL(event.notification.data && event.notification.data.url || self.registration.scope);
+  if (targetUrl.origin !== self.location.origin) {
+    return;
+  }
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clients) {
+      for (const client of clients) {
+        if (new URL(client.url).origin === targetUrl.origin) {
+          return client.navigate(targetUrl.href).then(function (navigatedClient) {
+            return navigatedClient ? navigatedClient.focus() : client.focus();
+          });
+        }
+      }
+      return self.clients.openWindow(targetUrl.href);
+    })
+  );
+});
+
 self.addEventListener('fetch', function (event) {
   if (event.request.method !== 'GET' || new URL(event.request.url).origin !== self.location.origin) {
     return;

@@ -21,13 +21,36 @@ class UserMessage
             "SELECT u.id
              FROM eleves e
              INNER JOIN utilisateurs u ON u.reference_id = e.parent_id
-                AND u.role = 'parent_ecole' AND u.ecole_id = e.ecole_id
+                AND u.role IN ('parent_ecole', 'parent_école') AND u.ecole_id = e.ecole_id
              WHERE e.id = :eleve_id AND u.statut = 'Actif'"
         );
         $stmt->execute([':eleve_id' => $studentId]);
         $userIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
         foreach ($userIds as $userId) {
             self::create((int) $userId, $type, $referenceId, $title, $body);
+        }
+
+        return count($userIds);
+    }
+
+    public static function notifyDerogationRecipients(
+        int $schoolId,
+        int $derogationId,
+        string $studentName,
+        string $requesterName,
+        string $endDate
+    ): int {
+        if ($schoolId <= 0 || $derogationId <= 0) {
+            return 0;
+        }
+
+        self::ensureTable();
+        $userIds = Derogation::getRecipientUserIds($schoolId);
+        $title = 'Nouvelle demande de dérogation';
+        $body = $requesterName . ' a demandé une dérogation pour ' . $studentName
+            . ', jusqu’au ' . date('d/m/Y', strtotime($endDate)) . '.';
+        foreach ($userIds as $userId) {
+            self::create((int) $userId, 'derogation_demande', $derogationId, $title, $body);
         }
 
         return count($userIds);
@@ -163,6 +186,19 @@ class UserMessage
         return $stmt->rowCount() > 0;
     }
 
+    public static function findForUser(int $messageId, int $userId): ?array
+    {
+        self::ensureTable();
+        $stmt = Database::getConnection()->prepare(
+            'SELECT id, type, reference_id FROM messages_utilisateurs '
+            . 'WHERE id = :id AND utilisateur_id = :utilisateur_id LIMIT 1'
+        );
+        $stmt->execute([':id' => $messageId, ':utilisateur_id' => $userId]);
+        $message = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $message ?: null;
+    }
+
     private static function create(int $userId, string $type, int $referenceId, string $title, string $body): void
     {
         if ($userId <= 0 || $referenceId <= 0) {
@@ -187,12 +223,14 @@ class UserMessage
     private static function userHasSelectedSection(int $schoolId, array $user, array $selectedSections): bool
     {
         $role = (string) $user['role'];
-        if ($role === 'parent_ecole' || $role === 'eleve_ecole') {
+        if (in_array($role, ['parent_ecole', 'parent_école', 'eleve_ecole', 'eleve_école'], true)) {
             $parentOrStudentId = (int) ($user['reference_id'] ?? 0);
             if ($parentOrStudentId <= 0) {
                 return false;
             }
-            $studentCondition = $role === 'parent_ecole' ? 'e.parent_id = :reference_id' : 'e.id = :reference_id';
+            $studentCondition = in_array($role, ['parent_ecole', 'parent_école'], true)
+                ? 'e.parent_id = :reference_id'
+                : 'e.id = :reference_id';
             $stmt = Database::getConnection()->prepare(
                 'SELECT 1 FROM eleves e
                  INNER JOIN inscriptions i ON i.eleve_id = e.id

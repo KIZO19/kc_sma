@@ -1,0 +1,9 @@
+{
+  "name": "kizo19/kc-sma",
+  "description": "School administration application",
+  "license": "proprietary",
+  "require": {
+    "php": ">=8.0",
+    "phpmailer/phpmailer": "^6.10"
+  }
+}

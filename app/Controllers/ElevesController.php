@@ -81,7 +81,8 @@ class ElevesController extends Controller
             $teacherClass = null;
             foreach ($teacherStudents as $teacherStudent) {
                 if ((int) $teacherStudent['id'] === $eleveId) {
-                    $teacherClass = $teacherStudent['nom_classe'] ?? null;
+                    $teacherClass = (string) ($teacherStudent['nom_classe'] ?? '')
+                        . (!empty($teacherStudent['nom_option']) ? ' · ' . $teacherStudent['nom_option'] : '');
                     break;
                 }
             }
@@ -118,7 +119,11 @@ class ElevesController extends Controller
         $currentClass = null;
         try {
             $classStmt = \App\Core\Database::getConnection()->prepare(
-                'SELECT c.nom_classe FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id WHERE i.eleve_id = :eleve ORDER BY i.date_inscription DESC, i.id DESC LIMIT 1'
+                'SELECT CONCAT(c.nom_classe, CASE WHEN o.nom_option IS NOT NULL AND o.nom_option <> \'\' THEN CONCAT(\' · \', o.nom_option) ELSE \'\' END)
+                 FROM inscriptions i
+                 INNER JOIN classes c ON c.id = i.classe_id
+                 LEFT JOIN options o ON o.id = c.option_id
+                 WHERE i.eleve_id = :eleve ORDER BY i.date_inscription DESC, i.id DESC LIMIT 1'
             );
             $classStmt->execute([':eleve' => $eleveId]);
             $currentClass = $classStmt->fetchColumn() ?: null;

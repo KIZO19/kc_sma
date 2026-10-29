@@ -88,7 +88,7 @@
                             <option value="">Sélectionnez une classe</option>
                             <?php foreach ($classes as $classe): ?>
                               <option value="<?= (int) $classe['id'] ?>" data-section-name="<?= htmlspecialchars($classe['nom_section'] ?? '') ?>" data-option-name="<?= htmlspecialchars($classe['nom_option'] ?? '') ?>" <?= ((int) ($oldInput['classe_id'] ?? 0) === (int) $classe['id']) ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($classe['nom_classe']) ?>
+                                <?= htmlspecialchars($classe['nom_classe'] . (!empty($classe['nom_option']) ? ' · ' . $classe['nom_option'] : '')) ?>
                               </option>
                             <?php endforeach; ?>
                           </select>

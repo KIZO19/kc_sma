@@ -44,7 +44,7 @@ $headers = [
               return implode(' | ', $values);
             };
           $values = [
-              'classe' => $debt['nom_classe'] ?? 'Classe non définie',
+              'classe' => ($debt['nom_classe'] ?? 'Classe non définie') . (!empty($debt['nom_option']) ? ' · ' . $debt['nom_option'] : ''),
               'eleve' => \App\Core\PersonName::format($debt),
               'matricule' => $debt['matricule'] ?? '',
               'frais' => $debt['frais_details_liste'] ?? ($debt['frais_liste'] ?? ''),

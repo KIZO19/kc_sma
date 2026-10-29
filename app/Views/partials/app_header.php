@@ -214,16 +214,59 @@
     .content-wrapper { min-height: calc(100vh - 56px); background: var(--surface-muted); }
     .breadcrumb .breadcrumb-item a { color: var(--text); }
     .breadcrumb .breadcrumb-item.active { color: var(--text-muted); }
+    .sidebar-backdrop { display: none; }
   </style>
   <style>
     /* Responsive tweaks */
     @media (max-width: 767.98px) {
+      .app-wrapper { display: block !important; min-height: 100vh; }
       .brand-text { display: none; }
       /* mobile: sidebar hidden by default, slides in as overlay */
-      .app-sidebar { width: 220px; transform: translateX(-100%); position: fixed; left: 0; top: 0; bottom: 0; z-index: 1050; transition: transform .25s ease; }
-      body.sidebar-open .app-sidebar { transform: translateX(0); }
-      .sidebar-backdrop { display: none; }
-      body.sidebar-open .sidebar-backdrop { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1040; }
+      body.sidebar-mini .app-sidebar { display: block !important; width: min(84vw, 320px) !important; min-width: min(84vw, 320px) !important; max-width: min(84vw, 320px) !important; margin-left: 0 !important; visibility: visible !important; transform: translateX(-100%); position: fixed; left: 0; top: 0; bottom: 0; z-index: 1050; transition: transform .25s ease; }
+      body.sidebar-open .app-sidebar { margin-left: 0 !important; transform: translateX(0); }
+      .sidebar-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1040; }
+      body.sidebar-open .sidebar-backdrop { display: block; }
+      .live-notification-toasts {
+        position: fixed;
+        top: 4.5rem;
+        right: 1rem;
+        z-index: 2000;
+        display: grid;
+        gap: .5rem;
+        width: min(24rem, calc(100vw - 2rem));
+        pointer-events: none;
+      }
+      .live-notification-toast {
+        pointer-events: auto;
+        box-shadow: 0 .5rem 1.5rem rgba(0, 0, 0, .2);
+      }
+      .app-sidebar .sidebar-menu .nav-header {
+        display: block !important;
+        visibility: visible !important;
+      }
+      .app-sidebar .sidebar-menu > .nav-item > .nav-link {
+        display: flex;
+        align-items: center;
+        width: 100% !important;
+        min-height: 44px;
+      }
+      .app-sidebar .sidebar-menu .nav-link p {
+        display: inline-block !important;
+        width: auto !important;
+        margin: 0 !important;
+        overflow: visible !important;
+        white-space: normal !important;
+        visibility: visible !important;
+        animation: none !important;
+      }
+      .app-sidebar .sidebar-menu .nav-arrow,
+      .app-sidebar .sidebar-menu .nav-badge {
+        display: inline-block !important;
+        visibility: visible !important;
+      }
+      .app-sidebar .sidebar-menu .nav-item.menu-open > .nav-treeview {
+        display: block !important;
+      }
       .content-wrapper { min-height: calc(100vh - 56px); padding: 0.75rem; }
       .app-header .nav-link { padding: .35rem .5rem; }
       .app-header .rounded-circle { width: 34px !important; height: 34px !important; }
@@ -232,8 +275,6 @@
       .app-sidebar { width: 220px; }
     }
   </style>
-    <!-- Backdrop for mobile sidebar -->
-    <div id="sidebarBackdrop" class="sidebar-backdrop" style="display:none;"></div>
 </head>
 <body class="layout-fixed sidebar-mini">
 <?php
@@ -270,11 +311,18 @@ if (!empty($schoolContext['logo_url'])) {
 }
 ?>
   <div class="app-wrapper">
-    <nav class="app-header navbar navbar-expand bg-body">
+  <div id="sidebarBackdrop" class="sidebar-backdrop" aria-hidden="true"></div>
+  <nav class="app-header navbar navbar-expand bg-body"
+       data-notifications-endpoint="<?= BASE_URL ?>/notifications/poll"
+       data-notifications-base-url="<?= BASE_URL ?>"
+       data-notifications-interval="<?= ($user['role'] ?? '') === 'comptable_école' ? '2000' : '5000' ?>"
+       data-notifications-icon="<?= BASE_URL ?>/assets/icons/kc-sma-192.png">
       <div class="container-fluid">
         <ul class="navbar-nav">
           <li class="nav-item">
-            <a class="nav-link" data-lte-toggle="sidebar" href="#" role="button"><i class="bi bi-list"></i></a>
+            <button class="nav-link border-0 bg-transparent" data-sidebar-toggle type="button" aria-label="Ouvrir ou fermer le menu" aria-expanded="false">
+              <i class="bi bi-list" aria-hidden="true"></i>
+            </button>
           </li>
           <li class="nav-item d-none d-md-block">
             <a href="<?= BASE_URL ?>/dashboard" class="nav-link">Dashboard</a>
@@ -359,13 +407,12 @@ if (!empty($schoolContext['logo_url'])) {
               <?php
                 $messageCount = (int) ($pendingDerogationMessagesCount ?? 0)
                   + (int) ($derogationDecisionMessagesCount ?? 0)
-                  + (int) ($userMessagesCount ?? 0);
+                  + (int) ($userMessagesCount ?? 0)
+                  + (int) ($directMessagesCount ?? 0);
               ?>
-              <?php if ($messageCount > 0): ?>
-                <span class="navbar-badge badge text-bg-danger"><?= $messageCount ?></span>
-              <?php endif; ?>
+              <span id="messagesNotificationBadge" class="navbar-badge badge text-bg-danger"<?= $messageCount > 0 ? '' : ' hidden' ?>><?= $messageCount ?></span>
             </a>
-            <div class="dropdown-menu dropdown-menu-lg dropdown-menu-end p-2">
+            <div id="messagesNotificationMenu" class="dropdown-menu dropdown-menu-lg dropdown-menu-end p-2">
               <?php if (!empty($userMessages)): ?>
                 <span class="dropdown-item-text fw-bold">Nouveaux messages</span>
                 <div class="dropdown-divider"></div>
@@ -418,6 +465,16 @@ if (!empty($schoolContext['logo_url'])) {
               <?php if (empty($userMessages) && !isset($pendingDerogationMessages) && !isset($derogationDecisionMessages)): ?>
                 <span class="dropdown-item-text text-muted small">Aucun nouveau message.</span>
               <?php endif; ?>
+              <div class="dropdown-divider"></div>
+              <span class="dropdown-item-text small text-muted">Sur mobile, le son suit les réglages du téléphone ; la vibration dépend du navigateur. Sur iPhone, installez KC_SMA sur l’écran d’accueil pour autoriser les notifications.</span>
+              <button id="phoneNotificationToggle" class="dropdown-item small" type="button" aria-pressed="false">
+                <i class="bi bi-phone me-2" aria-hidden="true"></i>Activer les notifications du téléphone
+              </button>
+              <span id="phoneNotificationHelp" class="dropdown-item-text small text-muted"></span>
+              <div class="dropdown-divider"></div>
+              <button id="notificationSoundToggle" class="dropdown-item small" type="button" aria-pressed="true">
+                <i class="bi bi-volume-up-fill me-2" aria-hidden="true"></i>Bip sonore de la page activé
+              </button>
               <?php if (!empty($user['id'])): ?>
                 <div class="dropdown-divider"></div>
                 <a href="<?= BASE_URL ?>/messages" class="dropdown-item text-center">Ouvrir les messages</a>
@@ -431,11 +488,9 @@ if (!empty($schoolContext['logo_url'])) {
           <li class="nav-item dropdown">
             <a class="nav-link" data-bs-toggle="dropdown" href="#">
               <i class="bi bi-bell-fill"></i>
-              <?php if (!empty($eventNotificationsCount)): ?>
-                <span class="navbar-badge badge text-bg-warning"><?= (int) $eventNotificationsCount ?></span>
-              <?php endif; ?>
+              <span id="eventsNotificationBadge" class="navbar-badge badge text-bg-warning"<?= !empty($eventNotificationsCount) ? '' : ' hidden' ?>><?= (int) ($eventNotificationsCount ?? 0) ?></span>
             </a>
-            <div class="dropdown-menu dropdown-menu-lg dropdown-menu-end p-2">
+            <div id="eventsNotificationMenu" class="dropdown-menu dropdown-menu-lg dropdown-menu-end p-2">
               <span class="dropdown-item-text fw-bold">Notifications d’événements</span>
               <div class="dropdown-divider"></div>
               <?php if (!empty($eventNotifications)): ?>
@@ -458,6 +513,7 @@ if (!empty($schoolContext['logo_url'])) {
         </ul>
       </div>
     </nav>
+    <div id="liveNotificationToasts" class="live-notification-toasts" aria-live="polite" aria-atomic="false"></div>
 
     <aside class="app-sidebar">
       <div class="school-context-card p-3 mb-3">
@@ -492,7 +548,7 @@ if (!empty($schoolContext['logo_url'])) {
         </div>
 
         <nav class="mt-2">
-          <ul id="sidebarNavMenu" class="nav nav-pills nav-sidebar flex-column" data-lte-treeview="true" role="menu" data-accordion="true">
+          <ul id="sidebarNavMenu" class="nav nav-pills nav-sidebar sidebar-menu flex-column" data-lte-treeview="true" role="menu" data-accordion="true">
             <li class="nav-header"><?= in_array(($role ?? ''), ['préfet_école', 'DP_école'], true) ? 'ESPACE SCOLAIRE' : 'MENU' ?></li>
             <li class="nav-item">
               <a href="<?= BASE_URL ?>/dashboard" class="nav-link <?= $currentPath === BASE_URL . '/dashboard' ? 'active' : '' ?>">

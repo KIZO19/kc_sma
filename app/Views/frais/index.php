@@ -90,7 +90,7 @@ $fees = $fees ?? [];
                                 <?= number_format((float) $fee['montant_total'], 2, ',', ' ') ?>
                                 <?= ' ' . htmlspecialchars($fee['devise'] ?? ($schoolCurrency ?? 'USD')) ?>
                               </td>
-                              <td><?= htmlspecialchars($fee['nom_classe'] ?? 'N/A') ?></td>
+                              <td><?= htmlspecialchars(($fee['nom_classe'] ?? 'N/A') . (!empty($fee['class_option_name']) ? ' · ' . $fee['class_option_name'] : '')) ?></td>
                               <td><?= htmlspecialchars($fee['annee_scolaire'] ?? '-') ?></td>
                               <td><?= htmlspecialchars($fee['devise'] ?? ($schoolCurrency ?? 'USD')) ?></td>
                               <td><?= htmlspecialchars($fee['scope_label'] ?? '-') ?></td>

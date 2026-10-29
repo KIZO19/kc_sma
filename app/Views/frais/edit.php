@@ -90,7 +90,7 @@
               <select id="classSelect" class="form-select">
                 <option value="">-- Sélectionner une classe --</option>
                 <?php foreach ($classes as $c): ?>
-                  <option value="<?= (int) $c['id'] ?>" <?= ((int) ($old['scope_id'] ?? $fee['scope_id'] ?? $fee['classe_id'] ?? 0) === (int) $c['id']) ? 'selected' : '' ?>><?= htmlspecialchars($c['nom_classe']) ?></option>
+                  <option value="<?= (int) $c['id'] ?>" <?= ((int) ($old['scope_id'] ?? $fee['scope_id'] ?? $fee['classe_id'] ?? 0) === (int) $c['id']) ? 'selected' : '' ?>><?= htmlspecialchars($c['nom_classe'] . (!empty($c['nom_option']) ? ' · ' . $c['nom_option'] : '')) ?></option>
                 <?php endforeach; ?>
               </select>
             </div>

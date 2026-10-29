@@ -7,6 +7,65 @@ use PDO;
 
 class Eleve
 {
+    public static function getChildrenForParent(int $parentId, int $schoolId): array
+    {
+        if ($parentId <= 0 || $schoolId <= 0) {
+            return [];
+        }
+
+        $stmt = Database::getConnection()->prepare(
+            'SELECT e.id, e.nom, e.postnom, e.prenom, e.matricule,
+                    (SELECT c.nom_classe
+                     FROM inscriptions i
+                     INNER JOIN classes c ON c.id = i.classe_id AND c.ecole_id = :class_school
+                     WHERE i.eleve_id = e.id
+                     ORDER BY i.date_inscription DESC, i.id DESC
+                     LIMIT 1) AS nom_classe,
+                    (SELECT o.nom_option
+                     FROM inscriptions i
+                     INNER JOIN classes c ON c.id = i.classe_id AND c.ecole_id = :option_school
+                     LEFT JOIN options o ON o.id = c.option_id
+                     WHERE i.eleve_id = e.id
+                     ORDER BY i.date_inscription DESC, i.id DESC
+                     LIMIT 1) AS nom_option
+             FROM eleves e
+             WHERE e.parent_id = :parent_id AND e.ecole_id = :school_id
+             ORDER BY e.nom, e.postnom, e.prenom'
+        );
+        $stmt->execute([
+            ':class_school' => $schoolId,
+            ':option_school' => $schoolId,
+            ':parent_id' => $parentId,
+            ':school_id' => $schoolId,
+        ]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function getPaymentsForParent(int $parentId, int $schoolId): array
+    {
+        $paymentsByChild = [];
+        foreach (self::getChildrenForParent($parentId, $schoolId) as $child) {
+            $childId = (int) $child['id'];
+            $payments = array_values(array_filter(
+                self::getAccountingEntries($childId),
+                static fn (array $entry): bool => strtoupper((string) ($entry['type_mouvement'] ?? '')) === 'CREDIT'
+            ));
+            $totalByCurrency = [];
+            foreach ($payments as $payment) {
+                $currency = strtoupper(trim((string) ($payment['frais_devise'] ?? 'USD'))) ?: 'USD';
+                $totalByCurrency[$currency] = ($totalByCurrency[$currency] ?? 0.0) + (float) ($payment['montant'] ?? 0);
+            }
+            ksort($totalByCurrency);
+            $paymentsByChild[$childId] = [
+                'payments' => $payments,
+                'total_by_currency' => $totalByCurrency,
+            ];
+        }
+
+        return $paymentsByChild;
+    }
+
     public static function findByMatricule(string $matricule, ?int $excludeId = null): ?array
     {
         $normalized = trim($matricule);
@@ -370,8 +429,13 @@ class Eleve
     {
         $db = Database::getConnection();
         $stmt = $db->prepare(
-            'SELECT n.*, ev.attribution_cours_id, ev.periode_id, ev.type_evaluation, ev.date_evaluation, ev.ponderation_max '
-            . 'FROM notes n LEFT JOIN evaluations ev ON n.evaluation_id = ev.id '
+            'SELECT n.*, ev.attribution_cours_id, ev.periode_id, ev.type_evaluation,
+                    ev.date_evaluation, ev.ponderation_max, co.nom_cours, p.nom_periode
+             FROM notes n
+             LEFT JOIN evaluations ev ON n.evaluation_id = ev.id
+             LEFT JOIN attribution_cours ac ON ac.id = ev.attribution_cours_id
+             LEFT JOIN cours co ON co.id = ac.cours_id
+             LEFT JOIN periodes p ON p.id = ev.periode_id '
             . 'WHERE n.eleve_id = :eleve ORDER BY ev.date_evaluation DESC'
         );
         $stmt->execute([':eleve' => $eleveId]);

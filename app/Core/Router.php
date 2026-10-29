@@ -79,6 +79,9 @@ class Router
         } elseif ($segments[0] === 'forgot-password') {
             $controllerName = 'Auth';
             $actionName = 'forgotPassword';
+        } elseif ($segments[0] === 'reset-password') {
+            $controllerName = 'Auth';
+            $actionName = 'resetPassword';
         } elseif ($segments[0] === 'dashboard') {
             $controllerName = 'Dashboard';
             $actionName = 'index';
@@ -124,7 +127,8 @@ class Router
                 'App\\Controllers\\NotesController' => ['index'],
                 'App\\Controllers\\ElevesController' => ['index', 'show'],
                 'App\\Controllers\\MonEmploiController' => ['index'],
-                'App\\Controllers\\MessagesController' => ['index', 'open'],
+                'App\\Controllers\\MessagesController' => ['index', 'open', 'thread', 'chatpoll', 'chatreply', 'chattyping'],
+                'App\\Controllers\\NotificationsController' => ['poll'],
                 'App\\Controllers\\ProfileController' => ['index', 'update'],
                 'App\\Controllers\\AuthController' => ['logout'],
                 'App\\Controllers\\EcolesController' => ['subscriptionrequired'],

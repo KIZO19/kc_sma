@@ -6,6 +6,7 @@ use App\Core\Auth;
 use App\Core\Controller;
 use App\Models\Ecole;
 use App\Models\ActivityLog;
+use App\Models\Derogation;
 use App\Models\NotificationAccess;
 use App\Models\SubscriptionRequest;
 use App\Models\User;
@@ -85,11 +86,59 @@ class EcolesController extends Controller
             'school' => $school,
             'subscription' => Ecole::getLatestSubscription($schoolId),
             'notificationSettings' => NotificationAccess::getSchoolPreferences($schoolId),
+            'derogationRecipientOptions' => Derogation::getRecipientOptions($schoolId),
+            'derogationRecipientUserIds' => Derogation::getRecipientUserIds($schoolId),
             'csrfToken' => $_SESSION['school_settings_csrf'],
             'success' => $_SESSION['school_settings_success'] ?? null,
             'error' => $_SESSION['school_settings_error'] ?? null,
         ]);
         unset($_SESSION['school_settings_success'], $_SESSION['school_settings_error']);
+    }
+
+    public function updateDerogationRecipients(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['ecole_admin']);
+
+        $user = Auth::refresh() ?: Auth::user();
+        $schoolId = (int) ($user['ecole_id'] ?? 0);
+        $token = (string) ($_POST['csrf_token'] ?? '');
+        if (
+            $_SERVER['REQUEST_METHOD'] !== 'POST'
+            || $schoolId <= 0
+            || $token === ''
+            || !hash_equals((string) ($_SESSION['school_settings_csrf'] ?? ''), $token)
+        ) {
+            $_SESSION['school_settings_error'] = 'Le formulaire a expiré. Rechargez la page et réessayez.';
+            $this->redirect('/ecoles/settings');
+            return;
+        }
+
+        try {
+            $recipientIds = $_POST['recipient_user_ids'] ?? [];
+            if (!is_array($recipientIds)) {
+                throw new \DomainException('La liste des destinataires est invalide.');
+            }
+            Derogation::saveRecipientUserIds($schoolId, $recipientIds, (int) ($user['id'] ?? 0));
+            $school = Ecole::findById($schoolId);
+            ActivityLog::record(
+                (int) ($user['id'] ?? 0),
+                'derogation_recipients_updated',
+                'school',
+                $schoolId,
+                (string) ($school['nom_etablissement'] ?? 'École'),
+                'Destinataires des demandes de dérogation mis à jour.'
+            );
+            $_SESSION['school_settings_success'] = 'Les destinataires des demandes de dérogation ont été enregistrés.';
+        } catch (\DomainException $e) {
+            $_SESSION['school_settings_error'] = $e->getMessage();
+        } catch (\Throwable $e) {
+            error_log('EcolesController::updateDerogationRecipients error: ' . $e->getMessage());
+            $_SESSION['school_settings_error'] = 'Impossible d’enregistrer les destinataires. Réessayez.';
+        }
+
+        $_SESSION['school_settings_csrf'] = bin2hex(random_bytes(32));
+        $this->redirect('/ecoles/settings');
     }
 
     public function updateSchoolNotificationAccess(): void
@@ -510,43 +559,109 @@ class EcolesController extends Controller
 
         $errors = [];
         $success = null;
+        $generatedPassword = null;
         $matricule = '';
+        $parentIdentifier = '';
+        if (empty($_SESSION['generate_password_csrf'])) {
+            $_SESSION['generate_password_csrf'] = bin2hex(random_bytes(32));
+        }
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $matricule = trim($_POST['matricule'] ?? '');
-
-            if ($matricule === '') {
-                $errors[] = 'Le matricule de l\'élève est requis.';
+            $token = (string) ($_POST['csrf_token'] ?? '');
+            if ($token === '' || !hash_equals((string) $_SESSION['generate_password_csrf'], $token)) {
+                $errors[] = 'Le formulaire a expiré. Rechargez la page puis réessayez.';
             } else {
-                $eleveUser = User::findByEleveMatricule($matricule);
-
-                if (!$eleveUser) {
-                    $errors[] = 'Aucun élève trouvé pour ce matricule.';
-                } else {
-                    if ($role === 'ecole_admin' && !empty($user['ecole_id']) && $eleveUser['ecole_id'] !== $user['ecole_id']) {
-                        $errors[] = 'Vous ne pouvez générer un mot de passe que pour les élèves de votre établissement.';
+                $accountType = (string) ($_POST['account_type'] ?? 'student');
+                if ($accountType === 'parent') {
+                    $parentIdentifier = trim((string) ($_POST['parent_identifier'] ?? ''));
+                    if ($parentIdentifier === '') {
+                        $errors[] = 'L’identifiant du compte parent est requis.';
                     } else {
-                        $tempPassword = bin2hex(random_bytes(4));
-                        $ok = User::updateProfile((int) $eleveUser['id'], ['mot_de_passe' => password_hash($tempPassword, PASSWORD_DEFAULT)]);
-                        if ($ok) {
-                            $success = 'Mot de passe généré pour ' . htmlspecialchars($matricule) . ' : ' . $tempPassword;
+                        $db = \App\Core\Database::getConnection();
+                        $stmt = $db->prepare(
+                            "SELECT u.id, u.nom_complet, u.identifiant, u.ecole_id, p.ecole_id AS parent_ecole_id
+                             FROM utilisateurs u
+                             INNER JOIN parents p ON p.id = u.reference_id
+                             WHERE u.identifiant = :identifiant
+                               AND u.role = 'parent_ecole'
+                               AND u.statut = 'Actif'
+                             LIMIT 1"
+                        );
+                        $stmt->execute([':identifiant' => $parentIdentifier]);
+                        $parentUser = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+                        if (!$parentUser) {
+                            $errors[] = 'Aucun compte parent actif trouvé pour cet identifiant.';
+                        } elseif (
+                            (int) ($parentUser['ecole_id'] ?? 0) <= 0
+                            || (int) ($parentUser['ecole_id'] ?? 0) !== (int) ($parentUser['parent_ecole_id'] ?? 0)
+                            || (
+                                $role === 'ecole_admin'
+                                && (int) ($parentUser['ecole_id'] ?? 0) !== (int) ($user['ecole_id'] ?? 0)
+                            )
+                        ) {
+                            $errors[] = 'Vous ne pouvez générer un mot de passe que pour un parent lié à votre établissement.';
                         } else {
-                            $errors[] = 'Impossible de mettre à jour le mot de passe. Réessayez.';
+                            $generatedPassword = bin2hex(random_bytes(8));
+                            if (User::updateProfile((int) $parentUser['id'], ['mot_de_passe' => $generatedPassword])) {
+                                $success = 'Mot de passe temporaire généré pour ' . $parentUser['nom_complet']
+                                    . ' (' . $parentUser['identifiant'] . ').';
+                                ActivityLog::record(
+                                    (int) ($user['id'] ?? 0),
+                                    'parent_password_generated',
+                                    'user',
+                                    (int) $parentUser['id'],
+                                    'Mot de passe parent généré',
+                                    'Mot de passe temporaire généré par ' . (string) ($user['nom_complet'] ?? 'un administrateur') . '.'
+                                );
+                            } else {
+                                $generatedPassword = null;
+                                $errors[] = 'Impossible de mettre à jour le mot de passe. Réessayez.';
+                            }
                         }
                     }
+                } elseif ($accountType === 'student') {
+                    $matricule = trim((string) ($_POST['matricule'] ?? ''));
+
+                    if ($matricule === '') {
+                        $errors[] = 'Le matricule de l\'élève est requis.';
+                    } else {
+                        $eleveUser = User::findByEleveMatricule($matricule);
+
+                        if (!$eleveUser) {
+                            $errors[] = 'Aucun élève trouvé pour ce matricule.';
+                        } elseif ($role === 'ecole_admin' && (int) ($eleveUser['ecole_id'] ?? 0) !== (int) ($user['ecole_id'] ?? 0)) {
+                            $errors[] = 'Vous ne pouvez générer un mot de passe que pour les élèves de votre établissement.';
+                        } else {
+                            $generatedPassword = bin2hex(random_bytes(8));
+                            if (User::updateProfile((int) $eleveUser['id'], ['mot_de_passe' => $generatedPassword])) {
+                                $success = 'Mot de passe temporaire généré pour le matricule ' . $matricule . '.';
+                            } else {
+                                $generatedPassword = null;
+                                $errors[] = 'Impossible de mettre à jour le mot de passe. Réessayez.';
+                            }
+                        }
+                    }
+                } else {
+                    $errors[] = 'Le type de compte demandé est invalide.';
                 }
             }
+
+            $_SESSION['generate_password_csrf'] = bin2hex(random_bytes(32));
         }
 
         $this->view('ecoles/generate_password', [
-            'title' => APP_NAME . ' - Générer mot de passe élève',
+            'title' => APP_NAME . ' - Générer un mot de passe',
             'user' => $user,
             'role' => $role,
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $modules,
             'errors' => $errors,
             'success' => $success,
+            'generatedPassword' => $generatedPassword,
             'matricule' => $matricule,
+            'parentIdentifier' => $parentIdentifier,
+            'csrfToken' => $_SESSION['generate_password_csrf'],
         ]);
     }
 

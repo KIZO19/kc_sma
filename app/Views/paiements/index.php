@@ -41,7 +41,7 @@
         <select id="fraisFilter" class="form-select">
           <option value="">Tous les frais</option>
           <?php foreach (($fees ?? []) as $fee): ?>
-            <option value="<?= (int) $fee['id'] ?>" <?= (!empty($fraisId) && (int) $fraisId === (int) $fee['id']) ? 'selected' : '' ?>><?= htmlspecialchars(trim(($fee['type_frais'] ?? '') . ' - ' . ($fee['nom_classe'] ?? '') . ' ' . ($fee['scope_label'] ?? ''))) ?></option>
+            <option value="<?= (int) $fee['id'] ?>" <?= (!empty($fraisId) && (int) $fraisId === (int) $fee['id']) ? 'selected' : '' ?>><?= htmlspecialchars(trim(($fee['type_frais'] ?? '') . ' - ' . ($fee['scope_label'] ?? (($fee['nom_classe'] ?? '') . (!empty($fee['class_option_name']) ? ' · ' . $fee['class_option_name'] : ''))))) ?></option>
           <?php endforeach; ?>
         </select>
       </div>

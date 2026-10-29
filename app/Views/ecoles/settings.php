@@ -66,6 +66,49 @@
 
       <div class="col-12">
         <div class="card">
+          <div class="card-header"><h2 class="card-title">Destinataires des demandes de dérogation</h2></div>
+          <form method="post" action="<?= BASE_URL ?>/ecoles/updateDerogationRecipients">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) ($csrfToken ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+            <div class="card-body">
+              <p class="text-muted">
+                Choisissez les comptes actifs qui recevront une notification lorsqu’un parent demande une dérogation.
+                Les personnes sélectionnées pourront consulter les demandes; seul le comptable peut les approuver ou les refuser.
+              </p>
+              <?php if (empty($derogationRecipientOptions)): ?>
+                <div class="alert alert-warning mb-0">Aucun comptable, préfet ou directeur actif n’est disponible pour recevoir ces demandes.</div>
+              <?php else: ?>
+                <div class="row g-2">
+                  <?php foreach ($derogationRecipientOptions as $recipient): ?>
+                    <?php
+                      $recipientId = (int) $recipient['id'];
+                      $recipientCheckboxId = 'derogationRecipient' . $recipientId;
+                    ?>
+                    <div class="col-md-6 col-xl-4">
+                      <label class="form-check border rounded p-3 h-100" for="<?= $recipientCheckboxId ?>">
+                        <input class="form-check-input" type="checkbox" name="recipient_user_ids[]"
+                               id="<?= $recipientCheckboxId ?>" value="<?= $recipientId ?>"
+                               <?= in_array($recipientId, $derogationRecipientUserIds ?? [], true) ? 'checked' : '' ?>>
+                        <span class="form-check-label ms-1">
+                          <span class="d-block fw-semibold"><?= htmlspecialchars((string) ($recipient['nom_complet'] ?? 'Utilisateur'), ENT_QUOTES, 'UTF-8') ?></span>
+                          <span class="small text-muted"><?= htmlspecialchars(\App\Models\User::getRoleLabel((string) $recipient['role']), ENT_QUOTES, 'UTF-8') ?></span>
+                        </span>
+                      </label>
+                    </div>
+                  <?php endforeach; ?>
+                </div>
+              <?php endif; ?>
+            </div>
+            <div class="card-footer text-end">
+              <button type="submit" class="btn btn-primary" <?= empty($derogationRecipientOptions) ? 'disabled' : '' ?>>
+                <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Enregistrer les destinataires
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="col-12">
+        <div class="card">
           <div class="card-header"><h2 class="card-title">Fonctionnalités de communication</h2></div>
           <form method="post" action="<?= BASE_URL ?>/ecoles/updateSchoolNotificationAccess">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) ($csrfToken ?? ''), ENT_QUOTES, 'UTF-8') ?>">

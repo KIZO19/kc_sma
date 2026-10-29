@@ -131,7 +131,7 @@ require __DIR__ . '/../partials/app_header.php';
                     <option value="">Toutes les classes</option>
                     <?php foreach ($classes as $class): ?>
                       <option value="<?= (int) $class['id'] ?>" <?= ((int) ($selectedClasseId ?? 0) === (int) $class['id']) ? 'selected' : '' ?>>
-                        <?= $e($class['nom_classe'] ?? '') ?>
+                        <?= $e($class['nom_classe'] ?? '') ?><?= !empty($class['nom_option']) ? ' · ' . $e($class['nom_option']) : '' ?>
                       </option>
                     <?php endforeach; ?>
                   </select>

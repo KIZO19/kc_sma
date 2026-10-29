@@ -8,6 +8,284 @@ use PDO;
 
 class ParentModel
 {
+    private static bool $childRequestsTableReady = false;
+
+    public static function getUnassignedChildrenBySchool(int $ecoleId, ?int $sectionId = null): array
+    {
+        if ($ecoleId <= 0) {
+            return [];
+        }
+        self::ensureChildRequestsTable();
+
+        $classScope = ' AND c.ecole_id = :class_school';
+        $optionClassScope = ' AND c.ecole_id = :option_school';
+        $schoolScope = ' AND scope_c.ecole_id = :scope_school';
+        $sectionScope = '';
+        $params = [
+            ':class_school' => $ecoleId,
+            ':option_school' => $ecoleId,
+            ':scope_school' => $ecoleId,
+            ':student_school' => $ecoleId,
+        ];
+        if ($sectionId !== null) {
+            $classScope .= ' AND c.section_id = :class_section';
+            $optionClassScope .= ' AND c.section_id = :option_section';
+            $schoolScope .= ' AND scope_c.section_id = :scope_section';
+            $sectionScope = ' AND EXISTS ('
+                . 'SELECT 1 FROM inscriptions section_i INNER JOIN classes section_c ON section_c.id = section_i.classe_id '
+                . 'WHERE section_i.eleve_id = e.id AND section_c.ecole_id = :section_school '
+                . 'AND section_c.section_id = :section_id)';
+            $params[':class_section'] = $sectionId;
+            $params[':option_section'] = $sectionId;
+            $params[':scope_section'] = $sectionId;
+            $params[':section_school'] = $ecoleId;
+            $params[':section_id'] = $sectionId;
+        }
+
+        $stmt = Database::getConnection()->prepare(
+            'SELECT e.id, e.nom, e.postnom, e.prenom, e.matricule, '
+            . '(SELECT c.nom_classe FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id '
+            . 'WHERE i.eleve_id = e.id' . $classScope . ' ORDER BY i.date_inscription DESC, i.id DESC LIMIT 1) AS nom_classe, '
+            . '(SELECT o.nom_option FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id '
+            . 'LEFT JOIN options o ON o.id = c.option_id '
+            . 'WHERE i.eleve_id = e.id' . $optionClassScope . ' ORDER BY i.date_inscription DESC, i.id DESC LIMIT 1) AS nom_option '
+            . 'FROM eleves e '
+            . 'WHERE e.parent_id IS NULL '
+            . 'AND NOT EXISTS (SELECT 1 FROM parent_child_requests pcr '
+            . 'WHERE pcr.student_id = e.id AND pcr.status = \'pending\') '
+            . 'AND (e.ecole_id = :student_school OR EXISTS ('
+            . 'SELECT 1 FROM inscriptions scope_i INNER JOIN classes scope_c ON scope_c.id = scope_i.classe_id '
+            . 'WHERE scope_i.eleve_id = e.id' . $schoolScope . '))'
+            . $sectionScope
+            . ' ORDER BY e.nom ASC, e.postnom ASC, e.prenom ASC'
+        );
+        $stmt->execute($params);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function createChildAssignmentRequest(
+        int $parentId,
+        int $eleveId,
+        int $ecoleId,
+        int $requestedBy,
+        ?int $sectionId = null
+    ): void
+    {
+        if ($parentId <= 0 || $eleveId <= 0 || $ecoleId <= 0 || $requestedBy <= 0) {
+            throw new \DomainException('Le parent, l’élève ou l’école sélectionné est invalide.');
+        }
+
+        self::ensureChildRequestsTable();
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        try {
+            $parentStmt = $db->prepare('SELECT id FROM parents WHERE id = :parent_id AND ecole_id = :ecole_id LIMIT 1');
+            $parentStmt->execute([':parent_id' => $parentId, ':ecole_id' => $ecoleId]);
+            if (!$parentStmt->fetchColumn()) {
+                throw new \DomainException('Ce parent n’appartient pas à votre école.');
+            }
+
+            $studentSql = 'SELECT e.parent_id FROM eleves e WHERE e.id = :eleve_id '
+                . 'AND (e.ecole_id = :student_school OR EXISTS ('
+                . 'SELECT 1 FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id '
+                . 'WHERE i.eleve_id = e.id AND c.ecole_id = :class_school';
+            $studentParams = [
+                ':eleve_id' => $eleveId,
+                ':student_school' => $ecoleId,
+                ':class_school' => $ecoleId,
+            ];
+            if ($sectionId !== null) {
+                $studentSql .= ' AND c.section_id = :class_section';
+                $studentParams[':class_section'] = $sectionId;
+            }
+            $studentSql .= '))';
+            if ($sectionId !== null) {
+                $studentSql .= ' AND EXISTS ('
+                    . 'SELECT 1 FROM inscriptions section_i INNER JOIN classes section_c ON section_c.id = section_i.classe_id '
+                    . 'WHERE section_i.eleve_id = e.id AND section_c.ecole_id = :section_school '
+                    . 'AND section_c.section_id = :section_id)';
+                $studentParams[':section_school'] = $ecoleId;
+                $studentParams[':section_id'] = $sectionId;
+            }
+            $studentStmt = $db->prepare($studentSql . ' LIMIT 1 FOR UPDATE');
+            $studentStmt->execute($studentParams);
+            $student = $studentStmt->fetch(PDO::FETCH_ASSOC);
+            if (!$student) {
+                throw new \DomainException('Cet élève n’appartient pas à votre école ou à votre section.');
+            }
+            if (!empty($student['parent_id'])) {
+                throw new \DomainException('Cet élève est déjà rattaché à un parent.');
+            }
+
+            $pendingStmt = $db->prepare(
+                'SELECT id FROM parent_child_requests WHERE student_id = :student_id AND status = \'pending\' LIMIT 1'
+            );
+            $pendingStmt->execute([':student_id' => $eleveId]);
+            if ($pendingStmt->fetchColumn()) {
+                throw new \DomainException('Une demande est déjà en attente pour cet élève.');
+            }
+
+            $requestStmt = $db->prepare(
+                'INSERT INTO parent_child_requests (parent_id, student_id, school_id, requested_by, status) '
+                . 'VALUES (:parent_id, :student_id, :school_id, :requested_by, \'pending\')'
+            );
+            $requestStmt->execute([
+                ':parent_id' => $parentId,
+                ':student_id' => $eleveId,
+                ':school_id' => $ecoleId,
+                ':requested_by' => $requestedBy,
+            ]);
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    public static function getPendingChildRequestsForParent(int $parentId, int $ecoleId): array
+    {
+        if ($parentId <= 0 || $ecoleId <= 0) {
+            return [];
+        }
+        self::ensureChildRequestsTable();
+
+        $stmt = Database::getConnection()->prepare(
+            'SELECT pcr.id, pcr.created_at, e.id AS student_id, e.nom, e.postnom, e.prenom, e.matricule, '
+            . 'c.nom_classe, o.nom_option, u.nom_complet AS requested_by_name '
+            . 'FROM parent_child_requests pcr '
+            . 'INNER JOIN parents p ON p.id = pcr.parent_id AND p.ecole_id = pcr.school_id '
+            . 'INNER JOIN eleves e ON e.id = pcr.student_id '
+            . 'LEFT JOIN utilisateurs u ON u.id = pcr.requested_by '
+            . 'LEFT JOIN inscriptions i ON i.id = ('
+            . 'SELECT i2.id FROM inscriptions i2 INNER JOIN classes c2 ON c2.id = i2.classe_id '
+            . 'WHERE i2.eleve_id = e.id AND c2.ecole_id = pcr.school_id '
+            . 'ORDER BY i2.date_inscription DESC, i2.id DESC LIMIT 1) '
+            . 'LEFT JOIN classes c ON c.id = i.classe_id '
+            . 'LEFT JOIN options o ON o.id = c.option_id '
+            . 'WHERE pcr.parent_id = :parent_id AND pcr.school_id = :school_id '
+            . 'AND pcr.status = \'pending\' AND e.parent_id IS NULL '
+            . 'ORDER BY pcr.created_at DESC, pcr.id DESC'
+        );
+        $stmt->execute([':parent_id' => $parentId, ':school_id' => $ecoleId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function getPendingChildRequestsForParentProfile(int $parentId, int $ecoleId): array
+    {
+        if ($parentId <= 0 || $ecoleId <= 0) {
+            return [];
+        }
+        self::ensureChildRequestsTable();
+
+        $stmt = Database::getConnection()->prepare(
+            'SELECT pcr.id, pcr.created_at, pcr.status, e.id AS student_id, e.nom, e.postnom, e.prenom, '
+            . 'e.matricule, u.nom_complet AS requested_by_name '
+            . 'FROM parent_child_requests pcr '
+            . 'INNER JOIN eleves e ON e.id = pcr.student_id '
+            . 'LEFT JOIN utilisateurs u ON u.id = pcr.requested_by '
+            . 'WHERE pcr.parent_id = :parent_id AND pcr.school_id = :school_id '
+            . 'AND pcr.status = \'pending\' AND e.parent_id IS NULL '
+            . 'ORDER BY pcr.created_at DESC, pcr.id DESC'
+        );
+        $stmt->execute([':parent_id' => $parentId, ':school_id' => $ecoleId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function respondToChildAssignmentRequest(
+        int $requestId,
+        int $parentId,
+        int $ecoleId,
+        string $decision
+    ): void {
+        if ($requestId <= 0 || $parentId <= 0 || $ecoleId <= 0 || !in_array($decision, ['accepted', 'rejected'], true)) {
+            throw new \DomainException('La réponse à cette demande est invalide.');
+        }
+        self::ensureChildRequestsTable();
+
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        try {
+            $requestStmt = $db->prepare(
+                'SELECT id, student_id FROM parent_child_requests '
+                . 'WHERE id = :request_id AND parent_id = :parent_id AND school_id = :school_id '
+                . 'AND status = \'pending\' LIMIT 1 FOR UPDATE'
+            );
+            $requestStmt->execute([
+                ':request_id' => $requestId,
+                ':parent_id' => $parentId,
+                ':school_id' => $ecoleId,
+            ]);
+            $request = $requestStmt->fetch(PDO::FETCH_ASSOC);
+            if (!$request) {
+                throw new \DomainException('Cette demande n’est plus disponible.');
+            }
+
+            if ($decision === 'accepted') {
+                $studentStmt = $db->prepare(
+                    'UPDATE eleves SET parent_id = :parent_id '
+                    . 'WHERE id = :student_id AND parent_id IS NULL '
+                    . 'AND (ecole_id = :student_school OR EXISTS ('
+                    . 'SELECT 1 FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id '
+                    . 'WHERE i.eleve_id = eleves.id AND c.ecole_id = :class_school))'
+                );
+                $studentStmt->execute([
+                    ':parent_id' => $parentId,
+                    ':student_id' => (int) $request['student_id'],
+                    ':student_school' => $ecoleId,
+                    ':class_school' => $ecoleId,
+                ]);
+                if ($studentStmt->rowCount() !== 1) {
+                    throw new \DomainException('Cet élève est déjà rattaché ou n’appartient plus à cette école.');
+                }
+            }
+
+            $update = $db->prepare(
+                'UPDATE parent_child_requests SET status = :status, responded_at = CURRENT_TIMESTAMP '
+                . 'WHERE id = :request_id AND status = \'pending\''
+            );
+            $update->execute([':status' => $decision, ':request_id' => $requestId]);
+            if ($update->rowCount() !== 1) {
+                throw new \DomainException('Cette demande a déjà reçu une réponse.');
+            }
+
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    private static function ensureChildRequestsTable(): void
+    {
+        if (self::$childRequestsTableReady) {
+            return;
+        }
+
+        Database::getConnection()->exec(
+            'CREATE TABLE IF NOT EXISTS parent_child_requests (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                parent_id INT NOT NULL,
+                student_id INT NOT NULL,
+                school_id INT NOT NULL,
+                requested_by INT NOT NULL,
+                status ENUM(\'pending\', \'accepted\', \'rejected\') NOT NULL DEFAULT \'pending\',
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                responded_at TIMESTAMP NULL DEFAULT NULL,
+                KEY idx_parent_child_request_parent (parent_id, status, created_at),
+                KEY idx_parent_child_request_student (student_id, status),
+                KEY idx_parent_child_request_school (school_id, status)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+        );
+        self::$childRequestsTableReady = true;
+    }
+
     public static function getAll(): array
     {
         $db = Database::getConnection();
@@ -115,18 +393,28 @@ class ParentModel
     public static function getChildren(int $parentId, ?int $ecoleId = null, ?int $sectionId = null): array
     {
         $db = Database::getConnection();
-        $classScope = $sectionId !== null
-            ? ' AND c.ecole_id = :class_school AND c.section_id = :class_section'
-            : '';
+        $classScope = $ecoleId !== null ? ' AND c.ecole_id = :class_school' : '';
+        $optionClassScope = $ecoleId !== null ? ' AND c.ecole_id = :option_class_school' : '';
+        if ($sectionId !== null) {
+            $classScope .= ' AND c.section_id = :class_section';
+            $optionClassScope .= ' AND c.section_id = :option_class_section';
+        }
         $sql =
             'SELECT e.id, e.matricule, e.nom, e.postnom, e.prenom, e.statut_eleve, '
             . '(SELECT c.nom_classe FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id '
-            . 'WHERE i.eleve_id = e.id' . $classScope . ' ORDER BY i.date_inscription DESC, i.id DESC LIMIT 1) AS nom_classe '
+            . 'WHERE i.eleve_id = e.id' . $classScope . ' ORDER BY i.date_inscription DESC, i.id DESC LIMIT 1) AS nom_classe, '
+            . '(SELECT o.nom_option FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id '
+            . 'LEFT JOIN options o ON o.id = c.option_id '
+            . 'WHERE i.eleve_id = e.id' . $optionClassScope . ' ORDER BY i.date_inscription DESC, i.id DESC LIMIT 1) AS nom_option '
             . 'FROM eleves e WHERE e.parent_id = :parent_id';
         $params = [':parent_id' => $parentId];
-        if ($sectionId !== null) {
+        if ($ecoleId !== null) {
             $params[':class_school'] = (int) $ecoleId;
+            $params[':option_class_school'] = (int) $ecoleId;
+        }
+        if ($sectionId !== null) {
             $params[':class_section'] = $sectionId;
+            $params[':option_class_section'] = $sectionId;
         }
         if ($ecoleId !== null) {
             $sql .= ' AND EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id '

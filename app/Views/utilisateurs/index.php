@@ -8,8 +8,59 @@ $pageStyles = <<<STYLE
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
 <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.dataTables.min.css">
 <style>
-  .chart-card { min-height: 360px; }
-  .dataTables_wrapper .dt-buttons { margin-bottom: 1rem; }
+  .users-page .chart-card { min-height: 360px; }
+  .users-page .users-grid-card { overflow: hidden; border: 0; box-shadow: 0 2px 12px rgba(31, 41, 55, .08); }
+  .users-page .users-grid-card > .card-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; padding: 1rem 1.25rem; }
+  .users-page .users-grid-card .card-title { font-weight: 600; }
+  .users-page .users-grid-card .user-count { border-radius: 999px; font-size: .75rem; }
+  .users-page .users-grid-card > .card-body { padding: 0; }
+  .users-page .users-table-shell { overflow-x: auto; }
+  .users-page .dataTables_wrapper { padding: 1rem 1.25rem; }
+  .users-page .users-grid-toolbar,
+  .users-page .users-grid-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem 1rem; }
+  .users-page .users-grid-toolbar { margin-bottom: 1rem; }
+  .users-page .users-grid-table { overflow: hidden; border: 1px solid var(--border, rgba(0, 0, 0, .08)); border-radius: .65rem; }
+  .users-page table.users-data-table { min-width: 1050px; margin: 0 !important; border-collapse: separate; border-spacing: 0; }
+  .users-page .users-data-table thead th { padding: .85rem .75rem; border-bottom: 1px solid var(--border, rgba(0, 0, 0, .08)); background: var(--surface-muted, #f8f9fb); color: var(--text-muted, #6c757d); font-size: .72rem; font-weight: 700; letter-spacing: .045em; text-transform: uppercase; white-space: nowrap; }
+  .users-page .users-data-table tbody td { padding: .8rem .75rem; border-bottom: 1px solid var(--border, rgba(0, 0, 0, .06)); vertical-align: middle; }
+  .users-page .users-data-table tbody tr:last-child td { border-bottom: 0; }
+  .users-page .users-data-table tbody tr:hover { background: rgba(13, 110, 253, .035); }
+  .users-page .users-data-table th:nth-child(1),
+  .users-page .users-data-table td:nth-child(1) { width: 4.5rem; color: var(--text-muted, #6c757d); font-variant-numeric: tabular-nums; }
+  .users-page .users-data-table th:nth-child(6),
+  .users-page .users-data-table td:nth-child(6) { width: 5rem; text-align: center; }
+  .users-page .users-data-table td:nth-child(3) { min-width: 12rem; overflow-wrap: anywhere; }
+  .users-page .users-data-table th:last-child,
+  .users-page .users-data-table td:last-child { min-width: 24rem; }
+  .users-page .users-data-table .img-thumbnail { width: 2.75rem; height: 2.75rem; padding: .15rem; border-radius: .65rem; object-fit: cover; }
+  .users-page .user-access-form { min-width: 22rem; }
+  .users-page .dt-buttons { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .users-page .dt-buttons .dt-button { margin: 0; padding: .4rem .7rem; border: 1px solid #d5deea; border-radius: .4rem; background: var(--surface, #fff); color: var(--text, #1f2937); font-size: .8125rem; }
+  .users-page .dt-buttons .dt-button:hover { border-color: #0d6efd; background: rgba(13, 110, 253, .06); color: #0d6efd; }
+  .users-page .dataTables_filter label,
+  .users-page .dataTables_length label { display: inline-flex; align-items: center; gap: .5rem; margin: 0; color: var(--text-muted, #6c757d); font-size: .875rem; }
+  .users-page .dataTables_filter input,
+  .users-page .dataTables_length select { min-height: 2.25rem; padding: .35rem .65rem; border: 1px solid #d5deea; border-radius: .4rem; background: var(--surface, #fff); color: var(--text, #1f2937); }
+  .users-page .dataTables_filter input { min-width: min(18rem, 55vw); margin-left: 0 !important; }
+  .users-page .users-grid-footer { margin-top: 1rem; color: var(--text-muted, #6c757d); font-size: .8125rem; }
+  .users-page .dataTables_paginate .paginate_button { margin: 0 .1rem; padding: .35rem .65rem !important; border: 1px solid transparent !important; border-radius: .4rem; }
+  .users-page .dataTables_paginate .paginate_button.current { border-color: #cfe2ff !important; background: #eaf2ff !important; color: #0d6efd !important; }
+  [data-theme="dark"] .users-page .users-data-table thead th { background: var(--surface-muted, #172232); }
+  [data-theme="dark"] .users-page .users-grid-table { border-color: rgba(255, 255, 255, .12); }
+  [data-theme="dark"] .users-page .users-data-table tbody tr:hover { background: rgba(96, 165, 250, .08); }
+  [data-theme="dark"] .users-page .dt-buttons .dt-button { border-color: rgba(255, 255, 255, .16); }
+  @media (max-width: 767.98px) {
+    .users-page .dataTables_wrapper { padding: .75rem; }
+    .users-page .users-grid-toolbar,
+    .users-page .users-grid-footer { align-items: stretch; }
+    .users-page .users-grid-toolbar > *,
+    .users-page .users-grid-footer > * { width: 100%; }
+    .users-page .dt-buttons { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .users-page .dt-buttons .dt-button { padding-inline: .35rem; text-align: center; }
+    .users-page .dataTables_filter label { display: flex; flex-wrap: wrap; }
+    .users-page .dataTables_filter input { width: 100%; min-width: 0; }
+    .users-page .dataTables_paginate { align-self: center; }
+  }
 </style>
 STYLE;
 
@@ -69,23 +120,34 @@ $pageScripts = <<<SCRIPT
     const tableIds = ['#allUsersTable', '#inactiveUsersTable', '#unassignedUsersTable'];
     tableIds.forEach(function (selector) {
       const table = document.querySelector(selector);
-      if (!table) return;
-      $(selector).DataTable({
-        dom: 'Bfrtip',
+      if (!table || !window.jQuery || !jQuery.fn.DataTable) return;
+      const isAccountTable = selector === '#allUsersTable';
+      window.jQuery(selector).DataTable({
+        dom: '<"users-grid-toolbar"Bf><"users-grid-table"t><"users-grid-footer"lip>',
         buttons: [
-          { extend: 'excelHtml5', text: 'Excel' },
-          { extend: 'pdfHtml5', text: 'PDF' },
-          { extend: 'print', text: 'Imprimer' }
+          { extend: 'excelHtml5', text: '<i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Excel', className: 'users-export-button', title: 'Utilisateurs KC_SMA' },
+          { extend: 'pdfHtml5', text: '<i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>PDF', className: 'users-export-button', title: 'Utilisateurs KC_SMA' },
+          { extend: 'print', text: '<i class="bi bi-printer me-1" aria-hidden="true"></i>Imprimer', className: 'users-export-button', title: 'Utilisateurs KC_SMA' }
         ],
-        responsive: true,
+        autoWidth: false,
+        scrollX: true,
         pageLength: 10,
         lengthMenu: [[5, 10, 25, 50], [5, 10, 25, 50]],
+        order: [[1, 'asc']],
+        columnDefs: isAccountTable
+          ? [
+            { targets: [5, 8], orderable: false, searchable: false },
+            { targets: [0], type: 'num' }
+          ]
+          : [{ targets: [0], type: 'num' }],
         language: {
-          search: 'Filtrer :',
-          lengthMenu: 'Afficher _MENU_ enregistrements',
-          info: 'Affichage de _START_ à _END_ sur _TOTAL_ enregistrements',
-          infoEmpty: 'Aucun enregistrement disponible',
-          zeroRecords: 'Aucun résultat trouvé',
+          search: 'Rechercher',
+          searchPlaceholder: 'Nom, identifiant, rôle…',
+          lengthMenu: '_MENU_ lignes',
+          info: '_START_–_END_ sur _TOTAL_ utilisateurs',
+          infoEmpty: 'Aucun utilisateur disponible',
+          emptyTable: 'Aucun utilisateur disponible.',
+          zeroRecords: 'Aucun utilisateur ne correspond à la recherche.',
           paginate: { first: 'Premier', previous: 'Précédent', next: 'Suivant', last: 'Dernier' },
           buttons: { excel: 'Excel', pdf: 'PDF', print: 'Imprimer' }
         }
@@ -124,7 +186,7 @@ SCRIPT;
 
 <?php require __DIR__ . '/../partials/app_header.php'; ?>
 
-<section class="content-header">
+<section class="content-header users-page">
   <div class="container-fluid">
     <?php if (!empty($_SESSION['utilisateurs_success'])): ?>
       <div class="alert alert-success"><?= htmlspecialchars($_SESSION['utilisateurs_success']) ?></div>
@@ -200,7 +262,7 @@ SCRIPT;
   </div>
 </section>
 
-<section class="content">
+<section class="content users-page">
   <div class="container-fluid">
     <div class="row mb-4">
       <div class="col-md-3">
@@ -237,27 +299,28 @@ SCRIPT;
       </div>
     </div>
 
-    <div class="card mb-4">
+    <div class="card mb-4 users-grid-card">
       <div class="card-header">
-        <h3 class="card-title"><?= ($role ?? '') === 'super_admin' ? 'Comptes de la plateforme' : 'Comptes de votre école' ?></h3>
+        <h3 class="card-title mb-0"><?= ($role ?? '') === 'super_admin' ? 'Comptes de la plateforme' : 'Comptes de votre école' ?></h3>
+        <span class="badge bg-light text-secondary user-count"><?= count($allUsers ?? []) ?> compte<?= count($allUsers ?? []) === 1 ? '' : 's' ?></span>
       </div>
       <div class="card-body">
         <?php if (empty($allUsers)): ?>
           <div class="alert alert-info">Aucun utilisateur disponible.</div>
         <?php else: ?>
-          <div class="table-responsive">
-            <table id="allUsersTable" class="table table-striped table-hover align-middle">
+          <div class="users-table-shell">
+            <table id="allUsersTable" class="table table-striped table-hover align-middle users-data-table" aria-label="Liste des comptes utilisateurs">
               <thead>
                 <tr>
-                  <th>#</th>
-                  <th>Nom</th>
-                  <th>Identifiant</th>
-                  <th>Rôle</th>
-                  <th>École</th>
-                  <th>Logo</th>
-                  <th>Statut</th>
-                  <th>Type</th>
-                  <th>Action</th>
+                  <th scope="col" data-grid-sort-type="number">ID</th>
+                  <th scope="col">Nom</th>
+                  <th scope="col">Identifiant</th>
+                  <th scope="col">Rôle</th>
+                  <th scope="col">École</th>
+                  <th scope="col" data-grid-sort="off">Logo</th>
+                  <th scope="col">Statut</th>
+                  <th scope="col">Type</th>
+                  <th scope="col" data-grid-sort="off">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -272,7 +335,7 @@ SCRIPT;
                       <?php $schoolLogo = $schoolDetailsById[(int) ($account['ecole_id'] ?? 0)]['logo_url'] ?? ''; ?>
                       <?php if (!empty($schoolLogo)): ?>
                         <?php $logoSrc = $schoolLogo; if (strpos($logoSrc, 'http') !== 0) { $logoSrc = BASE_URL . '/' . ltrim($logoSrc, '/'); } ?>
-                        <img src="<?= htmlspecialchars($logoSrc) ?>" alt="Logo école" class="img-thumbnail" style="width:48px;height:48px;object-fit:cover;">
+                        <img src="<?= htmlspecialchars($logoSrc) ?>" alt="Logo école" class="img-thumbnail">
                       <?php else: ?>
                         <span class="text-muted">—</span>
                       <?php endif; ?>

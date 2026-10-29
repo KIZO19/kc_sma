@@ -57,7 +57,7 @@ class SchoolItemDelivery
                         WHERE pe.eleve_id = d.eleve_id AND pe.frais_id = d.frais_id
                     ), 0) AS total_legacy_paye,
                     e.matricule, e.nom, e.postnom, e.prenom,
-                    c.nom_classe, sec.nom_section,
+                    c.nom_classe, o.nom_option, sec.nom_section,
                     f.type_frais, f.devise,
                     l.date_livraison, l.livre_par_user_id,
                     u.nom_complet AS livre_par_nom
@@ -74,6 +74,7 @@ class SchoolItemDelivery
                  ORDER BY latest.date_inscription DESC, latest.id DESC LIMIT 1
              )
              INNER JOIN classes c ON c.id = i.classe_id AND c.ecole_id = :class_school
+             LEFT JOIN options o ON o.id = c.option_id
              LEFT JOIN sections sec ON sec.id = c.section_id
              LEFT JOIN livraisons_objets_scolaires l
                ON l.ecole_id = :delivery_school
@@ -83,7 +84,7 @@ class SchoolItemDelivery
              WHERE d.annee_scolaire_id = :debt_year
              GROUP BY d.eleve_id, d.frais_id, d.annee_scolaire_id,
                       e.matricule, e.nom, e.postnom, e.prenom,
-                      c.nom_classe, sec.nom_section, f.type_frais, f.devise,
+                      c.nom_classe, o.nom_option, sec.nom_section, f.type_frais, f.devise,
                       l.date_livraison, l.livre_par_user_id, u.nom_complet
              HAVING GREATEST(total_ledger_paye, total_legacy_paye) >= MAX(d.montant_initial) - 0.005
              ORDER BY l.date_livraison IS NULL DESC, c.nom_classe ASC,

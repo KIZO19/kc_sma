@@ -4,7 +4,9 @@ namespace App\Controllers;
 
 use App\Core\Auth;
 use App\Core\Controller;
+use App\Models\PasswordReset;
 use App\Models\User;
+use App\Services\PasswordResetMailer;
 
 class AuthController extends Controller
 {
@@ -158,24 +160,133 @@ class AuthController extends Controller
     public function forgotPassword(): void
     {
         Auth::requireGuest();
+        $csrfToken = $this->getPasswordResetCsrfToken();
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $identifiant = trim($_POST['identifiant'] ?? '');
-            $message = 'Si cet identifiant existe, un lien de réinitialisation a été envoyé.';
+            $postedToken = (string) ($_POST['csrf_token'] ?? '');
+            if ($postedToken === '' || !hash_equals($csrfToken, $postedToken)) {
+                $this->view('auth/forgot', [
+                    'title' => APP_NAME,
+                    'error' => 'Le formulaire a expiré. Rechargez la page et réessayez.',
+                    'csrfToken' => $csrfToken,
+                ]);
+                return;
+            }
 
-            if ($identifiant !== '' && User::findByIdentifiant($identifiant)) {
-                $message = 'Un lien de réinitialisation a été envoyé à votre adresse si elle est enregistrée.';
+            $identifiant = trim((string) ($_POST['identifiant'] ?? ''));
+            $message = 'Si un compte correspond aux coordonnées fournies, un lien de réinitialisation sera envoyé à son adresse courriel.';
+            $error = null;
+
+            try {
+                if (!PasswordResetMailer::isConfigured()) {
+                    $error = 'Le service de récupération est momentanément indisponible. Veuillez réessayer plus tard.';
+                } else {
+                    $account = $this->isRecoveryIdentifier($identifiant)
+                        ? PasswordReset::findAccountByRecoveryIdentifier($identifiant)
+                        : null;
+                    $remoteAddress = (string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+
+                    if (PasswordReset::recordRequest($remoteAddress, isset($account['id']) ? (int) $account['id'] : null) && $account !== null) {
+                        $email = trim((string) ($account['recovery_email'] ?? ''));
+                        if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                            $token = PasswordReset::createToken((int) $account['id']);
+                            try {
+                                PasswordResetMailer::sendResetLink($email, (string) $account['nom_complet'], $token);
+                            } catch (\RuntimeException $exception) {
+                                PasswordReset::revokeToken($token);
+                                error_log('Password reset email delivery failed: ' . $exception->getMessage());
+                                $error = 'Le service de récupération est momentanément indisponible. Veuillez réessayer plus tard.';
+                            }
+                        }
+                    }
+                }
+            } catch (\PDOException|\RuntimeException $exception) {
+                error_log('Password reset request failed: ' . $exception->getMessage());
+                $error = 'Le service de récupération est momentanément indisponible. Veuillez réessayer plus tard.';
             }
 
             $this->view('auth/forgot', [
                 'title' => APP_NAME,
-                'message' => $message,
+                'message' => $error === null ? $message : '',
+                'error' => $error,
                 'identifiant' => $identifiant,
+                'csrfToken' => $this->rotatePasswordResetCsrfToken(),
             ]);
             return;
         }
 
-        $this->view('auth/forgot', ['title' => APP_NAME]);
+        $this->view('auth/forgot', ['title' => APP_NAME, 'csrfToken' => $csrfToken]);
+    }
+
+    public function resetPassword(): void
+    {
+        Auth::requireGuest();
+        header('Cache-Control: no-store, private');
+        header('Referrer-Policy: no-referrer');
+        $csrfToken = $this->getPasswordResetCsrfToken();
+        $token = trim((string) ($_POST['token'] ?? $_GET['token'] ?? ''));
+        $errors = [];
+        $message = null;
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $postedToken = (string) ($_POST['csrf_token'] ?? '');
+            if ($postedToken === '' || !hash_equals($csrfToken, $postedToken)) {
+                $errors[] = 'Le formulaire a expiré. Rechargez la page et réessayez.';
+            } else {
+                $password = (string) ($_POST['mot_de_passe'] ?? '');
+                $passwordConfirm = (string) ($_POST['mot_de_passe_confirm'] ?? '');
+
+                if (strlen($password) < 8) {
+                    $errors[] = 'Le mot de passe doit contenir au moins 8 caractères.';
+                }
+                if ($password !== $passwordConfirm) {
+                    $errors[] = 'Les mots de passe ne correspondent pas.';
+                }
+                if (!$errors && !PasswordReset::resetPassword($token, password_hash($password, PASSWORD_DEFAULT))) {
+                    $errors[] = 'Ce lien est invalide ou a expiré. Demandez un nouveau lien de réinitialisation.';
+                    $token = '';
+                }
+                if (!$errors) {
+                    $message = 'Votre mot de passe a été modifié. Vous pouvez maintenant vous connecter.';
+                    $token = '';
+                }
+            }
+        } elseif (!PasswordReset::isTokenValid($token)) {
+            $errors[] = 'Ce lien est invalide ou a expiré. Demandez un nouveau lien de réinitialisation.';
+            $token = '';
+        }
+
+        $this->view('auth/reset_password', [
+            'title' => APP_NAME,
+            'csrfToken' => $this->rotatePasswordResetCsrfToken(),
+            'token' => $token,
+            'errors' => $errors,
+            'message' => $message,
+        ]);
+    }
+
+    private function getPasswordResetCsrfToken(): string
+    {
+        if (empty($_SESSION['password_reset_csrf'])) {
+            $_SESSION['password_reset_csrf'] = bin2hex(random_bytes(32));
+        }
+
+        return (string) $_SESSION['password_reset_csrf'];
+    }
+
+    private function rotatePasswordResetCsrfToken(): string
+    {
+        $_SESSION['password_reset_csrf'] = bin2hex(random_bytes(32));
+        return (string) $_SESSION['password_reset_csrf'];
+    }
+
+    private function isRecoveryIdentifier(string $identifier): bool
+    {
+        if (filter_var($identifier, FILTER_VALIDATE_EMAIL)) {
+            return true;
+        }
+
+        return (bool) preg_match('/^\+?[0-9][0-9\s().-]{5,24}$/', $identifier);
     }
 
     public function logout(): void

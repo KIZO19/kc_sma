@@ -57,3 +57,13 @@ define('PAYMENT_TWILIO_ACCOUNT_SID', $paymentConfig('PAYMENT_TWILIO_ACCOUNT_SID'
 define('PAYMENT_TWILIO_AUTH_TOKEN', $paymentConfig('PAYMENT_TWILIO_AUTH_TOKEN'));
 define('PAYMENT_TWILIO_SMS_FROM', $paymentConfig('PAYMENT_TWILIO_SMS_FROM'));
 define('PAYMENT_TWILIO_WHATSAPP_FROM', $paymentConfig('PAYMENT_TWILIO_WHATSAPP_FROM'));
+
+// SMTP settings for account recovery emails
+define('APP_PUBLIC_URL', rtrim($paymentConfig('APP_PUBLIC_URL'), '/'));
+define('MAIL_SMTP_HOST', $paymentConfig('MAIL_SMTP_HOST'));
+define('MAIL_SMTP_PORT', (int) $paymentConfig('MAIL_SMTP_PORT', '587'));
+define('MAIL_SMTP_USERNAME', $paymentConfig('MAIL_SMTP_USERNAME'));
+define('MAIL_SMTP_PASSWORD', $paymentConfig('MAIL_SMTP_PASSWORD'));
+define('MAIL_SMTP_ENCRYPTION', strtolower($paymentConfig('MAIL_SMTP_ENCRYPTION', 'tls')));
+define('MAIL_FROM_ADDRESS', $paymentConfig('MAIL_FROM_ADDRESS'));
+define('MAIL_FROM_NAME', $paymentConfig('MAIL_FROM_NAME', APP_NAME));

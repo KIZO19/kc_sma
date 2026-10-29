@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Core\Auth;
 use App\Core\Controller;
+use App\Models\Eleve;
 use App\Models\User;
 
 class PaiementsEnfantController extends Controller
@@ -11,22 +12,25 @@ class PaiementsEnfantController extends Controller
     public function index(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['parent_ecole']);
+        Auth::requireRoles(['parent_ecole', 'parent_école']);
 
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
-        $modules = $this->getModulesForRole($role);
 
-        $this->view('pages/page', [
+        $this->view('paiements_enfant/index', [
             'title' => APP_NAME . ' - Paiements enfant',
             'user' => $user,
             'role' => $role,
             'roleLabel' => User::getRoleLabel($role),
-            'modules' => $modules,
-            'pageTitle' => 'Paiements enfant',
-            'pageDescription' => 'Suivez les paiements effectués pour votre enfant.',
-            'pageContent' => 'Détails financiers de votre enfant.',
-            'pageNotes' => 'Accessible aux parents uniquement.',
+            'modules' => $this->getModulesForRole($role),
+            'children' => Eleve::getChildrenForParent(
+                (int) ($user['reference_id'] ?? 0),
+                (int) ($user['ecole_id'] ?? 0)
+            ),
+            'paymentsByChild' => Eleve::getPaymentsForParent(
+                (int) ($user['reference_id'] ?? 0),
+                (int) ($user['ecole_id'] ?? 0)
+            ),
         ]);
     }
 }

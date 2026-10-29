@@ -19,7 +19,13 @@ $formatFinancialText = static function (array $financial, string $key) use ($for
 <section class="content-header">
   <div class="container-fluid">
     <h1>Dérogations</h1>
-    <p class="text-muted mb-0">Les autorités de section peuvent demander une protection temporaire; elle ne prend effet qu’après validation du comptable.</p>
+    <p class="text-muted mb-0">
+      <?php if (!empty($isParent)): ?>
+        Vous pouvez demander une protection temporaire pour votre enfant. La dérogation ne prend effet qu’après validation du comptable.
+      <?php else: ?>
+        Les autorités de section peuvent demander une protection temporaire; elle ne prend effet qu’après validation du comptable.
+      <?php endif; ?>
+    </p>
   </div>
 </section>
 <section class="content">
@@ -37,9 +43,10 @@ $formatFinancialText = static function (array $financial, string $key) use ($for
 
     <?php if (!empty($canRequest)): ?>
       <div class="card card-outline card-primary mb-4">
-        <div class="card-header"><h3 class="card-title">Nouvelle demande</h3></div>
+        <div class="card-header"><h3 class="card-title"><?= !empty($isParent) ? 'Demander une dérogation pour mon enfant' : 'Nouvelle demande' ?></h3></div>
         <div class="card-body">
           <form method="post" action="<?= BASE_URL ?>/derogations/request" class="row g-3">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) ($requestCsrfToken ?? ''), ENT_QUOTES, 'UTF-8') ?>">
             <div class="col-12 col-lg-4">
               <label class="form-label" for="derogationEleve">Élève à protéger</label>
               <select class="form-select" id="derogationEleve" name="eleve_id" required>
@@ -61,7 +68,7 @@ $formatFinancialText = static function (array $financial, string $key) use ($for
               <label class="form-label" for="derogationMotif">Motif</label>
               <textarea class="form-control" id="derogationMotif" name="motif" rows="2" maxlength="500" required></textarea>
             </div>
-            <div class="col-12 text-end"><button class="btn btn-primary" type="submit"><i class="bi bi-send me-1"></i>Demander la dérogation</button></div>
+            <div class="col-12 text-end"><button class="btn btn-primary" type="submit"><i class="bi bi-send me-1"></i><?= !empty($isParent) ? 'Envoyer ma demande' : 'Demander la dérogation' ?></button></div>
           </form>
         </div>
       </div>

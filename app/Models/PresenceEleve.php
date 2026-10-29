@@ -13,9 +13,10 @@ class PresenceEleve
             return [];
         }
 
-        $sql = 'SELECT DISTINCT c.id, c.ecole_id, c.nom_classe, e.nom_etablissement
+        $sql = 'SELECT DISTINCT c.id, c.ecole_id, c.nom_classe, o.nom_option, e.nom_etablissement
                 FROM classes c
                 INNER JOIN ecoles e ON e.id = c.ecole_id
+                LEFT JOIN options o ON o.id = c.option_id
                 WHERE EXISTS (
                     SELECT 1 FROM annees_scolaires a
                     WHERE a.ecole_id = c.ecole_id AND a.est_active = 1

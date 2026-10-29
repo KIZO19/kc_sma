@@ -27,7 +27,7 @@
             <table class="table table-sm">
               <tr><th>Type</th><td><?= htmlspecialchars($fee['type_frais'] ?? '-') ?></td></tr>
               <tr><th>Montant</th><td><?= number_format((float) ($fee['montant_total'] ?? 0), 2) ?> <?= htmlspecialchars($fee['devise'] ?? '') ?></td></tr>
-              <tr><th>Classe / portée</th><td><?= htmlspecialchars($fee['scope_label'] ?? ($fee['nom_classe'] ?? '-')) ?></td></tr>
+              <tr><th>Classe / portée</th><td><?= htmlspecialchars($fee['scope_label'] ?? (($fee['nom_classe'] ?? '-') . (!empty($fee['class_option_name']) ? ' · ' . $fee['class_option_name'] : ''))) ?></td></tr>
               <tr><th>Année scolaire</th><td><?= htmlspecialchars($fee['annee_scolaire'] ?? '-') ?></td></tr>
             </table>
           </div>
