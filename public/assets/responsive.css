@@ -1,0 +1,186 @@
+html {
+  width: 100%;
+  min-width: 320px;
+  overflow-x: clip;
+}
+
+body {
+  width: 100%;
+  min-width: 320px;
+  overflow-x: clip;
+}
+
+img,
+svg,
+video,
+canvas,
+iframe {
+  max-width: 100%;
+}
+
+.container-fluid,
+.row,
+.row > *,
+.card,
+.card-body,
+.content-wrapper,
+.app-wrapper {
+  min-width: 0;
+}
+
+.table-responsive {
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+input,
+select,
+textarea,
+.form-control,
+.form-select {
+  max-width: 100%;
+}
+
+.content-header .breadcrumb {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 767.98px) {
+  .app-sidebar {
+    width: min(84vw, 320px);
+    height: 100vh;
+    height: 100dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .app-sidebar .nav-sidebar .nav-link p,
+  .app-sidebar .user-panel .info {
+    display: block;
+  }
+
+  .content-wrapper {
+    width: 100%;
+    max-width: 100%;
+    margin-left: 0 !important;
+    padding: .5rem;
+  }
+
+  .content-wrapper > .content,
+  .content-wrapper > .content-header {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .content-header .row {
+    row-gap: .5rem;
+  }
+
+  .content-header .breadcrumb {
+    float: none !important;
+    margin: 0;
+  }
+
+  .app-header .container-fluid {
+    flex-wrap: nowrap;
+    padding-left: .5rem;
+    padding-right: .5rem;
+  }
+
+  .app-header .navbar-nav {
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+
+  .app-header .navbar-nav .nav-link {
+    padding-left: .4rem;
+    padding-right: .4rem;
+  }
+
+  .app-header .navbar-search {
+    position: absolute;
+    inset: 100% .5rem auto;
+    z-index: 2;
+    padding: .5rem;
+    background: var(--navbar, #fff);
+    box-shadow: 0 .4rem .8rem rgba(0, 0, 0, .12);
+  }
+
+  .app-header .navbar-search form {
+    width: 100%;
+  }
+
+  .app-header .navbar-search .form-control {
+    min-width: 0;
+  }
+
+  .card-header,
+  .card-footer {
+    flex-wrap: wrap;
+    gap: .5rem;
+  }
+
+  .card-header .card-title {
+    white-space: normal;
+  }
+
+  .btn {
+    white-space: normal;
+  }
+
+  .d-flex.flex-wrap > .form-control,
+  .d-flex.flex-wrap > .form-select {
+    flex: 1 1 12rem;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .content-wrapper {
+    padding: .35rem;
+  }
+
+  .content-header {
+    padding-top: .75rem;
+    padding-bottom: .5rem;
+  }
+
+  .content-header h1 {
+    font-size: 1.35rem;
+    overflow-wrap: anywhere;
+  }
+
+  .card {
+    margin-bottom: .75rem;
+  }
+
+  .card-body {
+    padding: .85rem;
+  }
+
+  .table-responsive > table {
+    white-space: nowrap;
+  }
+
+  .app-datagrid-toolbar .app-grid-info {
+    white-space: normal;
+  }
+
+  .login-page {
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: 1rem .5rem;
+  }
+
+  body.login-page .login-box {
+    width: min(100%, 26.25rem);
+    margin: 0 auto;
+  }
+
+  #pwaInstallButton {
+    right: .75rem !important;
+    bottom: calc(.75rem + env(safe-area-inset-bottom)) !important;
+    max-width: calc(100vw - 1.5rem);
+  }
+}

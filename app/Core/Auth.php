@@ -78,10 +78,60 @@ class Auth
         return isset($user['ecole_id']) && $user['ecole_id'] !== null ? (int) $user['ecole_id'] : null;
     }
 
+    public static function getSchoolSlug(): ?string
+    {
+        $ecoleId = self::getSchoolId();
+        if ($ecoleId === null || $ecoleId <= 0) {
+            return null;
+        }
+
+        static $schoolSlugs = [];
+        if (isset($schoolSlugs[$ecoleId])) {
+            return $schoolSlugs[$ecoleId];
+        }
+
+        $school = \App\Models\Ecole::findById($ecoleId);
+        $schoolName = trim((string) ($school['nom_etablissement'] ?? ''));
+        $transliteratedName = function_exists('iconv')
+            ? iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $schoolName)
+            : $schoolName;
+        $schoolNameSlug = strtolower((string) ($transliteratedName === false ? '' : $transliteratedName));
+        $schoolNameSlug = preg_replace('/[^a-z0-9]+/', '-', $schoolNameSlug) ?? '';
+        $schoolNameSlug = trim($schoolNameSlug, '-');
+        $schoolSlug = ($schoolNameSlug !== '' ? $schoolNameSlug : 'ecole') . '-ecole-' . $ecoleId;
+
+        $schoolSlugs[$ecoleId] = $schoolSlug;
+        return $schoolSlug;
+    }
+
+    public static function getApplicationBasePath(): string
+    {
+        $basePath = parse_url(BASE_URL, PHP_URL_PATH) ?: '';
+        $applicationPath = dirname(rtrim($basePath, '/'));
+
+        return $applicationPath === '/' || $applicationPath === '.'
+            ? ''
+            : rtrim($applicationPath, '/');
+    }
+
+    public static function getSchoolRouteBaseUrl(): ?string
+    {
+        $schoolSlug = self::getSchoolSlug();
+        if ($schoolSlug === null) {
+            return null;
+        }
+
+        return self::getApplicationBasePath() . '/' . $schoolSlug;
+    }
+
     public static function requireSchoolScope(int $ecoleId): void
     {
         if (self::guest()) {
             self::requireAuth();
+            return;
+        }
+
+        if ((self::user()['role'] ?? '') === 'super_admin') {
             return;
         }
 

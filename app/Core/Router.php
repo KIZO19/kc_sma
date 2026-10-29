@@ -6,15 +6,60 @@ class Router
 {
     public function dispatch(): void
     {
-        $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?? '/';
-        $basePath = parse_url(BASE_URL, PHP_URL_PATH) ?: '';
+        $requestUri = $_SERVER['REQUEST_URI'] ?? '/';
+        $uri = parse_url($requestUri, PHP_URL_PATH) ?? '/';
+        $applicationBasePath = Auth::getApplicationBasePath();
 
-        if ($basePath !== '' && strpos($uri, $basePath) === 0) {
-            $uri = substr($uri, strlen($basePath));
+        if (
+            $applicationBasePath !== ''
+            && strpos($uri, $applicationBasePath . '/') === 0
+        ) {
+            $uri = substr($uri, strlen($applicationBasePath));
         }
 
         $uri = $uri === '' ? '/' : $uri;
         $segments = array_values(array_filter(explode('/', trim($uri, '/'))));
+        $schoolSlug = Auth::getSchoolSlug();
+        $hasLegacyPublicPrefix = ($segments[0] ?? null) === 'public';
+        if ($hasLegacyPublicPrefix) {
+            array_shift($segments);
+        }
+
+        $requestedSchoolSlug = null;
+        if (preg_match('/^[a-z0-9-]+-ecole-\d+$/', $segments[0] ?? '')) {
+            $requestedSchoolSlug = array_shift($segments);
+        }
+        $hasSchoolPrefix = $schoolSlug !== null && $requestedSchoolSlug === $schoolSlug;
+        $uri = empty($segments) ? '/' : '/' . implode('/', $segments);
+
+        if ($hasSchoolPrefix) {
+            if ($hasLegacyPublicPrefix) {
+                $query = parse_url($requestUri, PHP_URL_QUERY);
+                $targetUrl = Auth::getSchoolRouteBaseUrl() . $uri;
+                if ($query !== null && $query !== '') {
+                    $targetUrl .= '?' . $query;
+                }
+
+                header('Location: ' . $targetUrl);
+                exit;
+            }
+
+            $_SERVER['REQUEST_URI'] = BASE_URL . $uri
+                . (($query = parse_url($requestUri, PHP_URL_QUERY)) !== null ? '?' . $query : '');
+        } elseif (
+            $schoolSlug !== null
+            && in_array($_SERVER['REQUEST_METHOD'] ?? 'GET', ['GET', 'HEAD'], true)
+        ) {
+            $targetPath = $uri === '/' ? '/dashboard' : $uri;
+            $query = parse_url($requestUri, PHP_URL_QUERY);
+            $targetUrl = Auth::getSchoolRouteBaseUrl() . $targetPath;
+            if ($query !== null && $query !== '') {
+                $targetUrl .= '?' . $query;
+            }
+
+            header('Location: ' . $targetUrl);
+            exit;
+        }
 
         $defaultController = 'Home';
         $defaultAction = 'index';

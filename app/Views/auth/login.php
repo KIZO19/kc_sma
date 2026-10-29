@@ -8,12 +8,18 @@ $identifiant = $identifiant ?? '';
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#172230">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="KC_SMA">
+  <link rel="manifest" href="<?= BASE_URL ?>/assets/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="<?= BASE_URL ?>/assets/icons/kc-sma-192.png">
   <title>Connexion - <?= htmlspecialchars($title) ?></title>
   <link rel="icon" href="<?= BASE_URL ?>/assets/favicon.ico" type="image/x-icon">
   <link rel="alternate icon" href="<?= BASE_URL ?>/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" crossorigin="anonymous">
   <link rel="stylesheet" href="<?= BASE_URL ?>/assets/adminlte.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css" crossorigin="anonymous">
+  <link rel="stylesheet" href="<?= BASE_URL ?>/assets/responsive.css">
   <style>
     body { background: #f4f7fb; }
     .login-box { width: 420px; margin: 6% auto; }
@@ -90,5 +96,6 @@ $identifiant = $identifiant ?? '';
     });
   });
 </script>
+<script src="<?= BASE_URL ?>/assets/pwa-install.js" defer></script>
 </body>
 </html>

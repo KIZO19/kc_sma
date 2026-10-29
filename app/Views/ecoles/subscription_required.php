@@ -42,10 +42,10 @@
 
             <?php if (($role ?? '') === 'ecole_admin'): ?>
               <a href="<?= BASE_URL ?>/ecoles/subscriptions" class="btn btn-primary me-2">
-                <i class="bi bi-card-checklist me-1" aria-hidden="true"></i>Suivre l’abonnement et faire une demande
+                <i class="bi bi-card-checklist me-1" aria-hidden="true"></i>Consulter l’abonnement
               </a>
             <?php else: ?>
-              <p class="small text-muted">Contactez l’administrateur de votre école pour qu’il soumette une demande d’abonnement ou de renouvellement.</p>
+              <p class="small text-muted">Contactez l’administrateur de votre école ou le super-administrateur pour connaître le statut de l’abonnement.</p>
             <?php endif; ?>
             <a href="<?= BASE_URL ?>/logout" class="btn btn-outline-secondary">
               <i class="bi bi-box-arrow-right me-1" aria-hidden="true"></i>Déconnexion

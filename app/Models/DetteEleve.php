@@ -146,9 +146,16 @@ class DetteEleve
     {
         $result = [];
         foreach (self::getOutstandingFeeDetails($eleveId) as $fee) {
-            $currency = $fee['devise'];
-            $result[$currency] = ($result[$currency] ?? 0.0) + $fee['montant_restant'];
+            $currency = strtoupper(trim((string) ($fee['devise'] ?? 'USD'))) ?: 'USD';
+            $remaining = max(0.0, (float) ($fee['montant_restant'] ?? 0));
+            if ($remaining <= 0) {
+                continue;
+            }
+
+            $result[$currency] = round(($result[$currency] ?? 0.0) + $remaining, 2);
         }
+
+        ksort($result);
         return $result;
     }
 

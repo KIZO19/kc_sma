@@ -8,6 +8,14 @@
     RewriteRule ^ index.php [L,QSA]
 </IfModule>
 
+<IfModule mod_mime.c>
+    AddType application/manifest+json .webmanifest
+</IfModule>
+
+<IfModule mod_headers.c>
+    Header set Service-Worker-Allowed "/kc_sma/"
+</IfModule>
+
 <IfModule mod_authz_core.c>
     <FilesMatch "^\.(env|gitignore|htaccess|htpasswd)$">
         Require all denied

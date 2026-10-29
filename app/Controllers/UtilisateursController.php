@@ -126,6 +126,13 @@ class UtilisateursController extends Controller
                 }
             }
         }
+        $manageableSchoolRoles = array_filter(
+            Roles::list(),
+            static fn (string $role): bool =>
+                in_array($role, User::getSchoolScopedRoles(), true)
+                && !in_array($role, ['ecole_admin', 'promoteur_école'], true),
+            ARRAY_FILTER_USE_KEY
+        );
 
         $this->view('utilisateurs/index', [
             'title' => APP_NAME . ' - Utilisateurs',
@@ -145,6 +152,7 @@ class UtilisateursController extends Controller
             'currentSchoolLogoUrl' => $currentSchoolLogoUrl,
             'isLocalAdmin' => !$isSuperAdmin,
             'availableRoles' => Roles::list(),
+            'manageableSchoolRoles' => $manageableSchoolRoles,
             'accountCsrfToken' => $_SESSION['user_account_csrf'],
         ]);
     }
@@ -267,9 +275,11 @@ class UtilisateursController extends Controller
     public function updateAccess(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['super_admin']);
+        Auth::requireRoles(['super_admin', 'ecole_admin']);
 
-        $currentUser = Auth::user();
+        $currentUser = Auth::refresh() ?: Auth::user();
+        $isSchoolAdmin = ($currentUser['role'] ?? '') === 'ecole_admin';
+        $currentSchoolId = (int) ($currentUser['ecole_id'] ?? 0);
         $userId = (int) ($_POST['user_id'] ?? 0);
         $role = (string) ($_POST['role'] ?? '');
         $statut = (string) ($_POST['statut'] ?? '');
@@ -277,6 +287,13 @@ class UtilisateursController extends Controller
         $sectionId = (int) ($_POST['section_id'] ?? 0);
         $targetUser = $userId > 0 ? User::findById($userId) : null;
         $errors = [];
+        $postedToken = (string) ($_POST['csrf_token'] ?? '');
+        $expectedToken = (string) ($_SESSION['user_account_csrf'] ?? '');
+        if ($postedToken === '' || $expectedToken === '' || !hash_equals($expectedToken, $postedToken)) {
+            $_SESSION['utilisateurs_errors'] = ['Votre session a expiré. Rechargez la page puis réessayez.'];
+            $this->redirect('/utilisateurs');
+            return;
+        }
 
         if (!$targetUser) {
             $errors[] = 'Utilisateur introuvable.';
@@ -284,7 +301,27 @@ class UtilisateursController extends Controller
             $errors[] = 'Vous ne pouvez pas modifier vos propres accès depuis cette page.';
         }
 
-        if (!array_key_exists($role, Roles::list())) {
+        if ($isSchoolAdmin) {
+            $manageableRoles = array_keys(array_filter(
+                Roles::list(),
+                static fn (string $candidateRole): bool =>
+                    in_array($candidateRole, User::getSchoolScopedRoles(), true)
+                    && !in_array($candidateRole, ['ecole_admin', 'promoteur_école'], true),
+                ARRAY_FILTER_USE_KEY
+            ));
+            if (
+                $currentSchoolId <= 0
+                || !$targetUser
+                || (int) ($targetUser['ecole_id'] ?? 0) !== $currentSchoolId
+                || in_array($targetUser['role'] ?? '', ['ecole_admin', 'promoteur_école'], true)
+            ) {
+                $errors[] = 'Vous ne pouvez gérer que les comptes rattachés à votre école, hors administrateurs et promoteurs.';
+            }
+            if (!in_array($role, $manageableRoles, true)) {
+                $errors[] = 'Le rôle sélectionné ne peut pas être attribué par un administrateur d’école.';
+            }
+            $ecoleId = $currentSchoolId;
+        } elseif (!array_key_exists($role, Roles::list())) {
             $errors[] = 'Rôle invalide.';
         }
         if (!in_array($statut, ['Actif', 'Inactif'], true)) {
@@ -292,13 +329,13 @@ class UtilisateursController extends Controller
         }
 
         $schoolScoped = in_array($role, User::getSchoolScopedRoles(), true);
-        if ($role === 'super_admin') {
+        if (!$isSchoolAdmin && $role === 'super_admin') {
             $ecoleId = null;
         } elseif ($schoolScoped && $role !== 'agent_ecole' && $ecoleId <= 0) {
             $errors[] = 'Une école est obligatoire pour ce rôle.';
-        } elseif ($ecoleId > 0 && !Ecole::findById($ecoleId)) {
+        } elseif (!$isSchoolAdmin && $ecoleId > 0 && !Ecole::findById($ecoleId)) {
             $errors[] = 'École invalide.';
-        } elseif (!$schoolScoped) {
+        } elseif (!$isSchoolAdmin && !$schoolScoped) {
             $ecoleId = null;
         }
 
@@ -327,7 +364,8 @@ class UtilisateursController extends Controller
             )
         ) {
             if (
-                ($targetUser['role'] ?? '') === 'ecole_admin'
+                $isSchoolAdmin
+                || ($targetUser['role'] ?? '') === 'ecole_admin'
                 || $role === 'ecole_admin'
             ) {
                 $previousSchool = !empty($targetUser['ecole_id'])

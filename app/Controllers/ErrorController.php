@@ -31,10 +31,16 @@ class ErrorController extends Controller
 
     public function accessDenied(): void
     {
-        http_response_code(403);
         Auth::requireAuth();
 
         $user = Auth::refresh() ?: Auth::user();
+        if (($user['role'] ?? '') === 'super_admin') {
+            $routeBaseUrl = Auth::getSchoolRouteBaseUrl() ?? BASE_URL;
+            header('Location: ' . $routeBaseUrl . '/dashboard');
+            exit;
+        }
+
+        http_response_code(403);
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
 

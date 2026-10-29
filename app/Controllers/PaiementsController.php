@@ -1282,14 +1282,6 @@ class PaiementsController extends Controller
             exit;
         }
 
-        // Fetch the latest compte for this élève to display solde / dette
-        $compte = null;
-        try {
-            $compte = Eleve::getAccount((int) ($data['eleve_id'] ?? 0));
-        } catch (\Throwable $e) {
-            $compte = null;
-        }
-
         // Determine school name for this élève (fallback to APP_NAME)
         $ecoleName = APP_NAME;
         $ecoleLogo = null;
@@ -1327,43 +1319,9 @@ class PaiementsController extends Controller
             $ecoleName = APP_NAME;
         }
 
-        // Calculate debt remaining according to the student’s applicable fees.
-        $reste = null;
-        $resteParFrais = null;
-        try {
-            $eleveId = (int) ($data['eleve_id'] ?? 0);
-            $fraisId = !empty($data['frais_id']) ? (int) $data['frais_id'] : 0;
-
-            if ($eleveId > 0) {
-                $reste = DetteEleve::getTotalOutstandingByEleve($eleveId);
-            }
-
-            if ($eleveId > 0 && $fraisId > 0) {
-                $dette = DetteEleve::findByEleveAndFrais($eleveId, $fraisId);
-                if ($dette) {
-                    $resteParFrais = (float) ($dette['montant_restant'] ?? 0);
-                } else {
-                    $fee = \App\Models\FraisScolaire::findById($fraisId);
-                    $feeTotal = $fee ? (float) ($fee['montant_total'] ?? 0) : 0.0;
-                    $stmtPaid = $db->prepare('SELECT SUM(ece.montant) AS paid FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id WHERE ce.eleve_id = :eleve AND ece.frais_id = :frais AND ece.type_mouvement = :type');
-                    $stmtPaid->execute([':eleve' => $eleveId, ':frais' => $fraisId, ':type' => 'CREDIT']);
-                    $paid1 = (float) ($stmtPaid->fetchColumn() ?: 0);
-
-                    $stmtPaid2 = $db->prepare('SELECT SUM(pe.montant_paye) AS paid FROM paiements_eleves pe WHERE pe.eleve_id = :eleve AND pe.frais_id = :frais');
-                    $stmtPaid2->execute([':eleve' => $eleveId, ':frais' => $fraisId]);
-                    $paid2 = (float) ($stmtPaid2->fetchColumn() ?: 0);
-
-                    $resteParFrais = max(0.0, $feeTotal - max($paid1, $paid2));
-                }
-
-                if ($resteParFrais !== null) {
-                    $reste = $resteParFrais;
-                }
-            }
-        } catch (\Throwable $e) {
-            $reste = null;
-            $resteParFrais = null;
-        }
+        $eleveId = (int) ($data['eleve_id'] ?? 0);
+        $totalPayeParDevise = $this->fetchTotalPaidByCurrency($user, $eleveId);
+        $resteParDevise = DetteEleve::computeOutstandingFromApplicableFees($eleveId);
 
         $this->view('paiements/receipt', [
             'title' => $ecoleName . ' - Reçu paiement',
@@ -1372,11 +1330,10 @@ class PaiementsController extends Controller
             'roleLabel' => User::getRoleLabel($user['role'] ?? 'default'),
             'modules' => $this->getModulesForRole($user['role'] ?? 'default'),
             'ecriture' => $data,
-            'compte' => $compte,
             'ecole_name' => $ecoleName,
             'ecole_logo' => $ecoleLogo,
-            'reste_a_payer' => $reste,
-            'reste_par_frais' => $resteParFrais,
+            'total_paye_par_devise' => $totalPayeParDevise,
+            'reste_a_payer_par_devise' => $resteParDevise,
         ]);
     }
 

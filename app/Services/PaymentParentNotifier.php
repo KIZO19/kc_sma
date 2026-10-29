@@ -358,7 +358,7 @@ class PaymentParentNotifier
                     ? 'Les notifications SMS et WhatsApp sont désactivées pour cette école.'
                     : 'Aucun canal de notification autorisé et configuré.',
                 'details' => $reason === 'school_notifications_disabled'
-                    ? 'Le super-administrateur doit autoriser au moins un canal pour cette école.'
+                    ? 'L’administrateur de l’école doit activer un canal autorisé par le super-administrateur.'
                     : 'Vérifiez les canaux autorisés pour l’école et la configuration du fournisseur.',
             ];
         }

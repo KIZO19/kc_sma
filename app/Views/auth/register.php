@@ -12,6 +12,7 @@ $old = $old ?? [];
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" crossorigin="anonymous">
   <link rel="stylesheet" href="<?= BASE_URL ?>/assets/adminlte.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css" crossorigin="anonymous">
+  <link rel="stylesheet" href="<?= BASE_URL ?>/assets/responsive.css">
   <style>
     body { background: #f4f7fb; }
     .login-box { width: 420px; margin: 4% auto; }

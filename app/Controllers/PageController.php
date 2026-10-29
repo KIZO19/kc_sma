@@ -241,10 +241,10 @@ class PageController extends Controller
             ],
         ];
 
-        $accessible = true;
-        if ($route !== '' && isset($accessMap[$route]) && !in_array($role, $accessMap[$route], true)) {
-            $accessible = false;
-        }
+        $accessible = $role === 'super_admin'
+            || $route === ''
+            || !isset($accessMap[$route])
+            || in_array($role, $accessMap[$route], true);
 
         if (isset($pages[$route])) {
             $page = $pages[$route];

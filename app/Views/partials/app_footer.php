@@ -272,5 +272,6 @@
     });
   </script>
   <?= $pageScripts ?? '' ?>
+  <script src="<?= BASE_URL ?>/assets/pwa-install.js" defer></script>
 </body>
 </html>

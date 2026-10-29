@@ -60,7 +60,37 @@ class Controller
             throw new \RuntimeException('View not found: ' . $view);
         }
 
+        $schoolRouteBaseUrl = Auth::getSchoolRouteBaseUrl();
+        if ($schoolRouteBaseUrl === null) {
+            require $viewFile;
+            return;
+        }
+
+        ob_start();
         require $viewFile;
+        $html = ob_get_clean();
+        if ($html === false) {
+            throw new \RuntimeException('Unable to render view: ' . $view);
+        }
+
+        $baseUrlPattern = '~' . preg_quote(BASE_URL, '~') . '(/[^"\'\s<>]*)?~';
+        $prefixedHtml = preg_replace_callback(
+            $baseUrlPattern,
+            static function (array $matches) use ($schoolRouteBaseUrl): string {
+                $path = $matches[1] ?? '';
+                if (preg_match('~^/(?:assets|uploads|vendor)(?:/|$)~i', $path)) {
+                    return $matches[0];
+                }
+
+                return $schoolRouteBaseUrl . $path;
+            },
+            $html
+        );
+        if ($prefixedHtml === null) {
+            throw new \RuntimeException('Unable to prefix school URLs in view: ' . $view);
+        }
+
+        echo $prefixedHtml;
     }
 
     protected function resolvePageTitle(string $title, ?array $user = null): string
@@ -90,7 +120,8 @@ class Controller
 
     protected function redirect(string $path): void
     {
-        header('Location: ' . BASE_URL . $path);
+        $routeBaseUrl = Auth::getSchoolRouteBaseUrl() ?? BASE_URL;
+        header('Location: ' . $routeBaseUrl . $path);
         exit;
     }
 
@@ -113,8 +144,8 @@ class Controller
 
         $modules = match ($role) {
             'ecole_admin' => [
-                ['name' => 'École', 'path' => '/ecoles', 'icon' => 'bi-building'],
-                ['name' => 'Paramètres école', 'path' => '/ecoles', 'icon' => 'bi-gear'],
+                ['name' => 'Paramètres école', 'path' => '/ecoles/settings', 'icon' => 'bi-gear'],
+                ['name' => 'Accès utilisateurs', 'path' => '/utilisateurs', 'icon' => 'bi-person-check'],
                 ['name' => 'Mon abonnement', 'path' => '/ecoles/subscriptions', 'icon' => 'bi-card-checklist'],
                 ['name' => 'Autorisations paiements', 'path' => '/paiements/gestionAutorisations', 'icon' => 'bi-shield-check'],
                 ['name' => 'Agents', 'path' => '/agents', 'icon' => 'bi-people-fill'],

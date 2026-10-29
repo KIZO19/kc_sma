@@ -5,7 +5,7 @@
       <div>
         <h1><?= empty($isSuperAdmin) ? 'Mon abonnement' : 'Gestion des abonnements' ?></h1>
         <p class="text-muted mb-0"><?= empty($isSuperAdmin)
-            ? 'Suivez l’abonnement de votre école et transmettez une demande au super-administrateur.'
+            ? 'Consultez l’état et l’historique de l’abonnement de votre école.'
             : 'Consultez les abonnements, traitez les demandes des écoles et gérez les accès.' ?></p>
       </div>
       <?php if (!empty($isSuperAdmin)): ?>
@@ -69,44 +69,9 @@
         </div>
       </div>
 
-      <?php if (!$hasPendingRequest): ?>
-        <div class="card">
-          <div class="card-header"><h2 class="card-title">Demander un abonnement ou un renouvellement</h2></div>
-          <form method="post" action="<?= BASE_URL ?>/ecoles/submitSubscriptionRequest">
-            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) ($csrfToken ?? ''), ENT_QUOTES, 'UTF-8') ?>">
-            <div class="card-body">
-              <div class="row g-3">
-                <div class="col-md-4">
-                  <label for="subscriptionRequestType" class="form-label">Type de demande</label>
-                  <select id="subscriptionRequestType" name="type_demande" class="form-select" required>
-                    <option value="nouvel_abonnement" <?= $latestSubscription ? '' : 'selected' ?>>Nouvel abonnement</option>
-                    <option value="renouvellement" <?= $latestSubscription ? 'selected' : '' ?>>Renouvellement</option>
-                  </select>
-                </div>
-                <div class="col-md-8">
-                  <label for="subscriptionRequestPlan" class="form-label">Tarif souhaité</label>
-                  <select id="subscriptionRequestPlan" name="plan_id" class="form-select" required>
-                    <option value="">Choisir un tarif</option>
-                    <?php foreach (($plans ?? []) as $plan): ?>
-                      <option value="<?= (int) $plan['id'] ?>">
-                        <?= htmlspecialchars((string) $plan['nom_plan'], ENT_QUOTES, 'UTF-8') ?> —
-                        <?= htmlspecialchars((string) $plan['duree_mois'], ENT_QUOTES, 'UTF-8') ?> mois,
-                        <?= htmlspecialchars(number_format((float) $plan['prix'], 2, ',', ' '), ENT_QUOTES, 'UTF-8') ?> USD
-                      </option>
-                    <?php endforeach; ?>
-                  </select>
-                </div>
-                <div class="col-12">
-                  <label for="subscriptionRequestMessage" class="form-label">Message au super-administrateur (facultatif)</label>
-                  <textarea id="subscriptionRequestMessage" name="message" class="form-control" rows="3" maxlength="1000"></textarea>
-                </div>
-              </div>
-              <p class="small text-muted mt-3 mb-0">La demande sera examinée par le super-administrateur. Aucun accès ne sera activé avant son approbation.</p>
-            </div>
-            <div class="card-footer text-end"><button type="submit" class="btn btn-primary"><i class="bi bi-send me-1" aria-hidden="true"></i>Envoyer la demande</button></div>
-          </form>
-        </div>
-      <?php endif; ?>
+      <div class="alert alert-info">
+        Cette page est en lecture seule. Pour modifier ou renouveler l’abonnement, veuillez contacter le super-administrateur.
+      </div>
 
       <div class="card">
         <div class="card-header"><h2 class="card-title">Historique des demandes</h2></div>

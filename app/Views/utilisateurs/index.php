@@ -296,6 +296,7 @@ SCRIPT;
                         <a href="<?= BASE_URL ?>/utilisateurs/editAccount?id=<?= (int) $account['id'] ?>" class="btn btn-sm btn-outline-secondary mb-2">Modifier les informations</a>
                         <form method="post" action="<?= BASE_URL ?>/utilisateurs/update-access" class="d-flex flex-wrap gap-2 align-items-center user-access-form">
                           <input type="hidden" name="user_id" value="<?= (int) $account['id'] ?>">
+                          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) ($accountCsrfToken ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                           <select name="role" class="form-select form-select-sm" required>
                             <?php foreach (($availableRoles ?? []) as $roleKey => $roleName): ?>
                               <option value="<?= htmlspecialchars($roleKey) ?>" <?= (($account['role'] ?? '') === $roleKey) ? 'selected' : '' ?>><?= htmlspecialchars($roleName) ?></option>
@@ -336,6 +337,40 @@ SCRIPT;
                             <?php endforeach; ?>
                           </select>
                           <button type="submit" class="btn btn-sm btn-primary">Lier</button>
+                        </form>
+                      <?php elseif (
+                          ($role ?? '') === 'ecole_admin'
+                          && (int) ($account['ecole_id'] ?? 0) === (int) ($user['ecole_id'] ?? 0)
+                          && (int) ($account['id'] ?? 0) !== (int) ($user['id'] ?? 0)
+                          && !in_array($account['role'] ?? '', ['ecole_admin', 'promoteur_école'], true)
+                      ): ?>
+                        <a href="<?= BASE_URL ?>/utilisateurs/editAccount?id=<?= (int) $account['id'] ?>" class="btn btn-sm btn-outline-secondary mb-2">Modifier les informations</a>
+                        <form method="post" action="<?= BASE_URL ?>/utilisateurs/update-access" class="d-flex flex-wrap gap-2 align-items-center user-access-form">
+                          <input type="hidden" name="user_id" value="<?= (int) $account['id'] ?>">
+                          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) ($accountCsrfToken ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                          <select name="role" class="form-select form-select-sm" required>
+                            <?php foreach (($manageableSchoolRoles ?? []) as $roleKey => $roleName): ?>
+                              <option value="<?= htmlspecialchars($roleKey, ENT_QUOTES, 'UTF-8') ?>" <?= (($account['role'] ?? '') === $roleKey) ? 'selected' : '' ?>><?= htmlspecialchars($roleName, ENT_QUOTES, 'UTF-8') ?></option>
+                            <?php endforeach; ?>
+                          </select>
+                          <div class="user-section-field" hidden>
+                            <select name="section_id" class="form-select form-select-sm" aria-label="Section affectée à ce compte" disabled>
+                              <option value="">Choisir une section</option>
+                              <?php foreach (($sections ?? []) as $section): ?>
+                                <option
+                                  value="<?= (int) $section['id'] ?>"
+                                  data-section-name="<?= htmlspecialchars(mb_strtolower(trim((string) $section['nom_section']), 'UTF-8'), ENT_QUOTES, 'UTF-8') ?>"
+                                  <?= (int) ($account['section_id'] ?? 0) === (int) $section['id'] ? 'selected' : '' ?>>
+                                  <?= htmlspecialchars($section['nom_section'], ENT_QUOTES, 'UTF-8') ?>
+                                </option>
+                              <?php endforeach; ?>
+                            </select>
+                          </div>
+                          <select name="statut" class="form-select form-select-sm" required>
+                            <option value="Actif" <?= (($account['statut'] ?? '') === 'Actif') ? 'selected' : '' ?>>Actif</option>
+                            <option value="Inactif" <?= (($account['statut'] ?? '') === 'Inactif') ? 'selected' : '' ?>>Inactif</option>
+                          </select>
+                          <button type="submit" class="btn btn-sm btn-primary">Modifier les accès</button>
                         </form>
                       <?php elseif (($role ?? '') === 'ecole_admin' && (int) ($account['ecole_id'] ?? 0) === (int) ($user['ecole_id'] ?? 0)): ?>
                         <a href="<?= BASE_URL ?>/utilisateurs/editAccount?id=<?= (int) $account['id'] ?>" class="btn btn-sm btn-outline-primary">Modifier les informations</a>

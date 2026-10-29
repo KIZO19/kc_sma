@@ -40,6 +40,11 @@
   }
   ?>
   <title><?= htmlspecialchars($title) ?></title>
+  <meta name="theme-color" content="#172230">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="<?= htmlspecialchars(APP_NAME) ?>">
+  <link rel="manifest" href="<?= BASE_URL ?>/assets/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="<?= BASE_URL ?>/assets/icons/kc-sma-192.png">
   <link rel="icon" href="<?= htmlspecialchars($faviconUrl) ?>" type="<?= htmlspecialchars($faviconMime) ?>">
   <link rel="shortcut icon" href="<?= htmlspecialchars($faviconUrl) ?>" type="<?= htmlspecialchars($faviconMime) ?>">
   <link rel="apple-touch-icon" href="<?= htmlspecialchars($faviconUrl) ?>">
@@ -48,6 +53,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css" crossorigin="anonymous">
   <link rel="stylesheet" href="<?= BASE_URL ?>/assets/app-datagrid.css">
   <?= $pageStyles ?? '' ?>
+  <link rel="stylesheet" href="<?= BASE_URL ?>/assets/responsive.css">
   <style>
     :root {
       color-scheme: light;
@@ -215,8 +221,6 @@
       .brand-text { display: none; }
       /* mobile: sidebar hidden by default, slides in as overlay */
       .app-sidebar { width: 220px; transform: translateX(-100%); position: fixed; left: 0; top: 0; bottom: 0; z-index: 1050; transition: transform .25s ease; }
-      .app-sidebar .nav-sidebar .nav-link p { display: none; }
-      .app-sidebar .user-panel .info { display: none; }
       body.sidebar-open .app-sidebar { transform: translateX(0); }
       .sidebar-backdrop { display: none; }
       body.sidebar-open .sidebar-backdrop { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1040; }
