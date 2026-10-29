@@ -6,6 +6,7 @@ use App\Core\Auth;
 use App\Core\Controller;
 use App\Entities\Roles;
 use App\Models\Ecole;
+use App\Models\ActivityLog;
 use App\Models\Section;
 use App\Models\User;
 
@@ -19,6 +20,9 @@ class UtilisateursController extends Controller
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
+        if (empty($_SESSION['user_account_csrf'])) {
+            $_SESSION['user_account_csrf'] = bin2hex(random_bytes(32));
+        }
 
         $isSuperAdmin = ($role === 'super_admin');
         $schoolId = Auth::getSchoolId();
@@ -29,7 +33,12 @@ class UtilisateursController extends Controller
             $unassignedUsers = User::getUnassignedPersonalAccounts();
         } else {
             $schoolUsers = User::getUsersBySchool((int) $schoolId);
-            $unassignedUsers = User::getUnassignedPersonalAccounts();
+            $unassignedUsers = array_values(array_filter(
+                User::getUnassignedPersonalAccounts(),
+                static fn (array $pendingUser): bool =>
+                    ($pendingUser['role'] ?? '') === 'agent_ecole'
+                    && ($pendingUser['statut'] ?? '') === 'Inactif'
+            ));
             $allUsers = $schoolUsers;
             foreach ($unassignedUsers as $pendingUser) {
                 $alreadyPresent = false;
@@ -60,8 +69,10 @@ class UtilisateursController extends Controller
                 }
             }
         }
-        $schools = Ecole::getAll();
-        $schoolPopulations = Ecole::getSchoolPopulationCounts();
+        $schools = $isSuperAdmin
+            ? Ecole::getAll()
+            : array_values(array_filter([Ecole::findById((int) $schoolId)]));
+        $schoolPopulations = $isSuperAdmin ? Ecole::getSchoolPopulationCounts() : [];
 
         $summaryStats = [
             'total' => count($allUsers),
@@ -134,7 +145,123 @@ class UtilisateursController extends Controller
             'currentSchoolLogoUrl' => $currentSchoolLogoUrl,
             'isLocalAdmin' => !$isSuperAdmin,
             'availableRoles' => Roles::list(),
+            'accountCsrfToken' => $_SESSION['user_account_csrf'],
         ]);
+    }
+
+    private function getEditableAccount(int $userId, array $currentUser): ?array
+    {
+        if ($userId <= 0) {
+            return null;
+        }
+
+        $account = User::findById($userId);
+        if (!$account) {
+            return null;
+        }
+
+        if (($currentUser['role'] ?? '') === 'super_admin') {
+            return $account;
+        }
+
+        $schoolId = (int) ($currentUser['ecole_id'] ?? 0);
+        return $schoolId > 0 && (int) ($account['ecole_id'] ?? 0) === $schoolId
+            ? $account
+            : null;
+    }
+
+    public function editAccount(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin', 'ecole_admin']);
+        $currentUser = Auth::refresh() ?: Auth::user();
+        $account = $this->getEditableAccount((int) ($_GET['id'] ?? 0), $currentUser);
+        if (!$account) {
+            $this->redirect('/error/accessDenied');
+        }
+
+        $this->view('utilisateurs/edit_account', [
+            'title' => APP_NAME . ' - Modifier le compte',
+            'user' => $currentUser,
+            'role' => $currentUser['role'] ?? 'default',
+            'roleLabel' => User::getRoleLabel($currentUser['role'] ?? 'default'),
+            'modules' => $this->getModulesForRole($currentUser['role'] ?? 'default'),
+            'account' => $account,
+            'csrfToken' => $_SESSION['user_account_csrf'] ?? '',
+        ]);
+    }
+
+    public function updateAccountInfo(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin', 'ecole_admin']);
+        $currentUser = Auth::refresh() ?: Auth::user();
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->redirect('/utilisateurs');
+        }
+
+        $postedToken = (string) ($_POST['csrf_token'] ?? '');
+        if ($postedToken === '' || !hash_equals((string) ($_SESSION['user_account_csrf'] ?? ''), $postedToken)) {
+            $_SESSION['utilisateurs_errors'] = ['Votre session a expiré. Rechargez le formulaire puis réessayez.'];
+            $this->redirect('/utilisateurs');
+        }
+
+        $userId = (int) ($_POST['user_id'] ?? 0);
+        $account = $this->getEditableAccount($userId, $currentUser);
+        if (!$account) {
+            $this->redirect('/error/accessDenied');
+        }
+
+        $name = trim((string) ($_POST['nom_complet'] ?? ''));
+        $identifier = trim((string) ($_POST['identifiant'] ?? ''));
+        $password = (string) ($_POST['mot_de_passe'] ?? '');
+        $passwordConfirm = (string) ($_POST['mot_de_passe_confirm'] ?? '');
+        $errors = [];
+
+        if ($name === '' || mb_strlen($name, 'UTF-8') > 150) {
+            $errors[] = 'Le nom complet est requis et doit contenir au maximum 150 caractères.';
+        }
+        if ($identifier === '' || mb_strlen($identifier, 'UTF-8') > 100) {
+            $errors[] = 'L’identifiant est requis et doit contenir au maximum 100 caractères.';
+        } elseif ($identifier !== (string) ($account['identifiant'] ?? '') && User::existsByIdentifiant($identifier)) {
+            $errors[] = 'Cet identifiant est déjà utilisé.';
+        }
+        if ($password !== '' && strlen($password) < 8) {
+            $errors[] = 'Le nouveau mot de passe doit contenir au moins 8 caractères.';
+        }
+        if ($password !== $passwordConfirm) {
+            $errors[] = 'Les mots de passe ne correspondent pas.';
+        }
+
+        if ($errors) {
+            $_SESSION['utilisateurs_errors'] = $errors;
+            $this->redirect('/utilisateurs/editAccount?id=' . $userId);
+        }
+
+        $data = ['nom_complet' => $name, 'identifiant' => $identifier];
+        if ($password !== '') {
+            $data['mot_de_passe'] = password_hash($password, PASSWORD_DEFAULT);
+        }
+
+        if (User::updateProfile($userId, $data)) {
+            if (($currentUser['role'] ?? '') === 'super_admin' && ($account['role'] ?? '') === 'ecole_admin') {
+                ActivityLog::record(
+                    (int) ($currentUser['id'] ?? 0),
+                    $password !== '' ? 'school_admin_password_reset' : 'school_admin_account_updated',
+                    'user',
+                    $userId,
+                    $name,
+                    $password !== ''
+                        ? 'Mot de passe de l’administrateur d’école réinitialisé.'
+                        : 'Informations du compte administrateur d’école mises à jour.'
+                );
+            }
+            $_SESSION['utilisateurs_success'] = 'Les informations du compte ont été mises à jour.';
+            $this->redirect('/utilisateurs');
+        }
+
+        $_SESSION['utilisateurs_errors'] = ['Impossible de mettre à jour les informations du compte.'];
+        $this->redirect('/utilisateurs/editAccount?id=' . $userId);
     }
 
     public function updateAccess(): void
@@ -199,6 +326,32 @@ class UtilisateursController extends Controller
                 $sectionId > 0 ? $sectionId : null
             )
         ) {
+            if (
+                ($targetUser['role'] ?? '') === 'ecole_admin'
+                || $role === 'ecole_admin'
+            ) {
+                $previousSchool = !empty($targetUser['ecole_id'])
+                    ? Ecole::findById((int) $targetUser['ecole_id'])
+                    : null;
+                $newSchool = $ecoleId > 0 ? Ecole::findById($ecoleId) : null;
+                $description = sprintf(
+                    'Accès modifiés : %s → %s ; statut %s → %s ; école %s → %s.',
+                    User::getRoleLabel((string) ($targetUser['role'] ?? '')),
+                    User::getRoleLabel($role),
+                    (string) ($targetUser['statut'] ?? 'inconnu'),
+                    $statut,
+                    (string) ($previousSchool['nom_etablissement'] ?? 'aucune'),
+                    (string) ($newSchool['nom_etablissement'] ?? 'aucune')
+                );
+                ActivityLog::record(
+                    (int) ($currentUser['id'] ?? 0),
+                    'school_admin_access_changed',
+                    'user',
+                    $userId,
+                    (string) ($targetUser['nom_complet'] ?? 'Compte utilisateur'),
+                    $description
+                );
+            }
             $_SESSION['utilisateurs_success'] = 'Les accès de l’utilisateur ont été mis à jour.';
         } else {
             $_SESSION['utilisateurs_errors'] = $errors ?: ['Impossible de mettre à jour les accès.'];
@@ -214,21 +367,59 @@ class UtilisateursController extends Controller
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $userId = (int) ($_POST['user_id'] ?? 0);
-            $user = $userId > 0 ? User::findById($userId) : null;
             $currentUser = Auth::user();
             $currentSchoolId = (int) ($currentUser['ecole_id'] ?? 0);
+            $user = $userId > 0 ? User::findById($userId) : null;
+            $isSuperAdmin = ($currentUser['role'] ?? '') === 'super_admin';
+            $isSchoolManager = in_array(
+                $currentUser['role'] ?? '',
+                ['ecole_admin', 'promoteur_école'],
+                true
+            );
+            $isPendingUnassignedAgent = $user
+                && ($user['role'] ?? '') === 'agent_ecole'
+                && ($user['statut'] ?? '') === 'Inactif'
+                && (empty($user['ecole_id']) || (int) $user['ecole_id'] === 0);
+            $hasSchoolAssignment = $user && (int) ($user['ecole_id'] ?? 0) > 0;
+            $requiresSchoolAssignment = $user
+                && in_array((string) ($user['role'] ?? ''), User::getSchoolScopedRoles(), true);
+            $belongsToCurrentSchool = $user
+                && $currentSchoolId > 0
+                && (int) ($user['ecole_id'] ?? 0) === $currentSchoolId;
+            $canValidate = $user
+                && ($user['statut'] ?? '') === 'Inactif'
+                && (
+                    ($isSuperAdmin && (!$requiresSchoolAssignment || $hasSchoolAssignment))
+                    || ($isSchoolManager && $currentSchoolId > 0 && ($belongsToCurrentSchool || $isPendingUnassignedAgent))
+                );
 
-            if ($userId > 0 && $user) {
-                $isPendingUnassignedAgent = ($user['role'] ?? '') === 'agent_ecole'
-                    && (($user['statut'] ?? '') === 'Inactif')
-                    && (empty($user['ecole_id']) || (int) $user['ecole_id'] === 0);
-
-                if ($isPendingUnassignedAgent && $currentSchoolId > 0) {
-                    User::assignToSchool($userId, $currentSchoolId);
+            if ($canValidate) {
+                if ($isPendingUnassignedAgent && $isSchoolManager) {
+                    if (!User::assignToSchool($userId, $currentSchoolId)) {
+                        $_SESSION['utilisateurs_errors'] = ['Impossible d’affecter ce compte à votre école.'];
+                        $this->redirect('/utilisateurs');
+                    }
                 }
 
-                User::updateStatus($userId, 'Actif');
+                if (!User::updateStatus($userId, 'Actif')) {
+                    $_SESSION['utilisateurs_errors'] = ['Impossible de valider ce compte utilisateur.'];
+                    $this->redirect('/utilisateurs');
+                }
+                if ($isSuperAdmin && ($user['role'] ?? '') === 'ecole_admin') {
+                    ActivityLog::record(
+                        (int) ($currentUser['id'] ?? 0),
+                        'school_admin_validated',
+                        'user',
+                        $userId,
+                        (string) ($user['nom_complet'] ?? 'Administrateur d’école'),
+                        'Compte administrateur d’école activé.'
+                    );
+                }
                 $_SESSION['utilisateurs_success'] = 'Compte utilisateur validé avec succès.';
+            } else {
+                $_SESSION['utilisateurs_errors'] = [
+                    'Ce compte ne peut pas être validé depuis votre rôle ou votre école.'
+                ];
             }
         }
 
@@ -245,8 +436,23 @@ class UtilisateursController extends Controller
             $ecoleId = (int) ($_POST['ecole_id'] ?? 0);
 
             if ($userId > 0 && $ecoleId > 0) {
-                User::assignToSchool($userId, $ecoleId);
-                $_SESSION['utilisateurs_success'] = 'Compte lié à l’école avec succès.';
+                $account = User::findById($userId);
+                $school = Ecole::findById($ecoleId);
+                if ($account && $school && User::assignToSchool($userId, $ecoleId)) {
+                    if (($account['role'] ?? '') === 'ecole_admin') {
+                        ActivityLog::record(
+                            (int) (Auth::user()['id'] ?? 0),
+                            'school_admin_assigned',
+                            'user',
+                            $userId,
+                            (string) ($account['nom_complet'] ?? 'Administrateur d’école'),
+                            'Compte administrateur associé à l’école ' . (string) $school['nom_etablissement'] . '.'
+                        );
+                    }
+                    $_SESSION['utilisateurs_success'] = 'Compte lié à l’école avec succès.';
+                } else {
+                    $_SESSION['utilisateurs_errors'] = ['Impossible de lier ce compte à l’école sélectionnée.'];
+                }
             }
         }
 

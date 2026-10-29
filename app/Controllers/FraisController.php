@@ -9,6 +9,7 @@ use App\Models\AnneeScolaire;
 use App\Models\Classe;
 use App\Models\FraisScolaire;
 use App\Models\Option;
+use App\Models\SchoolItemDelivery;
 use App\Models\Section;
 use App\Models\User;
 use PDO;
@@ -89,6 +90,314 @@ class FraisController extends Controller
             'oldInput' => $oldInput,
             'suggestedEncodage' => $suggestedEncodage,
         ]);
+    }
+
+    public function articles(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(self::MANAGEMENT_ROLES);
+
+        $user = Auth::refresh() ?: Auth::user();
+        $role = $user['role'] ?? 'default';
+        $this->requireAdministrationModuleAccess($user, 'inscriptions');
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        $activeYear = $ecoleId > 0 ? AnneeScolaire::getActiveBySchool($ecoleId) : null;
+        $allFees = $ecoleId > 0 ? FraisScolaire::getAllBySchool($ecoleId) : [];
+        $schoolFees = array_values(array_filter($allFees, static fn (array $fee): bool =>
+            ($fee['scope'] ?? '') === 'school'
+            && (int) ($fee['annee_scolaire_id'] ?? 0) === (int) ($activeYear['id'] ?? 0)
+        ));
+        $items = array_values(array_filter($schoolFees, static fn (array $fee): bool =>
+            str_starts_with((string) ($fee['encodage'] ?? ''), 'ART-SCOL-')
+        ));
+        $otherSchoolFees = array_values(array_filter($schoolFees, static fn (array $fee): bool =>
+            !str_starts_with((string) ($fee['encodage'] ?? ''), 'ART-SCOL-')
+        ));
+        $editId = (int) ($_GET['id'] ?? 0);
+        $editItem = null;
+        if ($editId > 0) {
+            foreach ($items as $item) {
+                if ((int) $item['id'] === $editId) {
+                    $editItem = $item;
+                    break;
+                }
+            }
+            if ($editItem === null) {
+                $this->redirect('/frais/articles');
+                return;
+            }
+        }
+
+        if (empty($_SESSION['school_items_csrf'])) {
+            $_SESSION['school_items_csrf'] = bin2hex(random_bytes(32));
+        }
+        $school = $ecoleId > 0 ? \App\Models\Ecole::findById($ecoleId) : null;
+        $this->view('frais/school_items', [
+            'title' => APP_NAME . ' - Objets classiques',
+            'user' => $user,
+            'role' => $role,
+            'roleLabel' => User::getRoleLabel($role),
+            'modules' => $this->getModulesForRole($role),
+            'activeYear' => $activeYear,
+            'schoolCurrency' => $school['devise_principale'] ?? 'USD',
+            'items' => $items,
+            'otherSchoolFees' => $otherSchoolFees,
+            'editItem' => $editItem,
+            'csrfToken' => $_SESSION['school_items_csrf'],
+        ]);
+    }
+
+    public function toggleSchoolItem(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(self::MANAGEMENT_ROLES);
+        $user = Auth::refresh() ?: Auth::user();
+        $this->requireAdministrationModuleAccess($user, 'inscriptions');
+        $schoolId = (int) ($user['ecole_id'] ?? 0);
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST' || $schoolId <= 0) {
+            $this->redirect('/frais/articles');
+        }
+
+        $token = (string) ($_POST['csrf_token'] ?? '');
+        if ($token === '' || !hash_equals((string) ($_SESSION['school_items_csrf'] ?? ''), $token)) {
+            $_SESSION['frais_errors'] = ['Votre session a expiré. Rechargez la page puis réessayez.'];
+            $this->redirect('/frais/articles');
+        }
+
+        $feeId = (int) ($_POST['id'] ?? 0);
+        $fee = $feeId > 0 ? FraisScolaire::findByIdAndSchool($feeId, $schoolId) : null;
+        $activeYear = AnneeScolaire::getActiveBySchool($schoolId);
+        if (
+            !$fee
+            || ($fee['scope'] ?? '') !== 'school'
+            || (int) ($fee['annee_scolaire_id'] ?? 0) !== (int) ($activeYear['id'] ?? 0)
+        ) {
+            $_SESSION['frais_errors'] = ['Frais de portée école entière introuvable pour l’année active.'];
+            $this->redirect('/frais/articles');
+        }
+
+        $currentCode = (string) ($fee['encodage'] ?? '');
+        if (str_starts_with($currentCode, 'ART-SCOL-')) {
+            $newCode = substr($currentCode, strlen('ART-SCOL-')) ?: null;
+            $_SESSION['frais_success'] = 'Le frais ne sera plus présenté comme objet classique à l’inscription.';
+        } else {
+            $newCode = 'ART-SCOL-' . strtoupper(bin2hex(random_bytes(6)));
+            $_SESSION['frais_success'] = 'Le frais apparaîtra comme objet classique obligatoire à l’inscription.';
+        }
+
+        $stmt = Database::getConnection()->prepare(
+            'UPDATE frais_scolaires SET encodage = :encodage
+             WHERE id = :id AND ecole_id = :ecole_id AND scope = :scope AND annee_scolaire_id = :year_id'
+        );
+        try {
+            $stmt->execute([
+                ':encodage' => $newCode,
+                ':id' => $feeId,
+                ':ecole_id' => $schoolId,
+                ':scope' => 'school',
+                ':year_id' => (int) $activeYear['id'],
+            ]);
+        } catch (\Throwable $exception) {
+            error_log('FraisController::toggleSchoolItem failed: ' . $exception->getMessage());
+            $_SESSION['frais_errors'] = ['Impossible de modifier la présence de ce frais dans la fiche d’objets classiques.'];
+            unset($_SESSION['frais_success']);
+        }
+
+        $this->redirect('/frais/articles');
+    }
+
+    public function saveSchoolItem(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(self::MANAGEMENT_ROLES);
+        $user = Auth::refresh() ?: Auth::user();
+        $this->requireAdministrationModuleAccess($user, 'inscriptions');
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST' || $ecoleId <= 0) {
+            $this->redirect('/frais/articles');
+        }
+
+        $token = (string) ($_POST['csrf_token'] ?? '');
+        if ($token === '' || !hash_equals((string) ($_SESSION['school_items_csrf'] ?? ''), $token)) {
+            $_SESSION['frais_errors'] = ['Votre session a expiré. Rechargez la page puis réessayez.'];
+            $this->redirect('/frais/articles');
+        }
+
+        $name = trim((string) ($_POST['type_frais'] ?? ''));
+        $amount = trim((string) ($_POST['montant_total'] ?? ''));
+        $id = (int) ($_POST['id'] ?? 0);
+        $activeYear = AnneeScolaire::getActiveBySchool($ecoleId);
+        if ($name === '' || mb_strlen($name, 'UTF-8') > 100) {
+            $_SESSION['frais_errors'] = ['Le nom de l’objet est requis et ne peut dépasser 100 caractères.'];
+            $this->redirect('/frais/articles' . ($id > 0 ? '?id=' . $id : ''));
+        }
+        if ($amount === '' || !is_numeric($amount) || (float) $amount <= 0) {
+            $_SESSION['frais_errors'] = ['Le prix de l’objet doit être supérieur à zéro.'];
+            $this->redirect('/frais/articles' . ($id > 0 ? '?id=' . $id : ''));
+        }
+        if (!$activeYear || empty($activeYear['id'])) {
+            $_SESSION['frais_errors'] = ['Aucune année scolaire active n’est configurée pour cette école.'];
+            $this->redirect('/frais/articles');
+        }
+
+        $fee = null;
+        if ($id > 0) {
+            $fee = FraisScolaire::findByIdAndSchool($id, $ecoleId);
+            if (
+                !$fee
+                || ($fee['scope'] ?? '') !== 'school'
+                || (int) ($fee['annee_scolaire_id'] ?? 0) !== (int) $activeYear['id']
+            ) {
+                $_SESSION['frais_errors'] = ['Objet scolaire introuvable pour cette école.'];
+                $this->redirect('/frais/articles');
+            }
+        }
+
+        $school = \App\Models\Ecole::findById($ecoleId);
+        $data = [
+            'classe_id' => null,
+            'type_frais' => $name,
+            'montant_total' => (float) $amount,
+            'annee_scolaire_id' => (int) $activeYear['id'],
+            'devise' => strtoupper((string) ($school['devise_principale'] ?? 'USD')),
+            'scope' => 'school',
+            'scope_id' => null,
+            'ecole_id' => $ecoleId,
+            'encodage' => $fee['encodage'] ?? ('ART-SCOL-' . strtoupper(bin2hex(random_bytes(6)))),
+        ];
+
+        try {
+            if ($fee) {
+                $saved = FraisScolaire::update($id, $data);
+            } else {
+                $saved = (bool) FraisScolaire::create($data);
+            }
+            if (!$saved) {
+                throw new \RuntimeException('La fiche de l’objet n’a pas pu être enregistrée.');
+            }
+            $_SESSION['frais_success'] = 'Objet scolaire enregistré pour les nouvelles inscriptions.';
+        } catch (\Throwable $exception) {
+            error_log('FraisController::saveSchoolItem failed: ' . $exception->getMessage());
+            $_SESSION['frais_errors'] = ['Impossible d’enregistrer cet objet scolaire. Vérifiez son nom et réessayez.'];
+        }
+
+        $this->redirect('/frais/articles');
+    }
+
+    public function livraisons(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(self::MANAGEMENT_ROLES);
+        $user = Auth::refresh() ?: Auth::user();
+        $schoolId = (int) ($user['ecole_id'] ?? 0);
+        $activeYear = $schoolId > 0 ? AnneeScolaire::getActiveBySchool($schoolId) : null;
+        $items = SchoolItemDelivery::getPurchasedItems($schoolId, (int) ($activeYear['id'] ?? 0));
+
+        if (empty($_SESSION['delivery_report_csrf'])) {
+            $_SESSION['delivery_report_csrf'] = bin2hex(random_bytes(32));
+        }
+        $summary = ['purchased' => count($items), 'delivered' => 0, 'pending' => 0];
+        foreach ($items as $item) {
+            if (!empty($item['date_livraison'])) {
+                $summary['delivered']++;
+            }
+        }
+        $summary['pending'] = $summary['purchased'] - $summary['delivered'];
+
+        $this->view('frais/livraisons', [
+            'title' => APP_NAME . ' - Livraisons des objets',
+            'user' => $user,
+            'role' => $user['role'] ?? 'default',
+            'roleLabel' => User::getRoleLabel($user['role'] ?? 'default'),
+            'modules' => $this->getModulesForRole($user['role'] ?? 'default'),
+            'activeYear' => $activeYear,
+            'items' => $items,
+            'summary' => $summary,
+            'csrfToken' => $_SESSION['delivery_report_csrf'],
+            'success' => (string) ($_SESSION['delivery_report_success'] ?? ''),
+            'error' => (string) ($_SESSION['delivery_report_error'] ?? ''),
+        ]);
+        unset($_SESSION['delivery_report_success'], $_SESSION['delivery_report_error']);
+    }
+
+    public function setDelivery(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(self::MANAGEMENT_ROLES);
+        $user = Auth::refresh() ?: Auth::user();
+        $schoolId = (int) ($user['ecole_id'] ?? 0);
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST' || $schoolId <= 0) {
+            $this->redirect('/frais/livraisons');
+        }
+
+        $token = (string) ($_POST['csrf_token'] ?? '');
+        if ($token === '' || !hash_equals((string) ($_SESSION['delivery_report_csrf'] ?? ''), $token)) {
+            $_SESSION['delivery_report_error'] = 'Votre session a expiré. Rechargez le rapport puis réessayez.';
+            $this->redirect('/frais/livraisons');
+        }
+
+        $activeYear = AnneeScolaire::getActiveBySchool($schoolId);
+        try {
+            SchoolItemDelivery::setDelivered(
+                $schoolId,
+                (int) ($activeYear['id'] ?? 0),
+                (int) ($_POST['eleve_id'] ?? 0),
+                (int) ($_POST['frais_id'] ?? 0),
+                (int) ($user['id'] ?? 0),
+                (string) ($_POST['delivered'] ?? '') === '1'
+            );
+            $_SESSION['delivery_report_success'] = (string) ($_POST['delivered'] ?? '') === '1'
+                ? 'Livraison enregistrée.'
+                : 'Livraison annulée.';
+        } catch (\Throwable $exception) {
+            error_log('FraisController::setDelivery failed: ' . $exception->getMessage());
+            $_SESSION['delivery_report_error'] = $exception instanceof \InvalidArgumentException
+                ? $exception->getMessage()
+                : 'Impossible de mettre à jour la livraison.';
+        }
+
+        $this->redirect('/frais/livraisons');
+    }
+
+    public function exportDeliveries(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(self::MANAGEMENT_ROLES);
+        $user = Auth::refresh() ?: Auth::user();
+        $schoolId = (int) ($user['ecole_id'] ?? 0);
+        $activeYear = $schoolId > 0 ? AnneeScolaire::getActiveBySchool($schoolId) : null;
+        $items = SchoolItemDelivery::getPurchasedItems($schoolId, (int) ($activeYear['id'] ?? 0));
+        $generatedAt = date('d/m/Y à H:i');
+        $data = [
+            'title' => 'Rapport de livraison des objets achetés',
+            'schoolName' => \App\Models\Ecole::findById($schoolId)['nom_etablissement'] ?? APP_NAME,
+            'schoolYear' => $activeYear['annee'] ?? '',
+            'items' => $items,
+            'generatedAt' => $generatedAt,
+        ];
+        $html = $this->renderViewToString('frais/livraisons_pdf', $data);
+        if (class_exists('\\Dompdf\\Dompdf')) {
+            $dompdfClass = '\\Dompdf\\Dompdf';
+            $dompdf = new $dompdfClass();
+            $dompdf->loadHtml($html, 'UTF-8');
+            $dompdf->setPaper('A4', 'landscape');
+            $dompdf->render();
+            header('Content-Type: application/pdf');
+            header('Content-Disposition: attachment; filename="livraisons_objets_' . date('Ymd_His') . '.pdf"');
+            echo $dompdf->output();
+            exit;
+        }
+
+        $data['printFallback'] = true;
+        $this->view('frais/livraisons_pdf', $data);
+    }
+
+    private function renderViewToString(string $view, array $data = []): string
+    {
+        extract($data);
+        ob_start();
+        require dirname(__DIR__) . '/Views/' . $view . '.php';
+        return (string) ob_get_clean();
     }
 
     private function generateUniqueEncodage(int $ecoleId): string

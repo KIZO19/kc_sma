@@ -49,6 +49,7 @@ $fees = $fees ?? [];
               </div>
             </div>
             <div class="col-md-6 text-end mb-2">
+              <a href="<?= BASE_URL ?>/frais/articles" class="btn btn-outline-primary me-2"><i class="bi bi-bag-check me-2"></i>Objets classiques</a>
               <a href="<?= BASE_URL ?>/frais/create" class="btn btn-success"><i class="bi bi-plus-lg me-2"></i>Nouveau frais</a>
             </div>
           </div>

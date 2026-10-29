@@ -65,7 +65,7 @@ class PageController extends Controller
             'bulletins-enfant' => ['parent_ecole'],
             'messages' => ['parent_ecole', 'enseignant_école', 'sec_école', 'ecole_admin'],
             'paiements-enfant' => ['parent_ecole'],
-            'agents' => ['super_admin', 'ecole_admin'],
+            'agents' => ['ecole_admin'],
             'parents' => ['super_admin', 'ecole_admin', 'sec_école'],
             'settings' => ['super_admin', 'ecole_admin'],
         ];

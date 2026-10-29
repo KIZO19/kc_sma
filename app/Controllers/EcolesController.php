@@ -5,7 +5,9 @@ namespace App\Controllers;
 use App\Core\Auth;
 use App\Core\Controller;
 use App\Models\Ecole;
+use App\Models\ActivityLog;
 use App\Models\NotificationAccess;
+use App\Models\SubscriptionRequest;
 use App\Models\User;
 
 class EcolesController extends Controller
@@ -56,7 +58,17 @@ class EcolesController extends Controller
             $status = $_POST['statut_systeme'] ?? 'En_Attente';
 
             if ($id > 0 && in_array($status, ['Actif', 'Suspendu', 'En_Attente'], true)) {
-                Ecole::updateSystemStatus($id, $status);
+                $school = Ecole::findById($id);
+                if ($school && Ecole::updateSystemStatus($id, $status) && ($school['statut_systeme'] ?? '') !== $status) {
+                    ActivityLog::record(
+                        (int) (Auth::user()['id'] ?? 0),
+                        'school_access_changed',
+                        'school',
+                        $id,
+                        (string) $school['nom_etablissement'],
+                        'Accès de l’école modifié : ' . (string) ($school['statut_systeme'] ?? 'inconnu') . ' → ' . $status . '.'
+                    );
+                }
             }
         }
 
@@ -72,7 +84,17 @@ class EcolesController extends Controller
             $id = (int) ($_POST['ecole_id'] ?? 0);
 
             if ($id > 0) {
-                Ecole::updateSystemStatus($id, 'Actif');
+                $school = Ecole::findById($id);
+                if ($school && Ecole::updateSystemStatus($id, 'Actif') && ($school['statut_systeme'] ?? '') !== 'Actif') {
+                    ActivityLog::record(
+                        (int) (Auth::user()['id'] ?? 0),
+                        'school_access_changed',
+                        'school',
+                        $id,
+                        (string) $school['nom_etablissement'],
+                        'École validée et accès activé.'
+                    );
+                }
             }
         }
 
@@ -145,6 +167,14 @@ class EcolesController extends Controller
                 if ($ecoleId === false) {
                     $errors[] = 'Impossible de créer l\'école, réessayez.';
                 } else {
+                    ActivityLog::record(
+                        (int) (Auth::user()['id'] ?? 0),
+                        'school_created',
+                        'school',
+                        (int) $ecoleId,
+                        $nom,
+                        'École créée avec le statut En attente de validation.'
+                    );
                     $existingAdminId = (int) ($_POST['existing_admin_id'] ?? 0);
                     $newAdminName = trim($_POST['admin_nom'] ?? '');
                     $newAdminIdent = trim($_POST['admin_identifiant'] ?? '');
@@ -152,8 +182,18 @@ class EcolesController extends Controller
                     $adminUserId = null;
 
                     if ($existingAdminId > 0) {
-                        \App\Models\User::assignToSchool($existingAdminId, (int) $ecoleId);
-                        $adminUserId = $existingAdminId;
+                        if (\App\Models\User::assignToSchool($existingAdminId, (int) $ecoleId)) {
+                            $adminUserId = $existingAdminId;
+                            $existingAdmin = \App\Models\User::findById($existingAdminId);
+                            ActivityLog::record(
+                                (int) (Auth::user()['id'] ?? 0),
+                                'school_admin_assigned',
+                                'user',
+                                $existingAdminId,
+                                (string) ($existingAdmin['nom_complet'] ?? 'Administrateur d’école'),
+                                'Compte administrateur associé à l’école ' . $nom . '.'
+                            );
+                        }
                     } elseif ($newAdminIdent !== '' && $newAdminName !== '') {
                         if ($newAdminPass === '') {
                             $newAdminPass = bin2hex(random_bytes(4));
@@ -168,6 +208,14 @@ class EcolesController extends Controller
                         ]);
                         if (!empty($user['id'])) {
                             $adminUserId = (int) $user['id'];
+                            ActivityLog::record(
+                                (int) (Auth::user()['id'] ?? 0),
+                                'school_admin_created',
+                                'user',
+                                $adminUserId,
+                                $newAdminName,
+                                'Compte administrateur créé pour l’école ' . $nom . '.'
+                            );
                             $_SESSION['ecoles_create_success'] = 'École créée. Mot de passe temporaire pour l\'admin: ' . $newAdminPass;
                         }
                     }
@@ -255,6 +303,18 @@ class EcolesController extends Controller
             } else {
                 $ok = Ecole::update($id, $data);
                 if ($ok) {
+                    $oldStatus = (string) ($school['statut_systeme'] ?? '');
+                    $newStatus = (string) ($data['statut_systeme'] ?? $oldStatus);
+                    if ($oldStatus !== $newStatus) {
+                        ActivityLog::record(
+                            (int) (Auth::user()['id'] ?? 0),
+                            'school_access_changed',
+                            'school',
+                            $id,
+                            (string) $data['nom_etablissement'],
+                            'Accès de l’école modifié : ' . $oldStatus . ' → ' . $newStatus . '.'
+                        );
+                    }
                     $_SESSION['ecole_edit_success'] = 'École mise à jour.';
                 } else {
                     $_SESSION['ecole_edit_errors'] = ['Erreur lors de la mise à jour.'];
@@ -454,6 +514,9 @@ class EcolesController extends Controller
             $this->redirect('/dashboard');
             return;
         }
+        if (($user['role'] ?? '') === 'ecole_admin' && empty($_SESSION['subscription_request_csrf'])) {
+            $_SESSION['subscription_request_csrf'] = bin2hex(random_bytes(32));
+        }
 
         $this->view('ecoles/subscription_required', [
             'title' => APP_NAME . ' - Accès école suspendu',
@@ -463,6 +526,9 @@ class EcolesController extends Controller
             'modules' => $this->getModulesForRole($user['role'] ?? 'default'),
             'school' => $school,
             'subscription' => $ecoleId > 0 ? Ecole::getLatestSubscription($ecoleId) : null,
+            'subscriptionRequests' => $ecoleId > 0 && ($user['role'] ?? '') === 'ecole_admin'
+                ? SubscriptionRequest::getForSchool($ecoleId)
+                : [],
         ]);
     }
 
@@ -594,6 +660,15 @@ class EcolesController extends Controller
 
             if (empty($errors)) {
                 if (Ecole::addSubscription($ecoleId, $planId, $dateDebut, $dateFin, $amount)) {
+                    $school = Ecole::findById($ecoleId);
+                    ActivityLog::record(
+                        (int) (Auth::user()['id'] ?? 0),
+                        'subscription_added',
+                        'school_subscription',
+                        $ecoleId,
+                        (string) ($school['nom_etablissement'] ?? 'École'),
+                        'Abonnement ' . ($isTrial ? 'd’essai' : 'payant') . ' ajouté du ' . $dateDebut . ' au ' . $dateFin . '.'
+                    );
                     $_SESSION['ecoles_subscription_success'] = $isTrial
                         ? 'Période d’essai gratuite ajoutée avec succès.'
                         : 'Abonnement ajouté avec succès.';
@@ -630,13 +705,44 @@ class EcolesController extends Controller
     public function subscriptions(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['super_admin']);
+        Auth::requireRoles(['super_admin', 'ecole_admin']);
 
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
+        if ($role === 'ecole_admin') {
+            $schoolId = (int) ($user['ecole_id'] ?? 0);
+            if ($schoolId <= 0) {
+                $this->redirect('/error/accessDenied');
+                return;
+            }
+            if (empty($_SESSION['subscription_request_csrf'])) {
+                $_SESSION['subscription_request_csrf'] = bin2hex(random_bytes(32));
+            }
+            $this->view('ecoles/subscriptions', [
+                'title' => APP_NAME . ' - Mon abonnement',
+                'user' => $user,
+                'role' => $role,
+                'roleLabel' => User::getRoleLabel($role),
+                'modules' => $this->getModulesForRole($role),
+                'isSuperAdmin' => false,
+                'school' => Ecole::findById($schoolId),
+                'subscriptions' => Ecole::getSubscriptions($schoolId),
+                'subscriptionRequests' => SubscriptionRequest::getForSchool($schoolId),
+                'plans' => Ecole::getPlans(),
+                'csrfToken' => $_SESSION['subscription_request_csrf'],
+                'success' => $_SESSION['subscription_request_success'] ?? null,
+                'errors' => $_SESSION['subscription_request_errors'] ?? [],
+            ]);
+            unset($_SESSION['subscription_request_success'], $_SESSION['subscription_request_errors']);
+            return;
+        }
+
         $selectedSchoolId = max(0, (int) ($_GET['ecole_id'] ?? 0));
         if ($selectedSchoolId > 0 && !Ecole::findById($selectedSchoolId)) {
             $selectedSchoolId = 0;
+        }
+        if (empty($_SESSION['subscription_request_csrf'])) {
+            $_SESSION['subscription_request_csrf'] = bin2hex(random_bytes(32));
         }
         $this->view('ecoles/subscriptions', [
             'title' => APP_NAME . ' - Gestion des abonnements',
@@ -644,11 +750,135 @@ class EcolesController extends Controller
             'role' => $role,
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $this->getModulesForRole($role),
+            'isSuperAdmin' => true,
             'subscriptions' => Ecole::getSubscriptions($selectedSchoolId > 0 ? $selectedSchoolId : null),
             'schools' => Ecole::getAll(),
             'plans' => Ecole::getPlans(),
+            'subscriptionRequests' => SubscriptionRequest::getAll(),
             'selectedSchoolId' => $selectedSchoolId,
+            'csrfToken' => $_SESSION['subscription_request_csrf'],
         ]);
+    }
+
+    public function submitSubscriptionRequest(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['ecole_admin']);
+        $user = Auth::refresh() ?: Auth::user();
+        $schoolId = (int) ($user['ecole_id'] ?? 0);
+        $token = (string) ($_POST['csrf_token'] ?? '');
+        if (
+            $_SERVER['REQUEST_METHOD'] !== 'POST'
+            || $schoolId <= 0
+            || $token === ''
+            || !hash_equals((string) ($_SESSION['subscription_request_csrf'] ?? ''), $token)
+        ) {
+            $_SESSION['subscription_request_errors'] = ['Le formulaire a expiré ou la demande est invalide. Rechargez la page et réessayez.'];
+            $this->redirect('/ecoles/subscriptions');
+            return;
+        }
+
+        $type = (string) ($_POST['type_demande'] ?? '');
+        $planId = filter_var($_POST['plan_id'] ?? null, FILTER_VALIDATE_INT);
+        $message = trim((string) ($_POST['message'] ?? ''));
+        $validPlan = false;
+        foreach (Ecole::getPlans() as $plan) {
+            if ((int) ($plan['id'] ?? 0) === (int) $planId) {
+                $validPlan = true;
+                break;
+            }
+        }
+        if (
+            !in_array($type, ['nouvel_abonnement', 'renouvellement'], true)
+            || $planId === false
+            || $planId <= 0
+            || !$validPlan
+            || mb_strlen($message, 'UTF-8') > 1000
+        ) {
+            $_SESSION['subscription_request_errors'] = ['Choisissez un type de demande et un tarif valides. Le message ne peut pas dépasser 1 000 caractères.'];
+            $this->redirect('/ecoles/subscriptions');
+            return;
+        }
+
+        if (SubscriptionRequest::create($schoolId, (int) ($user['id'] ?? 0), (int) $planId, $type, $message)) {
+            $school = Ecole::findById($schoolId);
+            ActivityLog::record(
+                (int) ($user['id'] ?? 0),
+                'subscription_requested',
+                'school_subscription',
+                $schoolId,
+                (string) ($school['nom_etablissement'] ?? 'École'),
+                'Demande de ' . ($type === 'renouvellement' ? 'renouvellement' : 'nouvel abonnement') . ' soumise au super-administrateur.'
+            );
+            $_SESSION['subscription_request_success'] = 'Votre demande a été transmise au super-administrateur.';
+            $_SESSION['subscription_request_csrf'] = bin2hex(random_bytes(32));
+        } else {
+            $_SESSION['subscription_request_errors'] = ['Une demande est déjà en attente ou la demande n’a pas pu être enregistrée.'];
+        }
+
+        $this->redirect('/ecoles/subscriptions');
+    }
+
+    public function reviewSubscriptionRequest(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin']);
+        $token = (string) ($_POST['csrf_token'] ?? '');
+        if (
+            $_SERVER['REQUEST_METHOD'] !== 'POST'
+            || $token === ''
+            || !hash_equals((string) ($_SESSION['subscription_request_csrf'] ?? ''), $token)
+        ) {
+            $_SESSION['ecoles_subscription_errors'] = ['Le formulaire a expiré. Rechargez la page puis réessayez.'];
+            $this->redirect('/ecoles/subscriptions');
+            return;
+        }
+
+        $requestId = filter_var($_POST['request_id'] ?? null, FILTER_VALIDATE_INT);
+        $status = (string) ($_POST['statut'] ?? '');
+        $note = trim((string) ($_POST['reponse'] ?? ''));
+        if (
+            $requestId === false
+            || $requestId <= 0
+            || !in_array($status, ['Approuvee', 'Refusee'], true)
+            || mb_strlen($note, 'UTF-8') > 1000
+        ) {
+            $_SESSION['ecoles_subscription_errors'] = ['Les données de traitement de la demande sont invalides.'];
+            $this->redirect('/ecoles/subscriptions');
+            return;
+        }
+
+        $request = null;
+        foreach (SubscriptionRequest::getAll() as $candidate) {
+            if ((int) ($candidate['id'] ?? 0) === (int) $requestId) {
+                $request = $candidate;
+                break;
+            }
+        }
+        if (!$request || ($request['statut'] ?? '') !== 'En_attente') {
+            $_SESSION['ecoles_subscription_errors'] = ['Cette demande est introuvable ou a déjà été traitée.'];
+            $this->redirect('/ecoles/subscriptions');
+            return;
+        }
+
+        if (SubscriptionRequest::review((int) $requestId, (int) (Auth::user()['id'] ?? 0), $status, $note)) {
+            ActivityLog::record(
+                (int) (Auth::user()['id'] ?? 0),
+                $status === 'Approuvee' ? 'subscription_request_approved' : 'subscription_request_rejected',
+                'school_subscription',
+                (int) $request['ecole_id'],
+                (string) ($request['nom_etablissement'] ?? 'École'),
+                'Demande de ' . ($request['type_demande'] === 'renouvellement' ? 'renouvellement' : 'nouvel abonnement')
+                    . ($status === 'Approuvee' ? ' approuvée.' : ' refusée.')
+            );
+            $_SESSION['ecoles_subscription_success'] = $status === 'Approuvee'
+                ? 'Demande approuvée : l’abonnement a été activé selon le tarif demandé.'
+                : 'Demande refusée.';
+        } else {
+            $_SESSION['ecoles_subscription_errors'] = ['Impossible de traiter cette demande. Vérifiez le tarif et réessayez.'];
+        }
+
+        $this->redirect('/ecoles/subscriptions');
     }
 
     public function notificationAccess(): void
@@ -705,6 +935,16 @@ class EcolesController extends Controller
             (string) $whatsappInput === '1',
             (int) ($user['id'] ?? 0)
         )) {
+            $school = Ecole::findById((int) $schoolId);
+            ActivityLog::record(
+                (int) ($user['id'] ?? 0),
+                'school_notification_access_changed',
+                'school',
+                (int) $schoolId,
+                (string) ($school['nom_etablissement'] ?? 'École'),
+                'Accès aux notifications mis à jour : SMS ' . ((string) $smsInput === '1' ? 'activé' : 'désactivé')
+                    . ', WhatsApp ' . ((string) $whatsappInput === '1' ? 'activé' : 'désactivé') . '.'
+            );
             $_SESSION['notification_access_success'] = 'Les accès SMS et WhatsApp de l’école ont été mis à jour.';
         } else {
             $_SESSION['notification_access_error'] = 'Impossible d’enregistrer les accès de notification. Réessayez.';
@@ -766,6 +1006,21 @@ class EcolesController extends Controller
             $dateFin,
             $status
         )) {
+            $subscription = null;
+            foreach (Ecole::getSubscriptions() as $candidate) {
+                if ((int) ($candidate['id'] ?? 0) === $subscriptionId) {
+                    $subscription = $candidate;
+                    break;
+                }
+            }
+            ActivityLog::record(
+                (int) (Auth::user()['id'] ?? 0),
+                'subscription_updated',
+                'school_subscription',
+                (int) ($subscription['ecole_id'] ?? 0),
+                (string) ($subscription['nom_etablissement'] ?? 'École'),
+                'Abonnement modifié : statut ' . $status . ', du ' . $dateDebut . ' au ' . $dateFin . '.'
+            );
             $_SESSION['ecoles_subscription_success'] = 'Abonnement mis à jour. Le montant déjà enregistré comme payé a été conservé.';
         } else {
             if (empty($errors)) {

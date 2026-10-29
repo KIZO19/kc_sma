@@ -141,10 +141,11 @@ class Ecole
         }
     }
 
-    public static function getSubscriptionExpiryNotice(int $ecoleId, int $daysAhead = 15): ?array
+    public static function getSubscriptionExpiryNotice(int $ecoleId, int $daysAhead = 14): ?array
     {
         $subscription = self::getLatestSubscription($ecoleId);
-        if (!$subscription || ($subscription['statut_abonnement'] ?? '') !== 'Actif') {
+        $status = (string) ($subscription['statut_abonnement'] ?? '');
+        if (!$subscription || $status !== 'Actif') {
             return null;
         }
 
@@ -158,7 +159,11 @@ class Ecole
         }
 
         $today = new \DateTimeImmutable('today');
-        if ($dateDebut > $today || $dateFin < $today) {
+        if ($dateDebut > $today) {
+            return null;
+        }
+
+        if ($dateFin < $today) {
             return null;
         }
 

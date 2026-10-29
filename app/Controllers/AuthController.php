@@ -133,7 +133,11 @@ class AuthController extends Controller
                 return;
             }
 
-            $message = 'Votre compte a été créé. Il est en attente de validation par le super administrateur.';
+            $message = match ($role) {
+                'ecole_admin' => 'Votre compte a été créé. Il est en attente de validation par le super-administrateur.',
+                'agent_ecole' => 'Votre compte a été créé. Il est en attente d’affectation et de validation par l’administrateur de l’école.',
+                default => 'Votre compte a été créé. Il est en attente de validation par l’administration de votre école.',
+            };
             $this->view('auth/register', [
                 'errors' => [],
                 'message' => $message,

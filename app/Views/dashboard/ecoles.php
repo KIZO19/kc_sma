@@ -33,12 +33,12 @@ require __DIR__ . '/../partials/app_header.php'; ?>
           <?php endif; ?>
           <div class="row mb-2">
             <div class="col-sm-6">
-              <h1 class="mb-0">Gestion des écoles</h1>
+              <h1 class="mb-0"><?= ($role ?? '') === 'super_admin' ? 'Gestion des écoles' : 'Mon établissement' ?></h1>
             </div>
             <div class="col-sm-6">
               <ol class="breadcrumb float-sm-end">
                 <li class="breadcrumb-item"><a href="<?= BASE_URL ?>/dashboard">Dashboard</a></li>
-                <li class="breadcrumb-item active">Écoles</li>
+                <li class="breadcrumb-item active"><?= ($role ?? '') === 'super_admin' ? 'Écoles' : 'Mon école' ?></li>
               </ol>
             </div>
           </div>
@@ -49,8 +49,8 @@ require __DIR__ . '/../partials/app_header.php'; ?>
         <div class="container-fluid">
           <div class="row mb-4">
             <div class="col-12">
-              <p class="text-muted">Super-admin : validez les comptes écoles et gérez les abonnements.</p>
               <?php if (($role ?? '') === 'super_admin'): ?>
+              <p class="text-muted">Super-admin : validez les comptes écoles et gérez les abonnements.</p>
               <div class="d-flex flex-wrap gap-2">
                 <a href="<?= BASE_URL ?>/ecoles/subscriptions" class="btn btn-outline-secondary"><i class="bi bi-card-checklist me-1" aria-hidden="true"></i>Gérer les abonnements</a>
                 <a href="<?= BASE_URL ?>/ecoles/plans" class="btn btn-outline-primary"><i class="bi bi-tags me-1" aria-hidden="true"></i>Tarifs des abonnements</a>
@@ -103,7 +103,7 @@ require __DIR__ . '/../partials/app_header.php'; ?>
         <div class="container-fluid px-0">
           <div class="card">
             <div class="card-header">
-              <h3 class="card-title">Liste des écoles</h3>
+              <h3 class="card-title"><?= ($role ?? '') === 'super_admin' ? 'Liste des écoles' : 'Informations de mon établissement' ?></h3>
             </div>
             <div class="card-body table-responsive">
               <table id="ecolesTable" class="table table-striped table-hover align-middle" style="width:100%">

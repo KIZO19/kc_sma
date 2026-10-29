@@ -1,4 +1,9 @@
 <?php require __DIR__ . '/../partials/app_header.php'; ?>
+<?php
+$agents = $agents ?? [];
+$agentAccounts = $agentAccounts ?? [];
+$csrfToken = $csrfToken ?? '';
+?>
 
 <section class="content-header">
   <div class="container-fluid">
@@ -16,7 +21,7 @@
     <?php endif; ?>
     <div class="row mb-2">
       <div class="col-sm-6">
-        <h1>Gestion des agents</h1>
+        <h1>Comptes des agents de l’école</h1>
       </div>
       <div class="col-sm-6">
         <ol class="breadcrumb float-sm-end">
@@ -45,7 +50,7 @@
                 <th>Nom</th>
                 <th>Téléphone</th>
                 <th>Email</th>
-                <th>Statut du compte</th>
+                <th>Compte de connexion</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -58,19 +63,32 @@
                   <td><?= htmlspecialchars($agent['email'] ?? '') ?></td>
                   <td>
                     <?php if (!empty($agentAccounts[$agent['id']])): ?>
-                      <span class="badge bg-success">Compte créé</span>
+                      <?php $account = $agentAccounts[$agent['id']]; ?>
+                      <strong><?= htmlspecialchars($account['identifiant'] ?? '', ENT_QUOTES, 'UTF-8') ?></strong>
+                      <span class="badge text-bg-<?= ($account['statut'] ?? '') === 'Actif' ? 'success' : 'secondary' ?> ms-1"><?= htmlspecialchars($account['statut'] ?? 'Inactif', ENT_QUOTES, 'UTF-8') ?></span>
+                      <small class="d-block text-muted"><?= htmlspecialchars(\App\Models\User::getRoleLabel($account['role'] ?? 'agent_ecole'), ENT_QUOTES, 'UTF-8') ?></small>
                     <?php else: ?>
-                      <span class="badge bg-secondary">Compte non créé</span>
+                      <span class="badge text-bg-secondary">Aucun compte</span>
                     <?php endif; ?>
                   </td>
                   <td>
                     <?php if (empty($agentAccounts[$agent['id']])): ?>
                       <form method="post" action="<?= BASE_URL ?>/agents/createAccount" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
                         <input type="hidden" name="agent_id" value="<?= (int) $agent['id'] ?>">
-                        <button type="submit" class="btn btn-sm btn-primary">Créer compte</button>
+                        <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-person-plus me-1" aria-hidden="true"></i>Créer compte</button>
                       </form>
                     <?php else: ?>
-                      <a href="<?= BASE_URL ?>/utilisateurs?reference_id=<?= (int) $agent['id'] ?>" class="btn btn-sm btn-secondary">Voir le compte</a>
+                      <?php $nextStatus = ($account['statut'] ?? '') === 'Actif' ? 'Inactif' : 'Actif'; ?>
+                      <form method="post" action="<?= BASE_URL ?>/agents/updateAccountStatus" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+                        <input type="hidden" name="agent_id" value="<?= (int) $agent['id'] ?>">
+                        <input type="hidden" name="statut" value="<?= $nextStatus ?>">
+                        <button type="submit" class="btn btn-sm btn-outline-<?= $nextStatus === 'Actif' ? 'success' : 'warning' ?>">
+                          <i class="bi bi-<?= $nextStatus === 'Actif' ? 'check-circle' : 'pause-circle' ?> me-1" aria-hidden="true"></i><?= $nextStatus === 'Actif' ? 'Activer' : 'Désactiver' ?>
+                        </button>
+                      </form>
+                      <a href="<?= BASE_URL ?>/utilisateurs" class="btn btn-sm btn-outline-secondary">Gérer les comptes</a>
                     <?php endif; ?>
                   </td>
                 </tr>

@@ -35,7 +35,8 @@ $paymentConfig = static function (string $name, string $default = ''): string {
 };
 
 // SMS / WhatsApp notification settings
-// Provider supported: 'infobip', 'twilio' or 'generic'
+// Primary SMS/WhatsApp provider: 'infobip', 'twilio' or 'generic'.
+// SMS automatically falls back between Infobip and Twilio if the primary fails.
 // Channel supported: 'whatsapp', 'sms', 'both'
 define('PAYMENT_PROVIDER', $paymentConfig('PAYMENT_PROVIDER', 'infobip'));
 define('PAYMENT_CHANNEL', $paymentConfig('PAYMENT_CHANNEL', 'both'));
@@ -45,13 +46,13 @@ define('PAYMENT_SMS_SENDER', $paymentConfig('PAYMENT_SMS_SENDER'));
 define('PAYMENT_WHATSAPP_API_URL', $paymentConfig('PAYMENT_WHATSAPP_API_URL'));
 define('PAYMENT_WHATSAPP_API_TOKEN', $paymentConfig('PAYMENT_WHATSAPP_API_TOKEN'));
 
-// Infobip credentials (used when PAYMENT_PROVIDER = 'infobip')
+// Infobip credentials
 define('PAYMENT_INFOBIP_BASE_URL', rtrim($paymentConfig('PAYMENT_INFOBIP_BASE_URL'), '/'));
 define('PAYMENT_INFOBIP_API_KEY', $paymentConfig('PAYMENT_INFOBIP_API_KEY'));
 define('PAYMENT_INFOBIP_SMS_FROM', $paymentConfig('PAYMENT_INFOBIP_SMS_FROM'));
 define('PAYMENT_INFOBIP_WHATSAPP_FROM', $paymentConfig('PAYMENT_INFOBIP_WHATSAPP_FROM'));
 
-// Twilio credentials (used when PAYMENT_PROVIDER = 'twilio')
+// Twilio credentials
 define('PAYMENT_TWILIO_ACCOUNT_SID', $paymentConfig('PAYMENT_TWILIO_ACCOUNT_SID'));
 define('PAYMENT_TWILIO_AUTH_TOKEN', $paymentConfig('PAYMENT_TWILIO_AUTH_TOKEN'));
 define('PAYMENT_TWILIO_SMS_FROM', $paymentConfig('PAYMENT_TWILIO_SMS_FROM'));

@@ -62,6 +62,9 @@ class User
     {
         $db = Database::getConnection();
         $role = (string) ($data['role'] ?? '');
+        if (isset($data['mot_de_passe'])) {
+            $data['mot_de_passe'] = self::normalizePasswordHash((string) $data['mot_de_passe']);
+        }
         $schoolScopedRoles = ['ecole_admin', 'agent_ecole', 'enseignant_école', 'eleve_ecole', 'parent_ecole', 'comptable_école', 'sec_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'promoteur_école'];
 
         $resolvedSchoolId = null;
@@ -214,9 +217,9 @@ class User
             $params[':section_id'] = $sectionId;
         }
 
-        // Hash password if it doesn't look hashed yet
-        if (isset($params[':mot_de_passe']) && strpos($params[':mot_de_passe'], '$2y$') !== 0) {
-            $params[':mot_de_passe'] = password_hash($params[':mot_de_passe'], PASSWORD_DEFAULT);
+        // Hash password if it doesn't look hashed yet.
+        if (isset($params[':mot_de_passe'])) {
+            $params[':mot_de_passe'] = self::normalizePasswordHash((string) $params[':mot_de_passe']);
         }
 
         $sql = 'INSERT INTO utilisateurs (' . implode(', ', $fields) . ', created_at) VALUES (' . implode(', ', $placeholders) . ', NOW())';
@@ -298,7 +301,7 @@ class User
             }
             if (isset($data['mot_de_passe'])) {
                 $fields[] = 'mot_de_passe = :mot_de_passe';
-                $params[':mot_de_passe'] = $data['mot_de_passe'];
+                $params[':mot_de_passe'] = self::normalizePasswordHash((string) $data['mot_de_passe']);
             }
             if (isset($data['avatar'])) {
                 $fields[] = 'avatar = :avatar';
@@ -319,6 +322,20 @@ class User
             error_log('User::updateProfile failed for user ID ' . $id . ': ' . $e->getMessage());
             return false;
         }
+    }
+
+    private static function normalizePasswordHash(string $password): string
+    {
+        $trimmed = trim($password);
+        if ($trimmed === '') {
+            return $trimmed;
+        }
+
+        if (preg_match('~^\$2[aby]\$\d{2}\$[./0-9A-Za-z]{53}$~', $trimmed) === 1) {
+            return $trimmed;
+        }
+
+        return password_hash($trimmed, PASSWORD_DEFAULT);
     }
 
     public static function getAllUsers(): array

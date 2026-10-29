@@ -30,6 +30,20 @@ class InscriptionsController extends Controller
 
     private const IDENTITY_EDIT_ROLES = ['super_admin', 'comptable_école', 'préfet_école', 'sec_école'];
 
+    private function getMandatorySchoolItems(int $schoolId, int $yearId): array
+    {
+        if ($schoolId <= 0 || $yearId <= 0) {
+            return [];
+        }
+
+        return array_values(array_filter(
+            \App\Models\FraisScolaire::getAllBySchool($schoolId),
+            static fn (array $fee): bool => ($fee['scope'] ?? '') === 'school'
+                && (int) ($fee['annee_scolaire_id'] ?? 0) === $yearId
+                && str_starts_with((string) ($fee['encodage'] ?? ''), 'ART-SCOL-')
+        ));
+    }
+
     public function index(): void
     {
         Auth::requireAuth();
@@ -109,6 +123,8 @@ class InscriptionsController extends Controller
         }
 
         $classes = $ecoleId > 0 ? Classe::getAllBySchool($ecoleId, $sectionScopeId) : [];
+        $activeYear = $ecoleId > 0 ? AnneeScolaire::getActiveBySchool($ecoleId) : null;
+        $schoolItems = $this->getMandatorySchoolItems($ecoleId, (int) ($activeYear['id'] ?? 0));
         $oldInput = $_SESSION['inscriptions_old'] ?? [];
         unset($_SESSION['inscriptions_old']);
 
@@ -124,6 +140,7 @@ class InscriptionsController extends Controller
             'selectedOption' => $selectedOption,
             'sections' => $sections,
             'options' => $options,
+            'schoolItems' => $schoolItems,
             'oldInput' => $oldInput,
         ]);
     }
@@ -251,6 +268,8 @@ class InscriptionsController extends Controller
                 $activeYear = AnneeScolaire::getActiveBySchool($ecoleId);
                 if (!$activeYear || empty($activeYear['id'])) {
                     $errors[] = 'Aucune année scolaire active n’est configurée pour cette école.';
+                } elseif ($ecoleId > 0 && empty($this->getMandatorySchoolItems($ecoleId, (int) $activeYear['id']))) {
+                    $errors[] = 'La fiche des objets classiques obligatoires n’est pas configurée pour l’année active. Contactez le comptable avant de finaliser l’inscription.';
                 }
             }
 

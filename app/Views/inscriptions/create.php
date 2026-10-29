@@ -3,7 +3,10 @@
 $parents = $parents ?? [];
 $sections = $sections ?? [];
 $options = $options ?? [];
+$schoolItems = $schoolItems ?? [];
 $oldInput = $oldInput ?? [];
+$schoolItemsTotal = array_sum(array_map(static fn (array $item): float => (float) ($item['montant_total'] ?? 0), $schoolItems));
+$schoolItemsCurrency = strtoupper((string) ($schoolItems[0]['devise'] ?? 'USD'));
 $selectedSectionName = mb_strtolower(trim((string) ($selectedSection['nom_section'] ?? '')), 'UTF-8');
 $showRegistrationOptions = $selectedSectionName === 'secondaire';
 $pageStyles = <<<STYLE
@@ -226,9 +229,34 @@ STYLE;
                     </div>
                     </section>
 
-                    <section class="registration-section" aria-labelledby="registration-parent-heading">
+                    <section class="registration-section" aria-labelledby="registration-items-heading">
                       <div class="registration-section-heading">
                         <span class="registration-section-step">3</span>
+                        <div>
+                          <h4 id="registration-items-heading">Objets classiques obligatoires</h4>
+                          <p>Les articles sélectionnés par le comptable sont ajoutés automatiquement au compte de l’élève.</p>
+                        </div>
+                      </div>
+                      <?php if (empty($schoolItems)): ?>
+                        <div class="alert alert-warning mb-0" role="alert">La fiche des objets classiques n’est pas encore configurée pour l’année active. Le comptable doit la compléter avant toute nouvelle inscription.</div>
+                      <?php else: ?>
+                        <div class="table-responsive">
+                          <table class="table table-sm align-middle mb-2">
+                            <thead><tr><th>Objet obligatoire</th><th class="text-end">Prix</th></tr></thead>
+                            <tbody>
+                              <?php foreach ($schoolItems as $item): ?>
+                                <tr><td><?= htmlspecialchars($item['type_frais'], ENT_QUOTES, 'UTF-8') ?></td><td class="text-end"><?= number_format((float) $item['montant_total'], 2, ',', ' ') ?> <?= htmlspecialchars($item['devise'] ?? $schoolItemsCurrency, ENT_QUOTES, 'UTF-8') ?></td></tr>
+                              <?php endforeach; ?>
+                            </tbody>
+                            <tfoot><tr class="fw-bold"><td>Total des objets classiques</td><td class="text-end"><?= number_format($schoolItemsTotal, 2, ',', ' ') ?> <?= htmlspecialchars($schoolItemsCurrency, ENT_QUOTES, 'UTF-8') ?></td></tr></tfoot>
+                          </table>
+                        </div>
+                      <?php endif; ?>
+                    </section>
+
+                    <section class="registration-section" aria-labelledby="registration-parent-heading">
+                      <div class="registration-section-heading">
+                        <span class="registration-section-step">4</span>
                         <div>
                           <h4 id="registration-parent-heading">Parent ou tuteur</h4>
                           <p>Liez un parent déjà enregistré ou créez sa fiche.</p>
@@ -286,7 +314,7 @@ STYLE;
 
                     <section class="registration-section" aria-labelledby="registration-family-heading">
                       <div class="registration-section-heading">
-                        <span class="registration-section-step">4</span>
+                        <span class="registration-section-step">5</span>
                         <div>
                           <h4 id="registration-family-heading">Famille et origine</h4>
                           <p>Informations complémentaires sur les parents et l’origine de l’élève.</p>
@@ -327,7 +355,7 @@ STYLE;
 
                     <section class="registration-section" aria-labelledby="registration-contact-heading">
                       <div class="registration-section-heading">
-                        <span class="registration-section-step">5</span>
+                        <span class="registration-section-step">6</span>
                         <div>
                           <h4 id="registration-contact-heading">Coordonnées et photo</h4>
                           <p>Lieu de naissance, adresse et photo facultative.</p>
@@ -348,7 +376,7 @@ STYLE;
                     </section>
                     <div class="d-flex justify-content-between form-actions">
                       <a href="<?= BASE_URL ?>/inscriptions" class="btn btn-secondary">Retour aux dossiers</a>
-                      <button id="registration-submit" type="submit" class="btn btn-success">Enregistrer</button>
+                      <button id="registration-submit" type="submit" class="btn btn-success" <?= empty($schoolItems) && (int) ($user['ecole_id'] ?? 0) > 0 ? 'disabled' : '' ?>>Enregistrer</button>
                     </div>
                   </form>
                 </div>

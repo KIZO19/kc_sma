@@ -140,7 +140,7 @@ SCRIPT;
     <?php endif; ?>
     <div class="row mb-2">
       <div class="col-sm-6">
-        <h1>Vue centralisée des utilisateurs</h1>
+        <h1><?= ($role ?? '') === 'super_admin' ? 'Gestion des utilisateurs de la plateforme' : 'Utilisateurs de votre école' ?></h1>
       </div>
       <div class="col-sm-6">
         <ol class="breadcrumb float-sm-end">
@@ -239,7 +239,7 @@ SCRIPT;
 
     <div class="card mb-4">
       <div class="card-header">
-        <h3 class="card-title">Tous les comptes utilisateurs</h3>
+        <h3 class="card-title"><?= ($role ?? '') === 'super_admin' ? 'Comptes de la plateforme' : 'Comptes de votre école' ?></h3>
       </div>
       <div class="card-body">
         <?php if (empty($allUsers)): ?>
@@ -293,6 +293,7 @@ SCRIPT;
                     </td>
                     <td>
                       <?php if (($role ?? '') === 'super_admin'): ?>
+                        <a href="<?= BASE_URL ?>/utilisateurs/editAccount?id=<?= (int) $account['id'] ?>" class="btn btn-sm btn-outline-secondary mb-2">Modifier les informations</a>
                         <form method="post" action="<?= BASE_URL ?>/utilisateurs/update-access" class="d-flex flex-wrap gap-2 align-items-center user-access-form">
                           <input type="hidden" name="user_id" value="<?= (int) $account['id'] ?>">
                           <select name="role" class="form-select form-select-sm" required>
@@ -336,8 +337,10 @@ SCRIPT;
                           </select>
                           <button type="submit" class="btn btn-sm btn-primary">Lier</button>
                         </form>
+                      <?php elseif (($role ?? '') === 'ecole_admin' && (int) ($account['ecole_id'] ?? 0) === (int) ($user['ecole_id'] ?? 0)): ?>
+                        <a href="<?= BASE_URL ?>/utilisateurs/editAccount?id=<?= (int) $account['id'] ?>" class="btn btn-sm btn-outline-primary">Modifier les informations</a>
                       <?php else: ?>
-                        <span class="text-muted">Aucune action</span>
+                        <span class="text-muted">Lecture seule</span>
                       <?php endif; ?>
                     </td>
                   </tr>
@@ -376,13 +379,37 @@ SCRIPT;
                         <td><?= htmlspecialchars($inactive['nom_complet']) ?></td>
                         <td><?= htmlspecialchars(\App\Models\User::getRoleLabel($inactive['role'])) ?></td>
                         <td>
-                          <?php if (($role ?? '') === 'super_admin'): ?>
+                          <?php
+                            $isPendingUnassignedAgent = ($inactive['role'] ?? '') === 'agent_ecole'
+                              && (empty($inactive['ecole_id']) || (int) $inactive['ecole_id'] === 0);
+                            $hasSchoolAssignment = (int) ($inactive['ecole_id'] ?? 0) > 0;
+                            $requiresSchoolAssignment = in_array(
+                              (string) ($inactive['role'] ?? ''),
+                              \App\Models\User::getSchoolScopedRoles(),
+                              true
+                            );
+                            $canValidateAccount = (
+                              ($role ?? '') === 'super_admin'
+                              && (!$requiresSchoolAssignment || $hasSchoolAssignment)
+                            )
+                              || (
+                                in_array(($role ?? ''), ['ecole_admin', 'promoteur_école'], true)
+                                && (int) ($user['ecole_id'] ?? 0) > 0
+                                && (
+                                  (int) ($inactive['ecole_id'] ?? 0) === (int) ($user['ecole_id'] ?? 0)
+                                  || $isPendingUnassignedAgent
+                                )
+                              );
+                          ?>
+                          <?php if ($canValidateAccount): ?>
                             <form method="post" action="<?= BASE_URL ?>/utilisateurs/validate" style="display:inline">
                               <input type="hidden" name="user_id" value="<?= (int) $inactive['id'] ?>">
-                              <button type="submit" class="btn btn-sm btn-success">Valider</button>
+                              <button type="submit" class="btn btn-sm btn-success">
+                                <?= $isPendingUnassignedAgent && ($role ?? '') !== 'super_admin' ? 'Affecter et valider' : 'Valider' ?>
+                              </button>
                             </form>
                           <?php else: ?>
-                            <span class="text-muted">Lecture seule</span>
+                            <span class="text-muted"><?= $isPendingUnassignedAgent && ($role ?? '') === 'super_admin' ? 'À lier à une école avant validation' : 'Lecture seule' ?></span>
                           <?php endif; ?>
                         </td>
                       </tr>
@@ -395,6 +422,7 @@ SCRIPT;
         </div>
       </div>
 
+      <?php if (($role ?? '') === 'super_admin'): ?>
       <div class="col-lg-6">
         <div class="card">
           <div class="card-header">
@@ -447,6 +475,7 @@ SCRIPT;
           </div>
         </div>
       </div>
+      <?php endif; ?>
     </div>
   </div>
 </section>

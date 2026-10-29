@@ -118,13 +118,16 @@ class Auth
         }
 
         $user = self::user();
+        if (($user['role'] ?? '') === 'super_admin') {
+            return;
+        }
+
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
         $isPendingUnassignedAgent = ($user['role'] ?? '') === 'agent_ecole'
             && ($user['statut'] ?? '') === 'Inactif'
             && $ecoleId <= 0;
         if (
-            ($user['role'] ?? '') === 'super_admin'
-            || $isPendingUnassignedAgent
+            $isPendingUnassignedAgent
             || self::isSubscriptionAccessRoute()
             || ($ecoleId > 0 && \App\Models\Ecole::hasPlatformAccess($ecoleId))
         ) {
@@ -137,7 +140,16 @@ class Auth
 
     private static function isSubscriptionAccessRoute(): bool
     {
-        return in_array(self::currentRoutePath(), ['/logout', '/profile', '/ecoles/subscriptionRequired'], true);
+        return in_array(
+            self::currentRoutePath(),
+            [
+                '/logout',
+                '/ecoles/subscriptionRequired',
+                '/ecoles/subscriptions',
+                '/ecoles/submitSubscriptionRequest',
+            ],
+            true
+        );
     }
 
     private static function currentRoutePath(): string

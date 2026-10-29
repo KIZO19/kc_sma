@@ -275,9 +275,9 @@ if (!empty($schoolContext['logo_url'])) {
           <li class="nav-item d-none d-md-block">
             <a href="<?= BASE_URL ?>/dashboard" class="nav-link">Dashboard</a>
           </li>
-          <?php if (($user['role'] ?? '') !== 'enseignant_école'): ?>
+          <?php if (in_array(($user['role'] ?? ''), ['super_admin', 'ecole_admin'], true)): ?>
             <li class="nav-item d-none d-md-block">
-              <a href="<?= BASE_URL ?>/ecoles" class="nav-link">Écoles</a>
+              <a href="<?= BASE_URL ?>/ecoles" class="nav-link"><?= ($user['role'] ?? '') === 'super_admin' ? 'Gestion des écoles' : 'Mon école' ?></a>
             </li>
           <?php endif; ?>
         </ul>

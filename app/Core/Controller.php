@@ -29,6 +29,7 @@ class Controller
         $expiryNoticeRoles = [
             'ecole_admin',
             'promoteur_école',
+            'préfet_école',
             'DE_école',
             'DD_école',
             'DP_école',
@@ -42,7 +43,7 @@ class Controller
         ) {
             $data['planExpiryNotice'] = \App\Models\Ecole::getSubscriptionExpiryNotice(
                 (int) $user['ecole_id'],
-                15
+                14
             );
         }
 
@@ -114,6 +115,7 @@ class Controller
             'ecole_admin' => [
                 ['name' => 'École', 'path' => '/ecoles', 'icon' => 'bi-building'],
                 ['name' => 'Paramètres école', 'path' => '/ecoles', 'icon' => 'bi-gear'],
+                ['name' => 'Mon abonnement', 'path' => '/ecoles/subscriptions', 'icon' => 'bi-card-checklist'],
                 ['name' => 'Autorisations paiements', 'path' => '/paiements/gestionAutorisations', 'icon' => 'bi-shield-check'],
                 ['name' => 'Agents', 'path' => '/agents', 'icon' => 'bi-people-fill'],
                 ['name' => 'Parents', 'path' => '/parents', 'icon' => 'bi-people'],

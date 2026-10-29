@@ -324,21 +324,21 @@ class PaymentParentNotifier
         $whatsappEnabled = $this->shouldSendWhatsapp() && $access['whatsapp'];
         if ($this->provider === 'infobip') {
             if ($smsEnabled) {
-                $attempts[] = $this->sendInfobipSms($phone, $message, $schoolName);
+                $attempts[] = $this->sendSmsWithFallback($phone, $message, $schoolName);
             }
             if ($whatsappEnabled) {
                 $attempts[] = $this->sendInfobipWhatsapp($phone, $message, $schoolWhatsappSender);
             }
         } elseif ($this->provider === 'twilio') {
             if ($smsEnabled) {
-                $attempts[] = $this->sendTwilioSms($phone, $message);
+                $attempts[] = $this->sendSmsWithFallback($phone, $message, $schoolName);
             }
             if ($whatsappEnabled) {
                 $attempts[] = $this->sendTwilioWhatsapp($phone, $message);
             }
         } else {
             if ($smsEnabled) {
-                $attempts[] = $this->sendSms($phone, $message, $schoolName);
+                $attempts[] = $this->sendSmsWithFallback($phone, $message, $schoolName);
             }
             if ($whatsappEnabled) {
                 $attempts[] = $this->sendWhatsapp($phone, $message);
@@ -426,6 +426,64 @@ class PaymentParentNotifier
         ];
 
         return $this->sendJsonRequest($this->smsApiUrl, $payload, $this->smsApiToken, 'sms');
+    }
+
+    private function sendSmsWithFallback(string $phone, string $message, string $schoolName): array
+    {
+        if ($this->provider === 'twilio') {
+            $providers = [
+                'Twilio' => fn (): array => $this->sendTwilioSms($phone, $message),
+                'Infobip' => fn (): array => $this->sendInfobipSms($phone, $message, $schoolName),
+            ];
+        } elseif ($this->provider === 'infobip') {
+            $providers = [
+                'Infobip' => fn (): array => $this->sendInfobipSms($phone, $message, $schoolName),
+                'Twilio' => fn (): array => $this->sendTwilioSms($phone, $message),
+            ];
+        } else {
+            $providers = [
+                'SMS personnalisé' => fn (): array => $this->sendSms($phone, $message, $schoolName),
+                'Infobip' => fn (): array => $this->sendInfobipSms($phone, $message, $schoolName),
+                'Twilio' => fn (): array => $this->sendTwilioSms($phone, $message),
+            ];
+        }
+
+        $failures = [];
+        foreach ($providers as $providerName => $send) {
+            $result = $send();
+            if (!empty($result['sent'])) {
+                $result['provider'] = $providerName;
+                if ($failures !== []) {
+                    $result['fallback_used'] = true;
+                    $previousFailures = [];
+                    foreach ($failures as $failedProvider => $failure) {
+                        $previousFailures[] = $failedProvider . ' indisponible ('
+                            . ($failure['details'] ?? $failure['reason'] ?? 'échec') . ')';
+                    }
+                    $result['details'] = implode('; ', $previousFailures)
+                        . '. SMS accepté par ' . $providerName . '. '
+                        . ($result['details'] ?? '');
+                }
+                return $result;
+            }
+
+            $failures[$providerName] = $result;
+        }
+
+        $failureDetails = [];
+        foreach ($failures as $providerName => $failure) {
+            $failureDetails[] = $providerName . ' : '
+                . ($failure['details'] ?? $failure['reason'] ?? 'échec');
+        }
+
+        return [
+            'sent' => false,
+            'channel' => 'sms',
+            'reason' => 'all_sms_providers_failed',
+            'message' => 'Échec de l’envoi SMS avec les fournisseurs configurés.',
+            'details' => implode(' ; ', $failureDetails),
+            'providers' => $failures,
+        ];
     }
 
     private function sendWhatsapp(string $phone, string $message): array

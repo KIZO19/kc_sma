@@ -18,15 +18,15 @@ $identifiant = $identifiant ?? '';
     body { background: #f4f7fb; }
     .login-box { width: 420px; margin: 6% auto; }
     .card { border-radius: 1rem; }
+    .login-logo { width: 110px; height: 110px; object-fit: cover; border-radius: 50%; }
   </style>
 </head>
 <body class="hold-transition login-page">
 <div class="login-box">
   <div class="card card-outline card-primary">
     <div class="card-header text-center">
-      <a href="<?= BASE_URL ?>" class="h1 d-flex align-items-center justify-content-center">
-        <img src="<?= BASE_URL ?>/assets/kc-logo.svg" alt="KC_SMA" width="36" height="36" class="me-2">
-        <span><b>KC</b>_SMA</span>
+      <a href="<?= BASE_URL ?>" class="d-inline-flex align-items-center justify-content-center">
+        <img src="<?= BASE_URL ?>/assets/kc-logo.jpg" alt="KC_SMA" class="login-logo">
       </a>
     </div>
     <div class="card-body">
