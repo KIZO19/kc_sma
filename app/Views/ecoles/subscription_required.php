@@ -14,7 +14,7 @@
             <div class="text-warning mb-3"><i class="bi bi-credit-card-2-front" style="font-size: 3rem;" aria-hidden="true"></i></div>
             <h2 class="h4 fw-bold">Un abonnement valide est nécessaire</h2>
             <p class="text-muted mb-4">
-              L’accès aux services de votre école est momentanément indisponible. Veuillez contacter le super-administrateur pour activer ou renouveler l’abonnement de l’établissement.
+              L’accès aux services de votre école est momentanément indisponible. Veuillez contacter <a href="<?= BASE_URL ?>/contact">KC_SMA</a> pour activer ou renouveler l’abonnement de l’établissement.
             </p>
 
             <?php if (!empty($school)): ?>
@@ -45,7 +45,7 @@
                 <i class="bi bi-card-checklist me-1" aria-hidden="true"></i>Consulter l’abonnement
               </a>
             <?php else: ?>
-              <p class="small text-muted">Contactez l’administrateur de votre école ou le super-administrateur pour connaître le statut de l’abonnement.</p>
+              <p class="small text-muted">Contactez l’administrateur de votre école ou <a href="<?= BASE_URL ?>/contact">KC_SMA</a> pour connaître le statut de l’abonnement.</p>
             <?php endif; ?>
             <a href="<?= BASE_URL ?>/logout" class="btn btn-outline-secondary">
               <i class="bi bi-box-arrow-right me-1" aria-hidden="true"></i>Déconnexion

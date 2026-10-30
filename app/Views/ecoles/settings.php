@@ -109,6 +109,49 @@
 
       <div class="col-12">
         <div class="card">
+          <div class="card-header"><h2 class="card-title">Destinataires des messages des parents</h2></div>
+          <form method="post" action="<?= BASE_URL ?>/ecoles/updateMessageRecipients">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) ($csrfToken ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+            <div class="card-body">
+              <p class="text-muted">
+                Choisissez les autorités scolaires que les parents pourront contacter dans la messagerie.
+                Seuls les comptes actifs sélectionnés apparaîtront dans leur liste de destinataires.
+              </p>
+              <?php if (empty($messageRecipientOptions)): ?>
+                <div class="alert alert-warning mb-0">Aucune autorité scolaire active n’est disponible pour recevoir les messages des parents.</div>
+              <?php else: ?>
+                <div class="row g-2">
+                  <?php foreach ($messageRecipientOptions as $recipient): ?>
+                    <?php
+                      $recipientId = (int) $recipient['id'];
+                      $recipientCheckboxId = 'messageRecipient' . $recipientId;
+                    ?>
+                    <div class="col-md-6 col-xl-4">
+                      <label class="form-check border rounded p-3 h-100" for="<?= $recipientCheckboxId ?>">
+                        <input class="form-check-input" type="checkbox" name="message_recipient_user_ids[]"
+                               id="<?= $recipientCheckboxId ?>" value="<?= $recipientId ?>"
+                               <?= in_array($recipientId, $messageRecipientUserIds ?? [], true) ? 'checked' : '' ?>>
+                        <span class="form-check-label ms-1">
+                          <span class="d-block fw-semibold"><?= htmlspecialchars((string) ($recipient['nom_complet'] ?? 'Utilisateur'), ENT_QUOTES, 'UTF-8') ?></span>
+                          <span class="small text-muted"><?= htmlspecialchars(\App\Models\User::getRoleLabel((string) $recipient['role']), ENT_QUOTES, 'UTF-8') ?></span>
+                        </span>
+                      </label>
+                    </div>
+                  <?php endforeach; ?>
+                </div>
+              <?php endif; ?>
+            </div>
+            <div class="card-footer text-end">
+              <button type="submit" class="btn btn-primary" <?= empty($messageRecipientOptions) ? 'disabled' : '' ?>>
+                <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Enregistrer les destinataires
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="col-12">
+        <div class="card">
           <div class="card-header"><h2 class="card-title">Fonctionnalités de communication</h2></div>
           <form method="post" action="<?= BASE_URL ?>/ecoles/updateSchoolNotificationAccess">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) ($csrfToken ?? ''), ENT_QUOTES, 'UTF-8') ?>">

@@ -6,6 +6,7 @@ use App\Core\Auth;
 use App\Core\Controller;
 use App\Core\Database;
 use App\Models\ActivityLog;
+use App\Models\SubscriptionRequest;
 use App\Models\User;
 use PDO;
 
@@ -103,7 +104,6 @@ class ActivitiesController extends Controller
 
     private function fetchPrioritySummary(): array
     {
-        SubscriptionRequest::ensureTable();
         $query = "
             SELECT
                 (SELECT COUNT(*) FROM ecoles WHERE statut_systeme = 'En_Attente') AS pending_schools,
@@ -134,6 +134,9 @@ class ActivitiesController extends Controller
                    )) AS expired_subscriptions";
 
         $summary = Database::getConnection()->query($query)->fetch(PDO::FETCH_ASSOC);
+        if ($summary !== false) {
+            $summary['pending_subscription_requests'] = SubscriptionRequest::getPendingCount();
+        }
 
         return $summary ?: [
             'pending_schools' => 0,

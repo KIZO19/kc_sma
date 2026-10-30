@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Core\Auth;
 use App\Core\Controller;
 use App\Models\PasswordReset;
+use App\Models\UserPresence;
 use App\Models\User;
 use App\Services\PasswordResetMailer;
 
@@ -26,6 +27,10 @@ class AuthController extends Controller
                     $error = 'Votre compte n’est pas encore affecté à une école. Contactez l’administration.';
                 } else {
                     Auth::login($user);
+                    if (($user['role'] ?? '') !== 'super_admin' && !empty($user['ecole_id'])) {
+                        $_SESSION['location_consent_nonce'] = bin2hex(random_bytes(16));
+                    }
+                    UserPresence::recordLogin($user);
                     $this->redirect('/dashboard');
                     return;
                 }

@@ -84,7 +84,7 @@ class Router
             $actionName = 'resetPassword';
         } elseif ($segments[0] === 'dashboard') {
             $controllerName = 'Dashboard';
-            $actionName = 'index';
+            $actionName = $segments[1] ?? 'index';
         } elseif ($segments[0] === 'ecoles' || $segments[0] === 'Ecole') {
             $controllerName = 'Ecoles';
             $actionName = $segments[1] ?? 'index';
@@ -122,13 +122,14 @@ class Router
 
         if ((Auth::user()['role'] ?? '') === 'enseignant_école') {
             $teacherRoutes = [
-                'App\\Controllers\\DashboardController' => ['index'],
+                'App\\Controllers\\DashboardController' => ['index', 'presence'],
                 'App\\Controllers\\PresencesController' => ['index'],
                 'App\\Controllers\\NotesController' => ['index'],
                 'App\\Controllers\\ElevesController' => ['index', 'show'],
                 'App\\Controllers\\MonEmploiController' => ['index'],
                 'App\\Controllers\\MessagesController' => ['index', 'open', 'thread', 'chatpoll', 'chatreply', 'chattyping'],
                 'App\\Controllers\\NotificationsController' => ['poll'],
+                'App\\Controllers\\ContactController' => ['index', 'send'],
                 'App\\Controllers\\ProfileController' => ['index', 'update'],
                 'App\\Controllers\\AuthController' => ['logout'],
                 'App\\Controllers\\EcolesController' => ['subscriptionrequired'],

@@ -173,8 +173,7 @@ class RecouvrementsController extends Controller
     private function fetchClasses(array $user): array
     {
         $db = Database::getConnection();
-        $sql = 'SELECT DISTINCT c.id, c.nom_classe,
-                   CASE WHEN sec.nom_section = \'Secondaire\' THEN COALESCE(o.nom_option, \'Option non définie\') ELSE NULL END AS nom_option
+        $sql = 'SELECT DISTINCT c.id, c.nom_classe, o.nom_option
             FROM classes c
             LEFT JOIN sections sec ON sec.id = c.section_id
             LEFT JOIN options o ON o.id = c.option_id';
@@ -408,8 +407,7 @@ class RecouvrementsController extends Controller
                        d.devise, MAX(d.date_creation) AS date_creation,
                        e.matricule, e.nom, e.postnom, e.prenom,
                        fs.type_frais, s.annee AS annee_scolaire,
-                       sec.nom_section, c.id AS classe_id, c.nom_classe,
-                       CASE WHEN sec.nom_section = \'Secondaire\' THEN COALESCE(o.nom_option, \'Option non définie\') ELSE NULL END AS nom_option
+                       sec.nom_section, c.id AS classe_id, c.nom_classe, o.nom_option
                 FROM dettes_eleves d
                 INNER JOIN eleves e ON e.id = d.eleve_id
                 INNER JOIN frais_scolaires fs ON fs.id = d.frais_id
@@ -490,8 +488,7 @@ class RecouvrementsController extends Controller
                                                                                      AND x.statut = \'Approuvee\' AND UPPER(x.devise) = UPPER(fs.devise)), 0)) AS montant_restant,
                            COALESCE(fs.devise, \'USD\') AS devise, i.date_inscription AS date_creation,
                            e.matricule, e.nom, e.postnom, e.prenom, fs.type_frais,
-                           s.annee AS annee_scolaire, sec.nom_section, c.section_id AS section_id, i.classe_id AS classe_id, c.nom_classe,
-                           CASE WHEN sec.nom_section = \'Secondaire\' THEN COALESCE(o.nom_option, \'Option non définie\') ELSE NULL END AS nom_option
+                           s.annee AS annee_scolaire, sec.nom_section, c.section_id AS section_id, i.classe_id AS classe_id, c.nom_classe, o.nom_option
                     FROM inscriptions i
                     INNER JOIN classes c ON c.id = i.classe_id
                     LEFT JOIN sections sec ON sec.id = c.section_id

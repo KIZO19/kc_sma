@@ -85,15 +85,11 @@
             <?php foreach ($threads as $thread): ?>
               <a class="list-group-item list-group-item-action py-3" href="<?= BASE_URL ?>/messages/thread?id=<?= (int) $thread['id'] ?>">
                 <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
-                  <div class="me-auto">
-                    <div class="fw-semibold">
-                      <?= htmlspecialchars((string) $thread['subject'], ENT_QUOTES, 'UTF-8') ?>
-                      <?php if ((int) $thread['unread_count'] > 0): ?><span class="badge text-bg-primary ms-1"><?= (int) $thread['unread_count'] ?> nouveau<?= (int) $thread['unread_count'] > 1 ? 'x' : '' ?></span><?php endif; ?>
-                    </div>
-                    <div class="small text-muted"><?= htmlspecialchars((string) $thread['other_name'], ENT_QUOTES, 'UTF-8') ?> · <?= htmlspecialchars((string) $thread['student_name'], ENT_QUOTES, 'UTF-8') ?></div>
-                    <div class="small mt-1"><?= htmlspecialchars(mb_strimwidth((string) ($thread['last_body'] ?? ''), 0, 160, '…', 'UTF-8'), ENT_QUOTES, 'UTF-8') ?></div>
-                  </div>
-                  <small class="text-muted"><?= !empty($thread['last_message_at']) ? htmlspecialchars(date('d/m/Y H:i', strtotime((string) $thread['last_message_at'])), ENT_QUOTES, 'UTF-8') : '' ?></small>
+                  <span class="fw-semibold">
+                    <?= htmlspecialchars((string) $thread['subject'], ENT_QUOTES, 'UTF-8') ?>
+                    <?php if ((int) $thread['unread_count'] > 0): ?><span class="badge text-bg-primary ms-1"><?= (int) $thread['unread_count'] ?> nouveau<?= (int) $thread['unread_count'] > 1 ? 'x' : '' ?></span><?php endif; ?>
+                  </span>
+                  <i class="bi bi-arrow-up-right text-muted" aria-hidden="true"></i>
                 </div>
               </a>
             <?php endforeach; ?>
@@ -110,21 +106,15 @@
         <?php else: ?>
           <div class="list-group list-group-flush">
             <?php foreach ($messages as $message): ?>
-              <article class="list-group-item py-3 <?= (int) $message['is_read'] === 0 ? 'bg-body-tertiary' : '' ?>" id="message-<?= (int) $message['id'] ?>">
-                <div class="d-flex justify-content-between align-items-start gap-3">
-                  <div>
-                    <h3 class="h6 mb-1">
-                      <?= htmlspecialchars((string) $message['title'], ENT_QUOTES, 'UTF-8') ?>
-                      <?php if ((int) $message['is_read'] === 0): ?><span class="badge text-bg-primary ms-1">Nouveau</span><?php endif; ?>
-                    </h3>
-                    <p class="mb-1"><?= nl2br(htmlspecialchars((string) $message['body'], ENT_QUOTES, 'UTF-8')) ?></p>
-                    <small class="text-muted"><?= htmlspecialchars(date('d/m/Y à H:i', strtotime((string) $message['created_at'])), ENT_QUOTES, 'UTF-8') ?></small>
-                  </div>
-                  <a class="btn btn-sm btn-outline-primary flex-shrink-0" href="<?= BASE_URL ?>/messages/open?id=<?= (int) $message['id'] ?>">
-                    <i class="bi bi-envelope-open me-1" aria-hidden="true"></i>Ouvrir
-                  </a>
-                </div>
-              </article>
+              <a class="list-group-item list-group-item-action py-3 d-flex justify-content-between align-items-center gap-3 <?= (int) $message['is_read'] === 0 ? 'bg-body-tertiary' : '' ?>"
+                 id="message-<?= (int) $message['id'] ?>"
+                 href="<?= BASE_URL ?>/messages/open?id=<?= (int) $message['id'] ?>">
+                <span class="fw-semibold">
+                  <?= htmlspecialchars((string) $message['title'], ENT_QUOTES, 'UTF-8') ?>
+                  <?php if ((int) $message['is_read'] === 0): ?><span class="badge text-bg-primary ms-1">Nouveau</span><?php endif; ?>
+                </span>
+                <i class="bi bi-arrow-up-right text-muted" aria-hidden="true"></i>
+              </a>
             <?php endforeach; ?>
           </div>
         <?php endif; ?>

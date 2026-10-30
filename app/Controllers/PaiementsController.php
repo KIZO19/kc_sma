@@ -975,13 +975,8 @@ class PaiementsController extends Controller
         }
 
         unset($_SESSION['paiements_old']);
-        $_SESSION['paiements_success'] = 'Paiement enregistré. Le formulaire a été actualisé pour un nouvel enregistrement.';
-        $_SESSION['payment_receipt_id'] = $ecritureId;
-        $redirectUrl = BASE_URL . '/paiements/create';
-        if ($eleveId > 0) {
-            $redirectUrl .= '?eleve_id=' . urlencode((string) $eleveId)
-                . '&frais_id=' . urlencode((string) $fraisId);
-        }
+        unset($_SESSION['paiements_success'], $_SESSION['payment_receipt_id']);
+        $redirectUrl = BASE_URL . '/paiements/receipt?id=' . urlencode((string) $ecritureId) . '&print=1';
         header('Location: ' . $redirectUrl);
         exit;
     }
@@ -1334,6 +1329,7 @@ class PaiementsController extends Controller
             'ecole_logo' => $ecoleLogo,
             'total_paye_par_devise' => $totalPayeParDevise,
             'reste_a_payer_par_devise' => $resteParDevise,
+            'autoPrint' => ($_GET['print'] ?? '') === '1',
         ]);
     }
 

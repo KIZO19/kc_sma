@@ -113,6 +113,20 @@
       background: var(--bg);
       color: var(--text);
     }
+    .live-notification-toasts {
+      position: fixed;
+      top: 4.5rem;
+      right: 1rem;
+      z-index: 2000;
+      display: grid;
+      gap: .5rem;
+      width: min(24rem, calc(100vw - 2rem));
+      pointer-events: none;
+    }
+    .live-notification-toast {
+      pointer-events: auto;
+      box-shadow: 0 .5rem 1.5rem rgba(0,0,0,.2);
+    }
     .app-header {
       background: var(--navbar);
       position: sticky;
@@ -226,20 +240,6 @@
       body.sidebar-open .app-sidebar { margin-left: 0 !important; transform: translateX(0); }
       .sidebar-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1040; }
       body.sidebar-open .sidebar-backdrop { display: block; }
-      .live-notification-toasts {
-        position: fixed;
-        top: 4.5rem;
-        right: 1rem;
-        z-index: 2000;
-        display: grid;
-        gap: .5rem;
-        width: min(24rem, calc(100vw - 2rem));
-        pointer-events: none;
-      }
-      .live-notification-toast {
-        pointer-events: auto;
-        box-shadow: 0 .5rem 1.5rem rgba(0, 0, 0, .2);
-      }
       .app-sidebar .sidebar-menu .nav-header {
         display: block !important;
         visibility: visible !important;
@@ -420,7 +420,6 @@ if (!empty($schoolContext['logo_url'])) {
                   <a href="<?= BASE_URL ?>/messages/open?id=<?= (int) $userMessage['id'] ?>" class="dropdown-item text-wrap">
                     <i class="bi bi-envelope-fill me-2 text-primary"></i>
                     <strong><?= htmlspecialchars((string) $userMessage['title'], ENT_QUOTES, 'UTF-8') ?></strong>
-                    <span class="d-block ms-4 small text-muted"><?= htmlspecialchars(mb_strimwidth((string) $userMessage['body'], 0, 100, '…', 'UTF-8'), ENT_QUOTES, 'UTF-8') ?></span>
                   </a>
                 <?php endforeach; ?>
               <?php endif; ?>
@@ -596,7 +595,7 @@ if (!empty($schoolContext['logo_url'])) {
               expire dans <?= (int) $planExpiryNotice['days_remaining'] ?> jour(s)
             <?php endif; ?>
             (le <?= htmlspecialchars(formatDate($planExpiryNotice['date_fin'])) ?>).
-            Veuillez contacter le super-administrateur pour le renouveler.
+            Veuillez contacter <a href="<?= BASE_URL ?>/contact">KC_SMA</a> pour le renouveler.
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
           </div>
         </div>

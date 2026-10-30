@@ -64,14 +64,50 @@
             <p class="mb-0 text-muted">Aucun abonnement n’est encore enregistré pour votre école.</p>
           <?php endif; ?>
           <?php if ($hasPendingRequest): ?>
-            <div class="alert alert-info mt-3 mb-0"><i class="bi bi-hourglass-split me-1" aria-hidden="true"></i>Une demande est en attente de traitement par le super-administrateur.</div>
+            <div class="alert alert-info mt-3 mb-0"><i class="bi bi-hourglass-split me-1" aria-hidden="true"></i>Une demande est en attente de traitement par KC_SMA.</div>
           <?php endif; ?>
         </div>
       </div>
 
-      <div class="alert alert-info">
-        Cette page est en lecture seule. Pour modifier ou renouveler l’abonnement, veuillez contacter le super-administrateur.
-      </div>
+      <?php if (!$hasPendingRequest): ?>
+        <div class="card card-outline card-primary">
+          <div class="card-header"><h2 class="card-title">Demander le renouvellement de l’abonnement</h2></div>
+          <?php if (empty($plans)): ?>
+            <div class="card-body">
+              <div class="alert alert-warning mb-0">Aucun tarif n’est actuellement disponible. Contactez <a href="<?= BASE_URL ?>/contact">KC_SMA</a>.</div>
+            </div>
+          <?php else: ?>
+            <form method="post" action="<?= BASE_URL ?>/ecoles/submitSubscriptionRequest">
+              <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) ($csrfToken ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+              <div class="card-body">
+                <p class="text-muted">Choisissez le tarif souhaité et envoyez votre demande à KC_SMA. Votre abonnement ne sera renouvelé qu’après approbation.</p>
+                <div class="mb-3">
+                  <label class="form-label" for="renewal-plan">Tarif souhaité</label>
+                  <select class="form-select" id="renewal-plan" name="plan_id" required>
+                    <option value="">Choisir un tarif</option>
+                    <?php foreach ($plans as $plan): ?>
+                      <option value="<?= (int) $plan['id'] ?>" <?= (int) ($latestSubscription['plan_id'] ?? 0) === (int) $plan['id'] ? 'selected' : '' ?>>
+                        <?= htmlspecialchars((string) $plan['nom_plan'], ENT_QUOTES, 'UTF-8') ?>
+                        — <?= htmlspecialchars(number_format((float) ($plan['prix'] ?? 0), 2, ',', ' '), ENT_QUOTES, 'UTF-8') ?> USD /
+                        <?= (int) ($plan['duree_mois'] ?? 0) ?> mois
+                      </option>
+                    <?php endforeach; ?>
+                  </select>
+                </div>
+                <div>
+                  <label class="form-label" for="renewal-message">Message (facultatif)</label>
+                  <textarea class="form-control" id="renewal-message" name="message" rows="3" maxlength="1000"></textarea>
+                </div>
+              </div>
+              <div class="card-footer text-end">
+                <button type="submit" class="btn btn-primary">
+                  <i class="bi bi-send me-1" aria-hidden="true"></i>Envoyer la demande de renouvellement
+                </button>
+              </div>
+            </form>
+          <?php endif; ?>
+        </div>
+      <?php endif; ?>
 
       <div class="card">
         <div class="card-header"><h2 class="card-title">Historique des demandes</h2></div>

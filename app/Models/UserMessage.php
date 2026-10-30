@@ -56,6 +56,76 @@ class UserMessage
         return count($userIds);
     }
 
+    public static function notifyPlatformAdministrators(
+        array $administratorIds,
+        int $contactMessageId,
+        string $senderName,
+        string $subject,
+        string $body
+    ): void {
+        self::ensureTable();
+        $title = 'Nouveau message reçu par KC_SMA';
+        $messageBody = 'De : ' . $senderName . "\nObjet : " . $subject . "\n\n" . $body;
+        foreach ($administratorIds as $administratorId) {
+            self::create((int) $administratorId, 'contact_kc_sma', $contactMessageId, $title, $messageBody);
+        }
+    }
+
+    public static function notifyAdministratorsOfSubscriptionRequest(
+        int $requestId,
+        int $schoolId,
+        int $planId,
+        int $requesterId
+    ): void {
+        self::ensureTable();
+        $db = Database::getConnection();
+        $request = $db->prepare(
+            'SELECT e.nom_etablissement, u.nom_complet AS requester_name,
+                    p.nom_plan, p.prix, p.duree_mois
+             FROM demandes_abonnement_ecoles r
+             INNER JOIN ecoles e ON e.id = r.ecole_id
+             INNER JOIN utilisateurs u ON u.id = r.demandeur_id
+             INNER JOIN plans_abonnement p ON p.id = r.plan_id
+             WHERE r.id = :request_id AND r.ecole_id = :school_id
+               AND r.plan_id = :plan_id AND r.demandeur_id = :requester_id
+               AND r.type_demande = \'renouvellement\'
+             LIMIT 1'
+        );
+        $request->execute([
+            ':request_id' => $requestId,
+            ':school_id' => $schoolId,
+            ':plan_id' => $planId,
+            ':requester_id' => $requesterId,
+        ]);
+        $details = $request->fetch(PDO::FETCH_ASSOC);
+        if (!$details) {
+            throw new \RuntimeException('Subscription renewal request details could not be loaded.');
+        }
+
+        $administratorIds = $db->query(
+            "SELECT id FROM utilisateurs WHERE role = 'super_admin' AND statut = 'Actif'"
+        )->fetchAll(PDO::FETCH_COLUMN);
+        if ($administratorIds === []) {
+            throw new \RuntimeException('No active KC_SMA administrator is available for subscription notifications.');
+        }
+
+        $title = 'Nouvelle demande de renouvellement d’abonnement';
+        $body = (string) $details['requester_name'] . ' demande le renouvellement de l’abonnement de '
+            . (string) $details['nom_etablissement'] . ' avec le tarif '
+            . (string) $details['nom_plan'] . ' ('
+            . number_format((float) $details['prix'], 2, ',', ' ') . ' USD / '
+            . (int) $details['duree_mois'] . ' mois).';
+        foreach ($administratorIds as $administratorId) {
+            self::create(
+                (int) $administratorId,
+                'subscription_renewal_request',
+                $requestId,
+                $title,
+                $body
+            );
+        }
+    }
+
     public static function notifyAccountantsOfExpiredDerogations(int $schoolId): void
     {
         if ($schoolId <= 0) {
@@ -190,7 +260,7 @@ class UserMessage
     {
         self::ensureTable();
         $stmt = Database::getConnection()->prepare(
-            'SELECT id, type, reference_id FROM messages_utilisateurs '
+            'SELECT id, type, reference_id, title, body, created_at FROM messages_utilisateurs '
             . 'WHERE id = :id AND utilisateur_id = :utilisateur_id LIMIT 1'
         );
         $stmt->execute([':id' => $messageId, ':utilisateur_id' => $userId]);
@@ -276,7 +346,7 @@ class UserMessage
         return true;
     }
 
-    private static function ensureTable(): void
+    public static function ensureTable(): void
     {
         if (self::$tableEnsured) {
             return;

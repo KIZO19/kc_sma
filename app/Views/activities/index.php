@@ -87,6 +87,8 @@
       <?php endforeach; ?>
     </div>
 
+    <?php require __DIR__ . '/realtime_section.php'; ?>
+
     <div class="row">
       <div class="col-12">
         <div class="card">

@@ -197,6 +197,8 @@ class Auth
                 '/ecoles/subscriptionRequired',
                 '/ecoles/subscriptions',
                 '/ecoles/submitSubscriptionRequest',
+                '/contact',
+                '/contact/send',
             ],
             true
         );

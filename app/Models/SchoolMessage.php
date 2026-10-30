@@ -46,20 +46,140 @@ class SchoolMessage
         }
 
         self::ensureTables();
+        $recipientIds = self::getParentRecipientUserIds($schoolId);
+        if ($recipientIds === []) {
+            return [];
+        }
+
         $roles = self::rolePlaceholders('staff_role_', self::STAFF_ROLES, $params);
         $params[':parent_id'] = $parentId;
         $params[':ecole_id'] = $schoolId;
+        $recipientPlaceholders = [];
+        foreach (array_values($recipientIds) as $index => $recipientId) {
+            $key = ':recipient_' . $index;
+            $recipientPlaceholders[] = $key;
+            $params[$key] = $recipientId;
+        }
         $stmt = Database::getConnection()->prepare(
             'SELECT DISTINCT u.id, u.nom_complet, u.role
              FROM utilisateurs u
              INNER JOIN eleves e ON e.ecole_id = u.ecole_id
              WHERE e.parent_id = :parent_id AND u.ecole_id = :ecole_id
                AND u.statut = \'Actif\' AND u.role IN (' . $roles . ')
+               AND u.id IN (' . implode(', ', $recipientPlaceholders) . ')
              ORDER BY u.nom_complet'
         );
         $stmt->execute($params);
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function getParentRecipientOptions(int $schoolId): array
+    {
+        if ($schoolId <= 0) {
+            return [];
+        }
+
+        self::ensureTables();
+        $roles = self::rolePlaceholders('staff_role_', self::STAFF_ROLES, $params);
+        $params[':ecole_id'] = $schoolId;
+        $stmt = Database::getConnection()->prepare(
+            'SELECT id, nom_complet, role FROM utilisateurs
+             WHERE ecole_id = :ecole_id AND statut = \'Actif\'
+               AND role IN (' . $roles . ')
+             ORDER BY role ASC, nom_complet ASC'
+        );
+        $stmt->execute($params);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function getParentRecipientUserIds(int $schoolId): array
+    {
+        if ($schoolId <= 0) {
+            return [];
+        }
+
+        self::ensureTables();
+        $db = Database::getConnection();
+        $configured = $db->prepare(
+            'SELECT 1 FROM ecole_school_message_recipient_settings WHERE ecole_id = :ecole_id'
+        );
+        $configured->execute([':ecole_id' => $schoolId]);
+        if (!$configured->fetchColumn()) {
+            return array_map(
+                static fn (array $recipient): int => (int) $recipient['id'],
+                self::getParentRecipientOptions($schoolId)
+            );
+        }
+
+        $stmt = $db->prepare(
+            'SELECT r.utilisateur_id
+             FROM ecole_school_message_recipients r
+             INNER JOIN utilisateurs u ON u.id = r.utilisateur_id AND u.ecole_id = r.ecole_id
+             WHERE r.ecole_id = :ecole_id AND u.statut = \'Actif\'
+             ORDER BY r.utilisateur_id ASC'
+        );
+        $stmt->execute([':ecole_id' => $schoolId]);
+
+        return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    public static function saveParentRecipientUserIds(int $schoolId, array $userIds, int $updatedBy): bool
+    {
+        if ($schoolId <= 0 || $updatedBy <= 0) {
+            throw new \DomainException('École ou administrateur invalide.');
+        }
+
+        $userIds = array_values(array_unique(array_filter(
+            array_map('intval', $userIds),
+            static fn (int $id): bool => $id > 0
+        )));
+        if ($userIds === []) {
+            throw new \DomainException('Sélectionnez au moins une autorité scolaire.');
+        }
+
+        $optionsById = [];
+        foreach (self::getParentRecipientOptions($schoolId) as $option) {
+            $optionsById[(int) $option['id']] = true;
+        }
+        foreach ($userIds as $userId) {
+            if (!isset($optionsById[$userId])) {
+                throw new \DomainException('Une des autorités sélectionnées n’est pas un compte actif autorisé de cette école.');
+            }
+        }
+
+        self::ensureTables();
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        try {
+            $setting = $db->prepare(
+                'INSERT INTO ecole_school_message_recipient_settings (ecole_id, updated_by_user_id)
+                 VALUES (:ecole_id, :updated_by)
+                 ON DUPLICATE KEY UPDATE updated_by_user_id = VALUES(updated_by_user_id),
+                    updated_at = CURRENT_TIMESTAMP'
+            );
+            $setting->execute([':ecole_id' => $schoolId, ':updated_by' => $updatedBy]);
+            $delete = $db->prepare(
+                'DELETE FROM ecole_school_message_recipients WHERE ecole_id = :ecole_id'
+            );
+            $delete->execute([':ecole_id' => $schoolId]);
+            $insert = $db->prepare(
+                'INSERT INTO ecole_school_message_recipients (ecole_id, utilisateur_id)
+                 VALUES (:ecole_id, :utilisateur_id)'
+            );
+            foreach ($userIds as $userId) {
+                $insert->execute([':ecole_id' => $schoolId, ':utilisateur_id' => $userId]);
+            }
+            $db->commit();
+
+            return true;
+        } catch (\Throwable $exception) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $exception;
+        }
     }
 
     public static function getStaffParentContacts(int $schoolId, ?int $sectionId = null): array
@@ -305,7 +425,8 @@ class SchoolMessage
         $staffUserId = 0;
         if (in_array($senderRole, self::PARENT_ROLES, true)) {
             if ((int) ($student['parent_id'] ?? 0) !== (int) ($sender['reference_id'] ?? 0)
-                || !self::userHasRoleInSchool($recipientUserId, self::STAFF_ROLES, $schoolId)) {
+                || !self::userHasRoleInSchool($recipientUserId, self::STAFF_ROLES, $schoolId)
+                || !in_array($recipientUserId, self::getParentRecipientUserIds($schoolId), true)) {
                 throw new \InvalidArgumentException('Vous ne pouvez écrire qu’à un responsable de l’école de votre enfant.');
             }
             $parentUserId = $senderId;
@@ -546,6 +667,22 @@ class SchoolMessage
                 typing_until DATETIME NOT NULL,
                 PRIMARY KEY (thread_id, user_id),
                 KEY idx_school_message_typing_expiry (typing_until)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+        );
+        $db->exec(
+            'CREATE TABLE IF NOT EXISTS ecole_school_message_recipient_settings (
+                ecole_id INT NOT NULL PRIMARY KEY,
+                updated_by_user_id INT NULL,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                KEY idx_school_message_recipient_settings_updated_by (updated_by_user_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+        );
+        $db->exec(
+            'CREATE TABLE IF NOT EXISTS ecole_school_message_recipients (
+                ecole_id INT NOT NULL,
+                utilisateur_id INT NOT NULL,
+                PRIMARY KEY (ecole_id, utilisateur_id),
+                KEY idx_school_message_recipients_user (utilisateur_id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
         );
         self::$tablesEnsured = true;

@@ -40,23 +40,30 @@
       }
     }
 
-    function unlockAudio() {
+    async function unlockAudio() {
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       if (!AudioContextClass) {
-        return;
+        return false;
       }
-      if (!audioContext) {
-        audioContext = new AudioContextClass();
-      }
-      if (audioContext.state === 'suspended') {
-        audioContext.resume().catch(function (error) {
-          console.warn('Impossible d’activer le son des notifications :', error);
-        });
+      try {
+        if (!audioContext) {
+          audioContext = new AudioContextClass();
+        }
+        if (audioContext.state === 'suspended') {
+          await audioContext.resume();
+        }
+        return audioContext.state === 'running';
+      } catch (error) {
+        console.warn('Impossible d’activer le son des notifications :', error);
+        return false;
       }
     }
 
-    function playNotificationSound() {
-      if (isMobileDevice() || phoneNotificationsEnabled || !soundEnabled || !audioContext || audioContext.state !== 'running') {
+    async function playNotificationSound() {
+      if (!soundEnabled || phoneNotificationsEnabled || !audioContext) {
+        return;
+      }
+      if (audioContext.state !== 'running' && !await unlockAudio()) {
         return;
       }
 
@@ -72,11 +79,6 @@
       gain.connect(audioContext.destination);
       oscillator.start(now);
       oscillator.stop(now + 0.2);
-    }
-
-    function isMobileDevice() {
-      return window.matchMedia('(pointer: coarse)').matches
-        || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     }
 
     function updatePhoneNotificationControl() {
@@ -200,13 +202,12 @@
       if (data.messages.length) {
         addSectionTitle(messagesMenu, 'Nouveaux messages');
         data.messages.forEach(function (message) {
-          const body = String(message.body || '');
           addLink(
             messagesMenu,
             baseUrl + '/messages/open?id=' + encodeURIComponent(message.id),
             'bi bi-envelope-fill text-primary',
             message.title,
-            body.length > 180 ? body.slice(0, 177) + '…' : body
+            ''
           );
         });
         hasSection = true;
@@ -216,13 +217,12 @@
         if (hasSection) addDivider(messagesMenu);
         addSectionTitle(messagesMenu, 'Nouveaux messages privés');
         data.directMessages.forEach(function (message) {
-          const detail = [message.sender_name, message.subject, message.body].filter(Boolean).join(' · ');
           addLink(
             messagesMenu,
             baseUrl + '/messages/thread?id=' + encodeURIComponent(message.thread_id),
             'bi bi-chat-left-text-fill text-primary',
             message.subject || 'Nouveau message',
-            detail.length > 180 ? detail.slice(0, 177) + '…' : detail
+            ''
           );
         });
         hasSection = true;
@@ -392,7 +392,7 @@
           if (!knownNotificationIds.has(item.id)) {
             showToast(item);
             showPhoneNotification(item);
-            playNotificationSound();
+            void playNotificationSound();
           }
         });
       }
@@ -449,11 +449,11 @@
 
     if (soundToggle) {
       setSoundEnabled(soundEnabled);
-      soundToggle.addEventListener('click', function () {
-        unlockAudio();
+      soundToggle.addEventListener('click', async function () {
+        await unlockAudio();
         setSoundEnabled(!soundEnabled);
         if (soundEnabled) {
-          playNotificationSound();
+          await playNotificationSound();
         }
       });
     }
@@ -482,8 +482,12 @@
       });
     }
 
-    document.addEventListener('pointerdown', unlockAudio, { once: true });
-    document.addEventListener('keydown', unlockAudio, { once: true });
+    document.addEventListener('pointerdown', function () {
+      void unlockAudio();
+    }, { once: true });
+    document.addEventListener('keydown', function () {
+      void unlockAudio();
+    }, { once: true });
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'visible') {
         pollNotifications();

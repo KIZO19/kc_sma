@@ -8,6 +8,7 @@ use App\Models\Ecole;
 use App\Models\ActivityLog;
 use App\Models\Derogation;
 use App\Models\NotificationAccess;
+use App\Models\SchoolMessage;
 use App\Models\SubscriptionRequest;
 use App\Models\User;
 
@@ -88,6 +89,8 @@ class EcolesController extends Controller
             'notificationSettings' => NotificationAccess::getSchoolPreferences($schoolId),
             'derogationRecipientOptions' => Derogation::getRecipientOptions($schoolId),
             'derogationRecipientUserIds' => Derogation::getRecipientUserIds($schoolId),
+            'messageRecipientOptions' => SchoolMessage::getParentRecipientOptions($schoolId),
+            'messageRecipientUserIds' => SchoolMessage::getParentRecipientUserIds($schoolId),
             'csrfToken' => $_SESSION['school_settings_csrf'],
             'success' => $_SESSION['school_settings_success'] ?? null,
             'error' => $_SESSION['school_settings_error'] ?? null,
@@ -135,6 +138,56 @@ class EcolesController extends Controller
         } catch (\Throwable $e) {
             error_log('EcolesController::updateDerogationRecipients error: ' . $e->getMessage());
             $_SESSION['school_settings_error'] = 'Impossible d’enregistrer les destinataires. Réessayez.';
+        }
+
+        $_SESSION['school_settings_csrf'] = bin2hex(random_bytes(32));
+        $this->redirect('/ecoles/settings');
+    }
+
+    public function updateMessageRecipients(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['ecole_admin']);
+
+        $user = Auth::refresh() ?: Auth::user();
+        $schoolId = (int) ($user['ecole_id'] ?? 0);
+        $token = (string) ($_POST['csrf_token'] ?? '');
+        if (
+            $_SERVER['REQUEST_METHOD'] !== 'POST'
+            || $schoolId <= 0
+            || $token === ''
+            || !hash_equals((string) ($_SESSION['school_settings_csrf'] ?? ''), $token)
+        ) {
+            $_SESSION['school_settings_error'] = 'Le formulaire a expiré. Rechargez la page et réessayez.';
+            $this->redirect('/ecoles/settings');
+            return;
+        }
+
+        try {
+            $recipientIds = $_POST['message_recipient_user_ids'] ?? [];
+            if (!is_array($recipientIds)) {
+                throw new \DomainException('La liste des destinataires est invalide.');
+            }
+            SchoolMessage::saveParentRecipientUserIds(
+                $schoolId,
+                $recipientIds,
+                (int) ($user['id'] ?? 0)
+            );
+            $school = Ecole::findById($schoolId);
+            ActivityLog::record(
+                (int) ($user['id'] ?? 0),
+                'school_message_recipients_updated',
+                'school',
+                $schoolId,
+                (string) ($school['nom_etablissement'] ?? 'École'),
+                'Destinataires des messages des parents mis à jour.'
+            );
+            $_SESSION['school_settings_success'] = 'Les destinataires des messages des parents ont été enregistrés.';
+        } catch (\DomainException $exception) {
+            $_SESSION['school_settings_error'] = $exception->getMessage();
+        } catch (\Throwable $exception) {
+            error_log('EcolesController::updateMessageRecipients error: ' . $exception->getMessage());
+            $_SESSION['school_settings_error'] = 'Impossible d’enregistrer les destinataires des messages. Réessayez.';
         }
 
         $_SESSION['school_settings_csrf'] = bin2hex(random_bytes(32));
@@ -514,8 +567,15 @@ class EcolesController extends Controller
         $perPage = 10;
         $offset = ($page - 1) * $perPage;
 
+        if (empty($_SESSION['subscription_request_csrf'])) {
+            $_SESSION['subscription_request_csrf'] = bin2hex(random_bytes(32));
+        }
         $total = Ecole::countBySystemStatus('En_Attente');
         $pending = Ecole::getPendingSchoolsPaged($perPage, $offset);
+        $pendingSubscriptionRequests = array_values(array_filter(
+            SubscriptionRequest::getAll(),
+            static fn (array $request): bool => ($request['statut'] ?? '') === 'En_attente'
+        ));
 
         $this->view('ecoles/requests', [
             'title' => APP_NAME . ' - Demandes écoles',
@@ -524,6 +584,8 @@ class EcolesController extends Controller
             'roleLabel' => \App\Models\User::getRoleLabel($role),
             'modules' => $modules,
             'pending' => $pending,
+            'pendingSubscriptionRequests' => $pendingSubscriptionRequests,
+            'csrfToken' => $_SESSION['subscription_request_csrf'],
             'pagination' => [
                 'page' => $page,
                 'perPage' => $perPage,
@@ -935,6 +997,9 @@ class EcolesController extends Controller
                 $this->redirect('/error/accessDenied');
                 return;
             }
+            if (empty($_SESSION['subscription_request_csrf'])) {
+                $_SESSION['subscription_request_csrf'] = bin2hex(random_bytes(32));
+            }
             $this->view('ecoles/subscriptions', [
                 'title' => APP_NAME . ' - Mon abonnement',
                 'user' => $user,
@@ -944,9 +1009,11 @@ class EcolesController extends Controller
                 'isSuperAdmin' => false,
                 'school' => Ecole::findById($schoolId),
                 'subscriptions' => Ecole::getSubscriptions($schoolId),
+                'plans' => Ecole::getPlans(),
                 'subscriptionRequests' => SubscriptionRequest::getForSchool($schoolId),
                 'success' => $_SESSION['subscription_request_success'] ?? null,
                 'errors' => $_SESSION['subscription_request_errors'] ?? [],
+                'csrfToken' => $_SESSION['subscription_request_csrf'],
             ]);
             unset($_SESSION['subscription_request_success'], $_SESSION['subscription_request_errors']);
             return;
@@ -979,7 +1046,62 @@ class EcolesController extends Controller
     {
         Auth::requireAuth();
         Auth::requireRoles(['ecole_admin']);
-        $_SESSION['subscription_request_errors'] = ['La consultation des abonnements est en lecture seule. Contactez le super-administrateur pour toute modification.'];
+        $user = Auth::refresh() ?: Auth::user();
+        $schoolId = (int) ($user['ecole_id'] ?? 0);
+        $token = (string) ($_POST['csrf_token'] ?? '');
+        if (
+            $_SERVER['REQUEST_METHOD'] !== 'POST'
+            || $schoolId <= 0
+            || $token === ''
+            || !hash_equals((string) ($_SESSION['subscription_request_csrf'] ?? ''), $token)
+        ) {
+            $_SESSION['subscription_request_errors'] = ['Le formulaire a expiré. Rechargez la page puis réessayez.'];
+            $this->redirect('/ecoles/subscriptions');
+            return;
+        }
+
+        $planId = filter_var($_POST['plan_id'] ?? null, FILTER_VALIDATE_INT);
+        $message = trim((string) ($_POST['message'] ?? ''));
+        if ($planId === false || $planId <= 0 || mb_strlen($message, 'UTF-8') > 1000) {
+            $_SESSION['subscription_request_errors'] = ['Choisissez un tarif valide et saisissez un message de 1 000 caractères maximum.'];
+            $this->redirect('/ecoles/subscriptions');
+            return;
+        }
+
+        $availablePlanIds = array_map(
+            static fn (array $plan): int => (int) $plan['id'],
+            Ecole::getPlans()
+        );
+        if (!in_array((int) $planId, $availablePlanIds, true)) {
+            $_SESSION['subscription_request_errors'] = ['Le tarif choisi n’est pas disponible. Rechargez la page puis réessayez.'];
+            $this->redirect('/ecoles/subscriptions');
+            return;
+        }
+
+        if (SubscriptionRequest::create(
+            $schoolId,
+            (int) ($user['id'] ?? 0),
+            (int) $planId,
+            'renouvellement',
+            $message
+        )) {
+            $school = Ecole::findById($schoolId);
+            ActivityLog::record(
+                (int) ($user['id'] ?? 0),
+                'subscription_requested',
+                'school_subscription',
+                $schoolId,
+                (string) ($school['nom_etablissement'] ?? 'École'),
+                'Demande de renouvellement d’abonnement soumise.'
+            );
+            $_SESSION['subscription_request_success'] = 'Votre demande de renouvellement a été transmise à KC_SMA.';
+        } else {
+            $_SESSION['subscription_request_errors'] = [
+                'La demande n’a pas pu être soumise. Une demande peut déjà être en attente pour votre école; vérifiez l’historique puis réessayez.'
+            ];
+        }
+
+        $_SESSION['subscription_request_csrf'] = bin2hex(random_bytes(32));
         $this->redirect('/ecoles/subscriptions');
     }
 
@@ -994,7 +1116,7 @@ class EcolesController extends Controller
             || !hash_equals((string) ($_SESSION['subscription_request_csrf'] ?? ''), $token)
         ) {
             $_SESSION['ecoles_subscription_errors'] = ['Le formulaire a expiré. Rechargez la page puis réessayez.'];
-            $this->redirect('/ecoles/subscriptions');
+            $this->redirect('/ecoles/requests');
             return;
         }
 
@@ -1008,7 +1130,7 @@ class EcolesController extends Controller
             || mb_strlen($note, 'UTF-8') > 1000
         ) {
             $_SESSION['ecoles_subscription_errors'] = ['Les données de traitement de la demande sont invalides.'];
-            $this->redirect('/ecoles/subscriptions');
+            $this->redirect('/ecoles/requests');
             return;
         }
 
@@ -1021,7 +1143,7 @@ class EcolesController extends Controller
         }
         if (!$request || ($request['statut'] ?? '') !== 'En_attente') {
             $_SESSION['ecoles_subscription_errors'] = ['Cette demande est introuvable ou a déjà été traitée.'];
-            $this->redirect('/ecoles/subscriptions');
+            $this->redirect('/ecoles/requests');
             return;
         }
 
@@ -1042,7 +1164,7 @@ class EcolesController extends Controller
             $_SESSION['ecoles_subscription_errors'] = ['Impossible de traiter cette demande. Vérifiez le tarif et réessayez.'];
         }
 
-        $this->redirect('/ecoles/subscriptions');
+        $this->redirect('/ecoles/requests');
     }
 
     public function notificationAccess(): void
@@ -1193,6 +1315,6 @@ class EcolesController extends Controller
             $_SESSION['ecoles_subscription_errors'] = $errors;
         }
 
-        $this->redirect('/ecoles/subscriptions');
+        $this->redirect('/ecoles/requests');
     }
 }

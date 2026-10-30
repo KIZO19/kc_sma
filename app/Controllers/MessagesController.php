@@ -308,15 +308,36 @@ class MessagesController extends Controller
         $messageId = filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT);
         if (!$user || !$messageId || $messageId <= 0) {
             $this->redirect('/messages');
+            return;
         }
 
         $message = UserMessage::findForUser($messageId, (int) $user['id']);
+        if (!$message) {
+            http_response_code(404);
+            $this->redirect('/messages');
+            return;
+        }
         if ($message && ($message['type'] ?? '') === 'derogation_demande') {
             UserMessage::markRead($messageId, (int) $user['id']);
             $this->redirect('/derogations');
+            return;
         }
 
         UserMessage::markRead($messageId, (int) $user['id']);
-        $this->redirect('/messages#message-' . $messageId);
+        if (($message['type'] ?? '') === 'subscription_renewal_request'
+            && ($user['role'] ?? '') === 'super_admin') {
+            $this->redirect('/ecoles/subscriptions');
+            return;
+        }
+
+        $role = (string) ($user['role'] ?? 'default');
+        $this->view('messages/notification', [
+            'title' => APP_NAME . ' - ' . $message['title'],
+            'user' => $user,
+            'role' => $role,
+            'roleLabel' => User::getRoleLabel($role),
+            'modules' => $this->getModulesForRole($role),
+            'message' => $message,
+        ]);
     }
 }

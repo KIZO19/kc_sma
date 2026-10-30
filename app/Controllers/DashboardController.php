@@ -8,6 +8,7 @@ use App\Core\Database;
 use App\Models\AdministrationAutorisation;
 use App\Models\Ecole;
 use App\Models\PresenceAgent;
+use App\Models\UserPresence;
 use App\Models\User;
 use PDO;
 
@@ -22,6 +23,10 @@ class DashboardController extends Controller
         $user = Auth::refresh() ?: $user;
 
         $role = $user['role'] ?? 'default';
+        if ($role !== 'super_admin') {
+            UserPresence::recordDashboardAccess($user);
+        }
+
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($role !== 'ecole_admin') {
                 $this->redirect('/error/accessDenied');
@@ -69,6 +74,160 @@ class DashboardController extends Controller
             'adminRoleModules' => $adminRoleModules,
             'adminMatrix' => $adminMatrix,
         ]);
+    }
+
+    public function presence(): void
+    {
+        Auth::requireAuth();
+        $user = Auth::user();
+        if ($user === null) {
+            http_response_code(401);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['error' => 'Authentification requise.']);
+            return;
+        }
+
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store, private');
+        $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+        if ($method === 'POST') {
+            $payload = json_decode((string) file_get_contents('php://input'), true);
+            UserPresence::recordHeartbeat($user);
+            if (isset($payload['location']) && is_array($payload['location'])) {
+                if (
+                    ($user['role'] ?? '') === 'super_admin'
+                    || empty($user['ecole_id'])
+                    || !is_string($payload['location_nonce'] ?? null)
+                    || empty($_SESSION['location_consent_nonce'])
+                    || !hash_equals((string) $_SESSION['location_consent_nonce'], $payload['location_nonce'])
+                    || !is_numeric($payload['location']['latitude'] ?? null)
+                    || !is_numeric($payload['location']['longitude'] ?? null)
+                    || !is_numeric($payload['location']['accuracy'] ?? null)
+                ) {
+                    http_response_code(403);
+                    echo json_encode(['error' => 'Données de localisation invalides.']);
+                    return;
+                }
+
+                $latitude = (float) $payload['location']['latitude'];
+                $longitude = (float) $payload['location']['longitude'];
+                $accuracy = (float) $payload['location']['accuracy'];
+                if (
+                    !is_finite($latitude)
+                    || !is_finite($longitude)
+                    || !is_finite($accuracy)
+                    || $latitude < -90
+                    || $latitude > 90
+                    || $longitude < -180
+                    || $longitude > 180
+                    || $accuracy < 0
+                    || $accuracy > 1000000
+                ) {
+                    http_response_code(400);
+                    echo json_encode(['error' => 'Coordonnées de localisation hors limites.']);
+                    return;
+                }
+
+                UserPresence::recordLocation($user, $latitude, $longitude, $accuracy);
+                echo json_encode(['success' => true]);
+                return;
+            }
+            if (
+                is_array($payload)
+                && ($payload['page_visit'] ?? false) === true
+                && is_string($payload['path'] ?? null)
+                && is_string($payload['title'] ?? null)
+            ) {
+                UserPresence::recordPageVisit($user, $payload['path'], $payload['title']);
+            }
+            echo json_encode(['success' => true]);
+            return;
+        }
+
+        if ($method !== 'GET') {
+            http_response_code(405);
+            header('Allow: GET, POST');
+            echo json_encode(['error' => 'Méthode non autorisée.']);
+            return;
+        }
+
+        if (($user['role'] ?? '') !== 'super_admin') {
+            http_response_code(403);
+            echo json_encode(['error' => 'Accès réservé au super administrateur.']);
+            return;
+        }
+
+        echo json_encode(UserPresence::getOverview(1), JSON_THROW_ON_ERROR);
+    }
+
+    public function activity(): void
+    {
+        Auth::requireAuth();
+        $user = Auth::user();
+        if (($user['role'] ?? '') !== 'super_admin') {
+            $this->redirect('/error/accessDenied');
+            return;
+        }
+
+        $this->redirect('/activities#real-time');
+    }
+
+    public function userHistory(): void
+    {
+        Auth::requireAuth();
+        $currentUser = Auth::user();
+        if (($currentUser['role'] ?? '') !== 'super_admin') {
+            $this->redirect('/error/accessDenied');
+            return;
+        }
+
+        $userId = filter_var($_GET['id'] ?? '', FILTER_VALIDATE_INT);
+        if (!is_int($userId) || $userId < 1) {
+            http_response_code(400);
+            $history = null;
+        } else {
+            $history = UserPresence::getUserHistory($userId);
+            if ($history === null) {
+                http_response_code(404);
+            }
+        }
+
+        $this->view('dashboard/user_history', [
+            'title' => 'Historique utilisateur',
+            'user' => $currentUser,
+            'role' => 'super_admin',
+            'history' => $history,
+        ]);
+    }
+
+    public function userHistoryFeed(): void
+    {
+        Auth::requireAuth();
+        $currentUser = Auth::user();
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store, private');
+
+        if (($currentUser['role'] ?? '') !== 'super_admin') {
+            http_response_code(403);
+            echo json_encode(['error' => 'Accès réservé au super administrateur.']);
+            return;
+        }
+
+        $userId = filter_var($_GET['id'] ?? '', FILTER_VALIDATE_INT);
+        if (!is_int($userId) || $userId < 1) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Identifiant utilisateur invalide.']);
+            return;
+        }
+
+        $history = UserPresence::getUserHistory($userId);
+        if ($history === null) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Utilisateur introuvable.']);
+            return;
+        }
+
+        echo json_encode($history, JSON_THROW_ON_ERROR);
     }
 
     private function buildDashboardData(array $user, string $role, array $paymentChartRange = []): array

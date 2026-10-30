@@ -253,6 +253,46 @@ $pageStyles = <<<'CSS'
   .workspace-dashboard .workspace-action:hover { border-color: var(--sidebar-active); background: var(--surface-muted); }
   .workspace-dashboard .workspace-action i { display: grid; width: 2.4rem; height: 2.4rem; flex: 0 0 auto; place-items: center; border-radius: .55rem; background: var(--surface-muted); color: var(--sidebar-active); font-size: 1.1rem; }
   [data-theme="dark"] .workspace-dashboard .workspace-action i { background: rgba(255,255,255,.06); }
+  .access-control-table .access-control-switch {
+    display: inline-flex;
+    min-width: 3.5rem;
+    min-height: 2.5rem;
+    align-items: center;
+    justify-content: center;
+    padding: .35rem;
+  }
+  .access-control-table .access-control-toggle.form-check-input {
+    display: block;
+    width: 3rem !important;
+    min-width: 3rem;
+    max-width: 3rem !important;
+    height: 1.6rem !important;
+    margin: 0 !important;
+    flex: 0 0 3rem;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    border: 2px solid #64748b;
+    border-radius: 2rem;
+    background-color: #cbd5e1;
+    background-position: left center;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .22);
+    transition: background-color .15s ease, border-color .15s ease, background-position .15s ease;
+  }
+  .access-control-table .access-control-toggle.form-check-input:checked {
+    border-color: #0756c9;
+    background-color: #0d6efd;
+    background-position: right center;
+  }
+  .access-control-table .access-control-toggle.form-check-input:focus-visible {
+    outline: 3px solid rgba(13, 110, 253, .38);
+    outline-offset: 2px;
+    box-shadow: none;
+  }
+  [data-theme="dark"] .access-control-table .access-control-toggle.form-check-input:not(:checked) {
+    border-color: #cbd5e1;
+    background-color: #475569;
+  }
 </style>
 CSS;
 require __DIR__ . '/../partials/app_header.php';
@@ -408,6 +448,7 @@ require __DIR__ . '/../partials/app_header.php';
                     </div>
                   </div>
                 </div>
+
               </div>
               <div class="col-xl-4">
                 <div class="card school-panel h-100 mb-0">
@@ -431,6 +472,10 @@ require __DIR__ . '/../partials/app_header.php';
                     <a class="school-action" href="<?= BASE_URL ?>/ecoles/requests">
                       <i class="bi bi-inbox" aria-hidden="true"></i>
                       <span><strong class="d-block">Demandes d’inscription</strong><small class="text-muted">Examiner les demandes reçues</small></span>
+                    </a>
+                    <a class="school-action" href="<?= BASE_URL ?>/activities#real-time">
+                      <i class="bi bi-activity" aria-hidden="true"></i>
+                      <span><strong class="d-block">Activité en temps réel</strong><small class="text-muted">Suivre les écoles et utilisateurs connectés</small></span>
                     </a>
                     <a class="school-action" href="<?= BASE_URL ?>/ecoles/create">
                       <i class="bi bi-plus-circle" aria-hidden="true"></i>
@@ -858,7 +903,7 @@ require __DIR__ . '/../partials/app_header.php';
             </div>
             <div class="card-body">
               <div class="table-responsive">
-                <table class="table table-bordered table-striped align-middle mb-0">
+                <table class="table table-bordered table-striped align-middle mb-0 access-control-table">
                   <thead class="table-light">
                     <tr>
                       <th>Rôle</th>
@@ -881,8 +926,8 @@ require __DIR__ . '/../partials/app_header.php';
                                 <input type="hidden" name="role" value="<?= htmlspecialchars($roleKey) ?>">
                                 <input type="hidden" name="module" value="<?= htmlspecialchars($moduleKey) ?>">
                                 <input type="hidden" name="enabled" value="0">
-                                <div class="form-check form-switch d-inline-block">
-                                  <input class="form-check-input" type="checkbox" name="enabled" value="1" role="switch"
+                                <div class="form-check form-switch access-control-switch">
+                                  <input class="form-check-input access-control-toggle" type="checkbox" name="enabled" value="1" role="switch"
                                     aria-label="<?= htmlspecialchars($moduleLabel . ' pour ' . $roleLabel) ?>"
                                     <?= $allowed ? 'checked' : '' ?> onchange="this.form.submit()">
                                 </div>

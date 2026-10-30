@@ -16,23 +16,73 @@ unset($_SESSION['payment_notification_status']);
   .pos-amount { font-weight: bold; font-size: 14px; }
   .qr { text-align:center; margin-top:3px; }
   @media print {
-    @page { size: 80mm auto; margin: 2mm; }
-    body { margin: 0; background: #fff; }
-    body * { visibility: hidden !important; }
-    .pos-receipt, .pos-receipt * { visibility: visible !important; }
+    @page { size: 80mm 150mm; margin: 0; }
+    html, body {
+      width: 80mm !important;
+      height: auto !important;
+      min-height: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: visible !important;
+      background: #fff !important;
+    }
+    body > *:not(.app-wrapper) { display: none !important; }
+    body > .app-wrapper {
+      display: block !important;
+      position: static !important;
+      width: 80mm !important;
+      height: auto !important;
+      min-height: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: visible !important;
+    }
+    .app-wrapper > *:not(.content-wrapper) { display: none !important; }
+    .app-wrapper > .content-wrapper {
+      display: block !important;
+      position: static !important;
+      width: 80mm !important;
+      height: auto !important;
+      min-height: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: visible !important;
+    }
+    .content-wrapper > *:not(.content) { display: none !important; }
+    .content-wrapper > .content {
+      display: block !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    .content > *:not(.container-fluid) { display: none !important; }
+    .content > .container-fluid,
+    .container-fluid > .row,
+    .row > .col-md-6,
+    .col-md-6 > .card,
+    .card > .card-body {
+      display: block !important;
+      position: static !important;
+      width: 80mm !important;
+      height: auto !important;
+      min-height: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: visible !important;
+      border: 0 !important;
+      box-shadow: none !important;
+    }
+    .container-fluid > .row { display: block !important; }
+    .card-body > *:not(.pos-receipt) { display: none !important; }
     .pos-receipt {
-      position: absolute;
-      top: 0;
-      left: 50%;
+      position: relative;
       width: 76mm;
       max-width: 76mm;
-      margin: 0;
+      margin: 0 auto;
+      padding: 0;
       overflow: visible;
-      transform: translateX(-50%);
-      break-inside: avoid;
-      page-break-inside: avoid;
+      transform: none;
     }
-    .card-body { padding: 0 !important; }
+    .pos-receipt .pos-row { display: flex !important; }
     .pos-receipt .no-print { display: none !important; }
     .receipt-watermark { opacity: .10; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   }
@@ -163,7 +213,7 @@ unset($_SESSION['payment_notification_status']);
 
                 <div class="mt-3 d-flex justify-content-between no-print">
                   <a href="<?= BASE_URL ?>/paiements" class="btn btn-secondary btn-sm">Retour</a>
-                  <button class="btn btn-primary btn-sm" onclick="window.print()">Imprimer le reçu</button>
+                  <button class="btn btn-primary btn-sm" type="button" onclick="printReceipt()">Imprimer le reçu</button>
                 </div>
               </div>
             </div>
@@ -173,4 +223,40 @@ unset($_SESSION['payment_notification_status']);
     </div>
   </div>
 </section>
+<script>
+  function printReceipt() {
+    const receipt = document.querySelector('.pos-receipt');
+    if (receipt) {
+      const measurementContainer = document.createElement('div');
+      measurementContainer.style.cssText = 'position:fixed;left:-10000px;top:0;width:80mm;visibility:hidden;';
+      const measuredReceipt = receipt.cloneNode(true);
+      measuredReceipt.querySelectorAll('.no-print').forEach(element => element.remove());
+      measuredReceipt.style.cssText += ';position:relative;width:76mm;max-width:76mm;margin:0;padding:0;overflow:visible;transform:none;';
+      measurementContainer.appendChild(measuredReceipt);
+      document.body.appendChild(measurementContainer);
+
+      const heightMillimeters = Math.ceil(measuredReceipt.getBoundingClientRect().height * 25.4 / 96 + 2);
+      measurementContainer.remove();
+
+      let pageSizeStyle = document.getElementById('receiptPrintPageSize');
+      if (!pageSizeStyle) {
+        pageSizeStyle = document.createElement('style');
+        pageSizeStyle.id = 'receiptPrintPageSize';
+        document.head.appendChild(pageSizeStyle);
+      }
+      pageSizeStyle.textContent = '@page { size: 80mm ' + heightMillimeters + 'mm; margin: 0; }';
+    }
+
+    window.print();
+  }
+</script>
+<?php if (!empty($autoPrint)): ?>
+  <script>
+    window.addEventListener('load', function () {
+      window.setTimeout(function () {
+        printReceipt();
+      }, 300);
+    }, { once: true });
+  </script>
+<?php endif; ?>
 <?php require __DIR__ . '/../partials/app_footer.php'; ?>

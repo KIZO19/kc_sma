@@ -12,6 +12,9 @@ class SubscriptionRequest
     public static function create(int $schoolId, int $userId, int $planId, string $type, string $message): bool
     {
         self::ensureTable();
+        if ($type === 'renouvellement') {
+            UserMessage::ensureTable();
+        }
         $db = Database::getConnection();
         $db->beginTransaction();
 
@@ -46,6 +49,14 @@ class SubscriptionRequest
                 ':type_demande' => $type,
                 ':message' => $message !== '' ? $message : null,
             ]);
+            if ($type === 'renouvellement') {
+                UserMessage::notifyAdministratorsOfSubscriptionRequest(
+                    (int) $db->lastInsertId(),
+                    $schoolId,
+                    $planId,
+                    $userId
+                );
+            }
             $db->commit();
 
             return true;
