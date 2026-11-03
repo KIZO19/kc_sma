@@ -1009,6 +1009,7 @@ class EcolesController extends Controller
                 'isSuperAdmin' => false,
                 'school' => Ecole::findById($schoolId),
                 'subscriptions' => Ecole::getSubscriptions($schoolId),
+                'currentSubscription' => Ecole::getCurrentSubscription($schoolId),
                 'plans' => Ecole::getPlans(),
                 'subscriptionRequests' => SubscriptionRequest::getForSchool($schoolId),
                 'success' => $_SESSION['subscription_request_success'] ?? null,

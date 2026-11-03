@@ -126,6 +126,58 @@ class UserMessage
         }
     }
 
+    public static function notifySchoolAdministratorsOfSubscriptionDecision(
+        array $request,
+        string $status,
+        string $note
+    ): void {
+        if (
+            ($request['type_demande'] ?? '') !== 'renouvellement'
+            || !in_array($status, ['Approuvee', 'Refusee'], true)
+        ) {
+            return;
+        }
+
+        self::ensureTable();
+        $schoolId = (int) ($request['ecole_id'] ?? 0);
+        $requestId = (int) ($request['id'] ?? 0);
+        if ($schoolId <= 0 || $requestId <= 0) {
+            throw new \RuntimeException('Subscription renewal request details are invalid.');
+        }
+
+        $stmt = Database::getConnection()->prepare(
+            "SELECT id FROM utilisateurs
+             WHERE ecole_id = :ecole_id AND role = 'ecole_admin' AND statut = 'Actif'"
+        );
+        $stmt->execute([':ecole_id' => $schoolId]);
+        $administratorIds = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+        if ($administratorIds === []) {
+            throw new \RuntimeException('No active school administrator is available for the subscription decision notification.');
+        }
+
+        $approved = $status === 'Approuvee';
+        $title = $approved
+            ? 'Demande de renouvellement approuvée'
+            : 'Demande de renouvellement refusée';
+        $body = 'Votre demande de renouvellement pour '
+            . (string) ($request['nom_etablissement'] ?? 'votre école')
+            . ' a été ' . ($approved ? 'approuvée' : 'refusée')
+            . '. Tarif : ' . (string) ($request['nom_plan'] ?? 'non précisé') . '.';
+        if ($note !== '') {
+            $body .= "\nRéponse de KC_SMA : " . $note;
+        }
+
+        foreach ($administratorIds as $administratorId) {
+            self::create(
+                $administratorId,
+                $approved ? 'subscription_request_approved' : 'subscription_request_rejected',
+                $requestId,
+                $title,
+                $body
+            );
+        }
+    }
+
     public static function notifyAccountantsOfExpiredDerogations(int $schoolId): void
     {
         if ($schoolId <= 0) {

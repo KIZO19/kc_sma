@@ -2,7 +2,7 @@
 <section class="content-header">
   <div class="container-fluid">
     <h1>Messagerie</h1>
-    <p class="text-muted mb-0">Échanges privés entre les familles et les responsables de l’établissement.</p>
+    <p class="text-muted mb-0">Échanges privés entre les familles, les responsables et les membres du personnel de l’établissement.</p>
   </div>
 </section>
 <section class="content">
@@ -17,11 +17,11 @@
     <?php endif; ?>
 
     <?php if (!empty($canCompose)): ?>
-      <div class="card card-outline card-primary mb-4">
+      <div class="card card-outline card-primary mb-4" id="compose-message">
         <div class="card-header"><h2 class="card-title h5 mb-0">Nouveau message</h2></div>
         <div class="card-body">
-          <?php if (empty($contacts) || (!empty($isParent) && empty($children))): ?>
-            <p class="text-muted mb-0"><?= !empty($isParent) ? 'Aucun responsable ou enfant lié à votre compte ne peut être sélectionné.' : 'Aucun parent actif associé à un élève de votre périmètre.' ?></p>
+          <?php if ((!empty($isParent) && (empty($contacts) || empty($children))) || (empty($isParent) && empty($contacts) && empty($staffContacts))): ?>
+            <p class="text-muted mb-0"><?= !empty($isParent) ? 'Aucun responsable ou enfant lié à votre compte ne peut être sélectionné.' : 'Aucun membre du personnel ou parent actif ne peut être sélectionné.' ?></p>
           <?php else: ?>
             <form method="post" action="<?= BASE_URL ?>/messages/send" class="row g-3">
               <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) ($csrfToken ?? ''), ENT_QUOTES, 'UTF-8') ?>">
@@ -49,12 +49,21 @@
                   <label class="form-label" for="message-recipient">Parent et enfant concerné</label>
                   <select class="form-select" id="message-recipient" name="recipient" required>
                     <option value="">Choisir un parent et un enfant</option>
+                    <optgroup label="Membres du personnel de l’école">
+                      <?php foreach (($staffContacts ?? []) as $contact): ?>
+                        <option value="staff:<?= (int) $contact['id'] ?>">
+                          <?= htmlspecialchars($contact['nom_complet'] . ' — ' . \App\Models\User::getRoleLabel($contact['role']), ENT_QUOTES, 'UTF-8') ?>
+                        </option>
+                      <?php endforeach; ?>
+                    </optgroup>
+                    <optgroup label="Parents des élèves de votre périmètre">
                     <?php foreach (($contacts ?? []) as $contact): ?>
                       <?php $studentName = trim(implode(' ', array_filter([$contact['nom'] ?? '', $contact['postnom'] ?? '', $contact['prenom'] ?? '']))); ?>
-                      <option value="<?= (int) $contact['parent_user_id'] ?>:<?= (int) $contact['eleve_id'] ?>">
+                      <option value="parent:<?= (int) $contact['parent_user_id'] ?>:<?= (int) $contact['eleve_id'] ?>">
                         <?= htmlspecialchars($contact['parent_nom'] . ' — ' . $studentName, ENT_QUOTES, 'UTF-8') ?>
                       </option>
                     <?php endforeach; ?>
+                    </optgroup>
                   </select>
                 </div>
               <?php endif; ?>
@@ -88,6 +97,12 @@
                   <span class="fw-semibold">
                     <?= htmlspecialchars((string) $thread['subject'], ENT_QUOTES, 'UTF-8') ?>
                     <?php if ((int) $thread['unread_count'] > 0): ?><span class="badge text-bg-primary ms-1"><?= (int) $thread['unread_count'] ?> nouveau<?= (int) $thread['unread_count'] > 1 ? 'x' : '' ?></span><?php endif; ?>
+                    <small class="d-block fw-normal text-muted">
+                      Avec <?= htmlspecialchars((string) $thread['other_name'], ENT_QUOTES, 'UTF-8') ?>
+                      <?php if (!empty($thread['student_name'])): ?>
+                        · <?= htmlspecialchars((string) $thread['student_name'], ENT_QUOTES, 'UTF-8') ?>
+                      <?php endif; ?>
+                    </small>
                   </span>
                   <i class="bi bi-arrow-up-right text-muted" aria-hidden="true"></i>
                 </div>

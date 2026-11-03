@@ -36,7 +36,7 @@ class Communique
         return (int) Database::getConnection()->lastInsertId();
     }
 
-    public static function latestBySchool(int $ecoleId, int $limit = 20): array
+    public static function latestBySchool(int $ecoleId, int $limit = 20, ?int $sectionId = null): array
     {
         self::ensureTable();
         $stmt = Database::getConnection()->prepare(
@@ -48,10 +48,28 @@ class Communique
              LIMIT :limit'
         );
         $stmt->bindValue(':ecole_id', $ecoleId, PDO::PARAM_INT);
-        $stmt->bindValue(':limit', max(1, min(100, $limit)), PDO::PARAM_INT);
+        $stmt->bindValue(':limit', $sectionId === null ? max(1, min(100, $limit)) : 500, PDO::PARAM_INT);
         $stmt->execute();
 
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $communiques = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if ($sectionId !== null) {
+            $communiques = array_values(array_filter(
+                $communiques,
+                static function (array $communique) use ($sectionId): bool {
+                    $rawSections = $communique['destinataires_sections'] ?? null;
+                    if ($rawSections === null || trim((string) $rawSections) === '') {
+                        return true;
+                    }
+                    $sections = json_decode((string) $rawSections, true);
+
+                    return is_array($sections)
+                        && $sections !== []
+                        && in_array($sectionId, array_map('intval', $sections), true);
+                }
+            ));
+        }
+
+        return array_slice($communiques, 0, max(1, min(100, $limit)));
     }
 
     private static function ensureTable(): void

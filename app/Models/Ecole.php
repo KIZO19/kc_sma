@@ -85,6 +85,33 @@ class Ecole
         }
     }
 
+    public static function getCurrentSubscription(int $ecoleId): ?array
+    {
+        if ($ecoleId <= 0) {
+            return null;
+        }
+
+        try {
+            $stmt = Database::getConnection()->prepare(
+                "SELECT a.*, COALESCE(p.nom_plan, 'Essai gratuit') AS nom_plan
+                 FROM abonnements_ecoles a
+                 LEFT JOIN plans_abonnement p ON p.id = a.plan_id
+                 WHERE a.ecole_id = :ecole_id
+                   AND a.statut_abonnement = 'Actif'
+                   AND a.date_debut <= CURRENT_DATE
+                   AND a.date_fin >= CURRENT_DATE
+                 ORDER BY a.date_debut DESC, a.id DESC
+                 LIMIT 1"
+            );
+            $stmt->execute([':ecole_id' => $ecoleId]);
+
+            return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        } catch (\Throwable $e) {
+            error_log('Ecole::getCurrentSubscription failed: ' . $e->getMessage());
+            return null;
+        }
+    }
+
     public static function getSubscriptions(?int $ecoleId = null): array
     {
         try {

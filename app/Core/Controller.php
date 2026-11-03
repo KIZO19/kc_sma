@@ -190,9 +190,9 @@ class Controller
                 ['name' => 'Bulletins', 'path' => '/bulletins', 'icon' => 'bi-file-earmark-text'],
                 ['name' => 'Présences', 'path' => '/presences', 'icon' => 'bi-calendar-check'],
                 ['name' => 'Évaluations', 'path' => '/evaluations', 'icon' => 'bi-journal-check'],
-                ['name' => 'Événements', 'path' => '/evenements', 'icon' => 'bi-calendar-event'],
             ],
             'DP_école' => [
+                ['name' => 'Admissions', 'path' => '/inscriptions', 'icon' => 'bi-person-plus'],
                 ['name' => 'Classes', 'path' => '/classes', 'icon' => 'bi-houses'],
                 ['name' => 'Parents', 'path' => '/parents', 'icon' => 'bi-people'],
                 ['name' => 'Élèves', 'path' => '/eleves', 'icon' => 'bi-person-badge'],
@@ -299,7 +299,11 @@ class Controller
             array_unshift($modules, ['name' => 'Communiqués', 'path' => '/communiques', 'icon' => 'bi-megaphone']);
         }
         if (in_array($role, ['DE_école', 'DP_école', 'DA_école'], true)) {
-            array_unshift($modules, ['name' => 'Gestion des horaires', 'path' => '/horaires', 'icon' => 'bi-calendar-week']);
+            array_unshift($modules, [
+                'name' => $role === 'DP_école' ? 'Enseignants et horaires' : 'Gestion des horaires',
+                'path' => '/horaires',
+                'icon' => 'bi-calendar-week',
+            ]);
         }
 
         $user = Auth::user();
@@ -344,7 +348,18 @@ class Controller
             return \App\Models\User::getDefaultSectionIdForRole($role) ?? 0;
         }
 
-        if (in_array($role, ['DP_école', 'DA_école'], true)) {
+        if ($role === 'DP_école') {
+            $sectionId = (int) ($user['section_id'] ?? 0);
+            $section = $sectionId > 0 ? \App\Models\Section::findById($sectionId) : null;
+            $sectionName = mb_strtolower(trim((string) ($section['nom_section'] ?? '')), 'UTF-8');
+            if ($sectionName === 'primaire') {
+                return $sectionId;
+            }
+
+            return \App\Models\User::getDefaultSectionIdForRole($role) ?? 0;
+        }
+
+        if ($role === 'DA_école') {
             $sectionId = (int) ($user['section_id'] ?? 0);
             $section = $sectionId > 0 ? \App\Models\Section::findById($sectionId) : null;
             $sectionName = mb_strtolower(trim((string) ($section['nom_section'] ?? '')), 'UTF-8');

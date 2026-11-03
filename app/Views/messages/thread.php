@@ -57,8 +57,10 @@ $lastMessageId = $initialMessages ? (int) $initialMessages[count($initialMessage
     <a class="btn btn-sm btn-outline-secondary mb-3" href="<?= BASE_URL ?>/messages"><i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Retour aux messages</a>
     <h1><?= htmlspecialchars((string) $thread['subject'], ENT_QUOTES, 'UTF-8') ?></h1>
     <p class="text-muted mb-0">
-      <?= htmlspecialchars((string) $thread['student_name'], ENT_QUOTES, 'UTF-8') ?>
-      · Conversation avec <?= htmlspecialchars(
+      <?php if (!empty($thread['student_name'])): ?>
+        <?= htmlspecialchars((string) $thread['student_name'], ENT_QUOTES, 'UTF-8') ?> ·
+      <?php endif; ?>
+      Conversation avec <?= htmlspecialchars(
           (int) $thread['parent_user_id'] === $currentUserId
               ? (string) $thread['staff_name']
               : (string) $thread['parent_name'],

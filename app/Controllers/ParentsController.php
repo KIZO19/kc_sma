@@ -63,7 +63,7 @@ class ParentsController extends Controller
         $parent = $role === 'super_admin'
             ? ParentModel::findById($parentId)
             : ($schoolId > 0
-                ? ParentModel::findByIdAndSchool($parentId, $schoolId, $canAssignChildren ? null : $sectionScopeId)
+                ? ParentModel::findByIdAndSchool($parentId, $schoolId, $sectionScopeId)
                 : null);
 
         if (!$parent) {
@@ -102,7 +102,8 @@ class ParentsController extends Controller
             'childrenFinancialSummaries' => ParentModel::getChildrenFinancialSummaries($children),
             'pendingChildRequests' => ParentModel::getPendingChildRequestsForParentProfile(
                 $parentId,
-                (int) ($parent['ecole_id'] ?? 0)
+                (int) ($parent['ecole_id'] ?? 0),
+                $role === 'super_admin' ? null : $sectionScopeId
             ),
             'canAssignChildren' => $canAssignChildren,
             'unassignedChildren' => $unassignedChildren,

@@ -19,6 +19,7 @@
     const endpoint = header.dataset.notificationsEndpoint;
     const baseUrl = header.dataset.notificationsBaseUrl;
     const notificationIcon = header.dataset.notificationsIcon;
+    const canComposeMessages = header.dataset.canComposeMessages === '1';
     const soundStorageKey = 'adminkc_notification_sound';
     const phoneNotificationStorageKey = 'adminkc_phone_notifications';
     const knownNotificationIds = new Set();
@@ -280,6 +281,16 @@
       }
 
       addDivider(messagesMenu);
+      if (canComposeMessages) {
+        addLink(
+          messagesMenu,
+          baseUrl + '/messages?compose=1#compose-message',
+          'bi bi-pencil-square text-primary',
+          'Commencer une conversation',
+          ''
+        );
+        addDivider(messagesMenu);
+      }
       addLink(messagesMenu, baseUrl + '/messages', '', 'Ouvrir les messages', '');
       if (data.pendingDerogationCount !== null || data.decisionMessageCount !== null) {
         addDivider(messagesMenu);

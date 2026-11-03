@@ -119,13 +119,15 @@ class SubscriptionRequest
             return false;
         }
 
+        UserMessage::ensureTable();
         $db = Database::getConnection();
         $db->beginTransaction();
         try {
             $stmt = $db->prepare(
-                'SELECT r.*, p.duree_mois, p.prix
+                'SELECT r.*, p.duree_mois, p.prix, p.nom_plan, e.nom_etablissement
                  FROM demandes_abonnement_ecoles r
                  INNER JOIN plans_abonnement p ON p.id = r.plan_id
+                 INNER JOIN ecoles e ON e.id = r.ecole_id
                  WHERE r.id = :id AND r.statut = \'En_attente\'
                  FOR UPDATE'
             );
@@ -193,6 +195,8 @@ class SubscriptionRequest
             if ($update->rowCount() !== 1) {
                 throw new \RuntimeException('Subscription request could not be updated.');
             }
+
+            UserMessage::notifySchoolAdministratorsOfSubscriptionDecision($request, $status, $note);
 
             $db->commit();
             return true;

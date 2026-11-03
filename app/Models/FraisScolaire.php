@@ -14,13 +14,13 @@ class FraisScolaire
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public static function getAllBySchool(int $ecoleId): array
+    public static function getAllBySchool(int $ecoleId, ?int $sectionId = null): array
     {
         $db = Database::getConnection();
         try {
             $stmt = $db->prepare(
                 "SELECT f.*, 
-                        c.nom_classe, co.nom_option AS class_option_name,
+                        c.nom_classe, c.section_id AS class_section_id, co.nom_option AS class_option_name,
                         ao.nom_option AS option_scope_name,
                         ss.nom_section AS section_scope_name,
                         s.annee AS annee_scolaire,
@@ -54,12 +54,13 @@ class FraisScolaire
                 ':option_school' => $ecoleId,
                 ':section_school' => $ecoleId,
             ]);
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $fees = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            return $sectionId === null ? $fees : self::filterFeesBySection($fees, $ecoleId, $sectionId);
         } catch (\PDOException $e) {
             // Fallback for older schema without 'scope' column: return basic fees for school's classes
             error_log('FraisScolaire::getAllBySchool fallback due to DB error: ' . $e->getMessage());
             $stmt = $db->prepare(
-                "SELECT f.*, c.nom_classe, co.nom_option AS class_option_name,
+                "SELECT f.*, c.nom_classe, c.section_id AS class_section_id, co.nom_option AS class_option_name,
                         s.annee AS annee_scolaire,
                         CASE WHEN co.nom_option IS NOT NULL AND co.nom_option <> ''
                           THEN CONCAT(c.nom_classe, ' · ', co.nom_option)
@@ -72,8 +73,37 @@ class FraisScolaire
                  ORDER BY s.annee DESC, c.nom_classe ASC, f.type_frais ASC"
             );
             $stmt->execute([':class_school' => $ecoleId, ':fee_school' => $ecoleId]);
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $fees = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            return $sectionId === null ? $fees : self::filterFeesBySection($fees, $ecoleId, $sectionId);
         }
+    }
+
+    private static function filterFeesBySection(array $fees, int $ecoleId, int $sectionId): array
+    {
+        $stmt = Database::getConnection()->prepare(
+            'SELECT DISTINCT option_id FROM classes WHERE ecole_id = :ecole_id AND section_id = :section_id AND option_id IS NOT NULL'
+        );
+        $stmt->execute([':ecole_id' => $ecoleId, ':section_id' => $sectionId]);
+        $optionIds = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+
+        return array_values(array_filter($fees, static function (array $fee) use ($sectionId, $optionIds): bool {
+            $scope = (string) ($fee['scope'] ?? '');
+            $scopeId = (int) ($fee['scope_id'] ?? 0);
+            if ($scope === 'school' || ($scope === '' && empty($fee['classe_id']))) {
+                return true;
+            }
+            if ($scope === 'section') {
+                return $scopeId === $sectionId;
+            }
+            if ($scope === 'class') {
+                return (int) ($fee['class_section_id'] ?? 0) === $sectionId;
+            }
+            if ($scope === 'option') {
+                return in_array($scopeId, $optionIds, true);
+            }
+
+            return (int) ($fee['class_section_id'] ?? 0) === $sectionId;
+        }));
     }
 
     public static function create(array $data)

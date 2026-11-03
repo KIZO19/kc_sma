@@ -18,7 +18,6 @@ class EvenementsController extends Controller
         'préfet_école',
         'DE_école',
         'DD_école',
-        'DP_école',
         'DA_école',
         'sec_école',
         'enseignant_école',

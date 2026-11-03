@@ -14,6 +14,7 @@ class ClassesController extends Controller
     private const CREATION_ROLES = [
         'promoteur_école',
         'préfet_école',
+        'DP_école',
         'sec_école',
     ];
 
@@ -21,6 +22,7 @@ class ClassesController extends Controller
         'promoteur_école',
         'préfet_école',
         'DE_école',
+        'DP_école',
         'DA_école',
         'sec_école',
     ];
@@ -29,6 +31,7 @@ class ClassesController extends Controller
         'promoteur_école',
         'préfet_école',
         'DE_école',
+        'DP_école',
         'DA_école',
         'sec_école',
     ];
@@ -241,7 +244,39 @@ class ClassesController extends Controller
             (int) $classe['section_id'] !== $sectionId
             || $oldOptionId !== $optionId
         )) {
-            $errors[] = 'La section ou l’option ne peut pas être modifiée, car cette classe possède déjà des inscriptions, des frais ou des cours attribués.';
+            $details = Classe::getUsageDetails($id);
+            $errors[] = 'Impossible de modifier la section ou l’option de la classe « '
+                . (string) $classe['nom_classe']
+                . ' ». Elle est liée aux éléments suivants :';
+            foreach ([
+                'inscriptions' => 'Élèves inscrits',
+                'frais' => 'Frais scolaires',
+                'attributions' => 'Cours attribués',
+            ] as $type => $label) {
+                $count = (int) ($usage[$type] ?? 0);
+                if ($count <= 0) {
+                    continue;
+                }
+
+                $entries = array_map(
+                    static function (array $detail): string {
+                        $parts = array_filter([
+                            trim((string) ($detail['label'] ?? '')),
+                            trim((string) ($detail['detail'] ?? '')),
+                            trim((string) ($detail['school_year'] ?? '')),
+                        ], static fn (string $part): bool => $part !== '');
+
+                        return implode(' — ', $parts);
+                    },
+                    $details[$type] ?? []
+                );
+                $listedCount = count($entries);
+                if ($listedCount < $count) {
+                    $entries[] = 'et ' . ($count - $listedCount) . ' autre(s)';
+                }
+                $errors[] = $label . ' (' . $count . ') : '
+                    . ($entries !== [] ? implode('; ', $entries) : 'détails indisponibles');
+            }
         }
 
         if (!empty($errors)) {

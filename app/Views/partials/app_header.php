@@ -316,7 +316,8 @@ if (!empty($schoolContext['logo_url'])) {
        data-notifications-endpoint="<?= BASE_URL ?>/notifications/poll"
        data-notifications-base-url="<?= BASE_URL ?>"
        data-notifications-interval="<?= ($user['role'] ?? '') === 'comptable_école' ? '2000' : '5000' ?>"
-       data-notifications-icon="<?= BASE_URL ?>/assets/icons/kc-sma-192.png">
+       data-notifications-icon="<?= BASE_URL ?>/assets/icons/kc-sma-192.png"
+       data-can-compose-messages="<?= !empty($user['id']) && \App\Models\SchoolMessage::canComposeForRole((string) ($user['role'] ?? '')) ? '1' : '0' ?>">
       <div class="container-fluid">
         <ul class="navbar-nav">
           <li class="nav-item">
@@ -476,6 +477,11 @@ if (!empty($schoolContext['logo_url'])) {
               </button>
               <?php if (!empty($user['id'])): ?>
                 <div class="dropdown-divider"></div>
+                <?php if (\App\Models\SchoolMessage::canComposeForRole((string) ($user['role'] ?? ''))): ?>
+                  <a href="<?= BASE_URL ?>/messages?compose=1#compose-message" class="dropdown-item text-center">
+                    <i class="bi bi-pencil-square me-1" aria-hidden="true"></i>Commencer une conversation
+                  </a>
+                <?php endif; ?>
                 <a href="<?= BASE_URL ?>/messages" class="dropdown-item text-center">Ouvrir les messages</a>
               <?php endif; ?>
               <?php if (isset($pendingDerogationMessages) || isset($derogationDecisionMessages)): ?>

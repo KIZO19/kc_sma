@@ -140,6 +140,52 @@ class Classe
         return $stmt->fetch(PDO::FETCH_ASSOC) ?: ['inscriptions' => 0, 'frais' => 0, 'attributions' => 0];
     }
 
+    public static function getUsageDetails(int $id, int $limit = 10): array
+    {
+        $db = Database::getConnection();
+        $limit = max(1, min(50, $limit));
+        $queries = [
+            'inscriptions' => [
+                'SELECT CONCAT_WS(\' \', e.nom, e.postnom, e.prenom) AS label, a.annee AS school_year,
+                        i.decision_finale AS detail
+                 FROM inscriptions i
+                 INNER JOIN eleves e ON e.id = i.eleve_id
+                 INNER JOIN annees_scolaires a ON a.id = i.annee_scolaire_id
+                 WHERE i.classe_id = :class_id
+                 ORDER BY a.annee DESC, e.nom, e.postnom, e.prenom',
+            ],
+            'frais' => [
+                'SELECT f.type_frais AS label, a.annee AS school_year,
+                        CONCAT(f.montant_total, \' \', f.devise) AS detail
+                 FROM frais_scolaires f
+                 INNER JOIN annees_scolaires a ON a.id = f.annee_scolaire_id
+                 WHERE f.classe_id = :class_id
+                 ORDER BY a.annee DESC, f.type_frais',
+            ],
+            'attributions' => [
+                'SELECT c.nom_cours AS label, a.annee AS school_year,
+                        CONCAT_WS(\' \', ag.nom, ag.postnom, ag.prenom) AS detail
+                 FROM attribution_cours ac
+                 INNER JOIN cours c ON c.id = ac.cours_id
+                 INNER JOIN agents ag ON ag.id = ac.agent_id
+                 INNER JOIN annees_scolaires a ON a.id = ac.annee_scolaire_id
+                 WHERE ac.classe_id = :class_id
+                 ORDER BY a.annee DESC, c.nom_cours, ag.nom, ag.postnom',
+            ],
+        ];
+
+        $details = [];
+        foreach ($queries as $type => [$sql]) {
+            $stmt = $db->prepare($sql . ' LIMIT :limit');
+            $stmt->bindValue(':class_id', $id, PDO::PARAM_INT);
+            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+            $stmt->execute();
+            $details[$type] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+
+        return $details;
+    }
+
     public static function update(int $id, array $data): bool
     {
         $db = Database::getConnection();

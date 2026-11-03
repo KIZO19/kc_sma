@@ -44,24 +44,27 @@
       <?php endif; ?>
 
       <div class="card">
-        <div class="card-header"><h2 class="card-title">Abonnement de <?= htmlspecialchars($school['nom_etablissement'] ?? 'votre école', ENT_QUOTES, 'UTF-8') ?></h2></div>
+        <div class="card-header"><h2 class="card-title">Abonnement en cours de <?= htmlspecialchars($school['nom_etablissement'] ?? 'votre école', ENT_QUOTES, 'UTF-8') ?></h2></div>
         <div class="card-body">
-          <?php if ($latestSubscription): ?>
-            <?php
-              $subscriptionActive = ($latestSubscription['statut_abonnement'] ?? '') === 'Actif'
-                  && strtotime((string) ($latestSubscription['date_debut'] ?? '')) <= time()
-                  && strtotime((string) ($latestSubscription['date_fin'] ?? '')) >= strtotime('today');
-            ?>
+          <?php if (!empty($currentSubscription)): ?>
             <div class="row g-3">
-              <div class="col-md-3"><div class="text-muted small">Plan</div><strong><?= htmlspecialchars((string) ($latestSubscription['nom_plan'] ?? 'Plan'), ENT_QUOTES, 'UTF-8') ?></strong></div>
+              <div class="col-md-3"><div class="text-muted small">Plan</div><strong><?= htmlspecialchars((string) ($currentSubscription['nom_plan'] ?? 'Plan'), ENT_QUOTES, 'UTF-8') ?></strong></div>
               <div class="col-md-3"><div class="text-muted small">Statut</div>
-                <span class="badge text-bg-<?= $subscriptionActive ? 'success' : 'danger' ?>"><?= $subscriptionActive ? 'Actif' : htmlspecialchars((string) ($latestSubscription['statut_abonnement'] ?? 'Expiré'), ENT_QUOTES, 'UTF-8') ?></span>
+                <span class="badge text-bg-success">Actif</span>
               </div>
-              <div class="col-md-3"><div class="text-muted small">Début</div><?= htmlspecialchars(formatDate($latestSubscription['date_debut'] ?? null), ENT_QUOTES, 'UTF-8') ?></div>
-              <div class="col-md-3"><div class="text-muted small">Fin</div><?= htmlspecialchars(formatDate($latestSubscription['date_fin'] ?? null), ENT_QUOTES, 'UTF-8') ?></div>
+              <div class="col-md-3"><div class="text-muted small">Début</div><?= htmlspecialchars(formatDate($currentSubscription['date_debut'] ?? null), ENT_QUOTES, 'UTF-8') ?></div>
+              <div class="col-md-3"><div class="text-muted small">Fin</div><?= htmlspecialchars(formatDate($currentSubscription['date_fin'] ?? null), ENT_QUOTES, 'UTF-8') ?></div>
             </div>
           <?php else: ?>
-            <p class="mb-0 text-muted">Aucun abonnement n’est encore enregistré pour votre école.</p>
+            <p class="mb-0 text-muted">Aucun abonnement actif n’est en cours actuellement.</p>
+            <?php if ($latestSubscription): ?>
+              <hr>
+              <div class="small text-muted">Dernier abonnement enregistré : <?= htmlspecialchars((string) ($latestSubscription['nom_plan'] ?? 'Plan'), ENT_QUOTES, 'UTF-8') ?>,
+                statut <?= htmlspecialchars((string) ($latestSubscription['statut_abonnement'] ?? 'Inconnu'), ENT_QUOTES, 'UTF-8') ?>,
+                du <?= htmlspecialchars(formatDate($latestSubscription['date_debut'] ?? null), ENT_QUOTES, 'UTF-8') ?>
+                au <?= htmlspecialchars(formatDate($latestSubscription['date_fin'] ?? null), ENT_QUOTES, 'UTF-8') ?>.
+              </div>
+            <?php endif; ?>
           <?php endif; ?>
           <?php if ($hasPendingRequest): ?>
             <div class="alert alert-info mt-3 mb-0"><i class="bi bi-hourglass-split me-1" aria-hidden="true"></i>Une demande est en attente de traitement par KC_SMA.</div>

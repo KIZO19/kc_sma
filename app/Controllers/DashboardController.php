@@ -531,7 +531,7 @@ class DashboardController extends Controller
             return [];
         }
 
-        $sectionScopeId = in_array($role, ['préfet_école', 'DE_école', 'DD_école'], true)
+        $sectionScopeId = in_array($role, ['préfet_école', 'DE_école', 'DD_école', 'DP_école'], true)
             ? $this->getSectionScopeForUser($user)
             : null;
         $teacherAttendance = $role === 'DE_école'
@@ -539,7 +539,7 @@ class DashboardController extends Controller
             : [];
         $studentCount = $this->countSchoolStudents($schoolId, $sectionScopeId);
         $teacherCount = $this->countSchoolUsers($schoolId, ['enseignant_école'], $sectionScopeId);
-        $parentCount = $this->countSchoolUsers($schoolId, ['parent_ecole']);
+        $parentCount = $this->countSchoolUsers($schoolId, ['parent_ecole'], $sectionScopeId);
         $classCount = $this->countSchoolClasses($schoolId, $sectionScopeId);
         $eventCount = $this->countSchoolEvents($schoolId);
         $debtTotal = $this->sumOutstandingDebt($schoolId);
@@ -583,10 +583,9 @@ class DashboardController extends Controller
                 ['title' => 'Enseignants', 'value' => $schoolId > 0 ? $this->countSchoolUsers($schoolId, ['enseignant_école'], $sectionScopeId) : 0, 'icon' => 'bi-person-workspace', 'bg' => 'bg-warning', 'hint' => 'Enseignants du secondaire'],
             ],
             'DP_école' => [
-                ['title' => 'Élèves inscrits', 'value' => $studentCount, 'icon' => 'bi-people-fill', 'bg' => 'bg-primary', 'hint' => 'Effectif de l’école'],
-                ['title' => 'Classes', 'value' => $classCount, 'icon' => 'bi-diagram-3', 'bg' => 'bg-info', 'hint' => 'Organisation scolaire'],
-                ['title' => 'Enseignants', 'value' => $schoolId > 0 ? $this->countSchoolUsers($schoolId, ['enseignant_école']) : 0, 'icon' => 'bi-person-workspace', 'bg' => 'bg-success', 'hint' => 'Comptes enseignants'],
-                ['title' => 'Événements', 'value' => $eventCount, 'icon' => 'bi-calendar-event', 'bg' => 'bg-warning', 'hint' => 'Activités enregistrées'],
+                ['title' => 'Élèves inscrits', 'value' => $studentCount, 'icon' => 'bi-people-fill', 'bg' => 'bg-primary', 'hint' => 'Effectif du primaire'],
+                ['title' => 'Classes', 'value' => $classCount, 'icon' => 'bi-diagram-3', 'bg' => 'bg-info', 'hint' => 'Classes du primaire'],
+                ['title' => 'Enseignants', 'value' => $this->countSchoolUsers($schoolId, ['enseignant_école'], $sectionScopeId), 'icon' => 'bi-person-workspace', 'bg' => 'bg-success', 'hint' => 'Enseignants du primaire'],
             ],
             default => [],
         };
@@ -733,7 +732,7 @@ class DashboardController extends Controller
             return ['title' => 'Vue synthétique', 'items' => []];
         }
 
-        $sectionScopeId = $role === 'préfet_école'
+        $sectionScopeId = in_array($role, ['préfet_école', 'DP_école'], true)
             ? $this->getSectionScopeForUser($user)
             : null;
         $students = $this->countSchoolStudents($schoolId, $sectionScopeId);
@@ -744,9 +743,8 @@ class DashboardController extends Controller
                 ['label' => 'Options du secondaire', 'value' => (string) $this->countSchoolOptions($schoolId, $sectionScopeId), 'color' => 'bg-success'],
             ],
             'DP_école' => [
-                ['label' => 'Effectif scolaire', 'value' => (string) $students, 'color' => 'bg-primary'],
-                ['label' => 'Enseignants', 'value' => (string) $this->countSchoolUsers($schoolId, ['enseignant_école']), 'color' => 'bg-success'],
-                ['label' => 'Événements enregistrés', 'value' => (string) $this->countSchoolEvents($schoolId), 'color' => 'bg-warning'],
+                ['label' => 'Effectif du primaire', 'value' => (string) $students, 'color' => 'bg-primary'],
+                ['label' => 'Enseignants du primaire', 'value' => (string) $this->countSchoolUsers($schoolId, ['enseignant_école'], $sectionScopeId), 'color' => 'bg-success'],
             ],
             default => [],
         };

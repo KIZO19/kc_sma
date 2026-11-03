@@ -55,9 +55,14 @@ class MessagesController extends Controller
                 : [],
             'contacts' => $isParent
                 ? SchoolMessage::getParentContacts((int) ($user['reference_id'] ?? 0), $schoolId)
-                : ($isStaff ? SchoolMessage::getStaffParentContacts($schoolId, $this->getSectionScopeForUser($user)) : []),
+                : (SchoolMessage::canMessageParents((string) $role)
+                    ? SchoolMessage::getStaffParentContacts($schoolId, $this->getSectionScopeForUser($user))
+                    : []),
+            'staffContacts' => $isStaff
+                ? SchoolMessage::getStaffContacts($schoolId, (int) ($user['id'] ?? 0))
+                : [],
             'isParent' => $isParent,
-            'canCompose' => $isParent || $isStaff,
+            'canCompose' => SchoolMessage::canComposeForRole((string) $role),
             'csrfToken' => $_SESSION['school_messages_csrf'],
         ]);
     }
@@ -115,19 +120,39 @@ class MessagesController extends Controller
         if ($isParent) {
             $recipientUserId = (int) ($_POST['recipient_user_id'] ?? 0);
         } else {
-            $recipient = explode(':', (string) ($_POST['recipient'] ?? ''), 2);
-            if (count($recipient) === 2 && ctype_digit($recipient[0]) && ctype_digit($recipient[1])) {
-                $recipientUserId = (int) $recipient[0];
-                $studentId = (int) $recipient[1];
+            $recipient = explode(':', (string) ($_POST['recipient'] ?? ''));
+            if (count($recipient) === 2 && $recipient[0] === 'staff' && ctype_digit($recipient[1])) {
+                $recipientUserId = (int) $recipient[1];
+                $studentId = 0;
+            } elseif (
+                count($recipient) === 3
+                && $recipient[0] === 'parent'
+                && ctype_digit($recipient[1])
+                && ctype_digit($recipient[2])
+            ) {
+                $recipientUserId = (int) $recipient[1];
+                $studentId = (int) $recipient[2];
+            } else {
+                $legacyRecipient = explode(':', (string) ($_POST['recipient'] ?? ''), 2);
+                if (
+                    count($legacyRecipient) === 2
+                    && ctype_digit($legacyRecipient[0])
+                    && ctype_digit($legacyRecipient[1])
+                ) {
+                    $recipientUserId = (int) $legacyRecipient[0];
+                    $studentId = (int) $legacyRecipient[1];
+                }
             }
         }
 
         if (
-            !$studentId || $studentId <= 0 || $recipientUserId <= 0
+            (!$isParent && $studentId === false)
+            || ($isParent && (!$studentId || $studentId <= 0))
+            || $recipientUserId <= 0
             || $subject === '' || mb_strlen($subject, 'UTF-8') > 160
             || $body === '' || mb_strlen($body, 'UTF-8') > 5000
         ) {
-            $_SESSION['messages_error'] = 'Complétez le destinataire, l’élève, l’objet et un message de 5 000 caractères maximum.';
+            $_SESSION['messages_error'] = 'Complétez le destinataire, l’objet et un message de 5 000 caractères maximum.';
             $this->redirect('/messages');
             return;
         }
@@ -324,9 +349,16 @@ class MessagesController extends Controller
         }
 
         UserMessage::markRead($messageId, (int) $user['id']);
-        if (($message['type'] ?? '') === 'subscription_renewal_request'
-            && ($user['role'] ?? '') === 'super_admin') {
-            $this->redirect('/ecoles/subscriptions');
+        if (
+            in_array(
+                (string) ($message['type'] ?? ''),
+                ['subscription_renewal_request', 'subscription_request_approved', 'subscription_request_rejected'],
+                true
+            )
+        ) {
+            $this->redirect(($user['role'] ?? '') === 'super_admin'
+                ? '/ecoles/requests'
+                : '/ecoles/subscriptions');
             return;
         }
 

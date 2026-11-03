@@ -19,6 +19,20 @@ class SchoolMessage
         'comptable_école',
         'sec_école',
     ];
+    private const SCHOOL_STAFF_ROLES = [
+        'ecole_admin',
+        'agent_ecole',
+        'agent_école',
+        'préfet_école',
+        'DE_école',
+        'DD_école',
+        'DP_école',
+        'DA_école',
+        'comptable_école',
+        'sec_école',
+        'promoteur_école',
+        'enseignant_école',
+    ];
 
     private static bool $tablesEnsured = false;
 
@@ -216,6 +230,28 @@ class SchoolMessage
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public static function getStaffContacts(int $schoolId, int $currentUserId): array
+    {
+        if ($schoolId <= 0 || $currentUserId <= 0) {
+            return [];
+        }
+
+        self::ensureTables();
+        $roles = self::rolePlaceholders('school_staff_role_', self::SCHOOL_STAFF_ROLES, $params);
+        $params[':school_id'] = $schoolId;
+        $params[':current_user_id'] = $currentUserId;
+        $stmt = Database::getConnection()->prepare(
+            'SELECT id, nom_complet, role
+             FROM utilisateurs
+             WHERE ecole_id = :school_id AND id <> :current_user_id
+               AND statut = \'Actif\' AND role IN (' . $roles . ')
+             ORDER BY nom_complet, role'
+        );
+        $stmt->execute($params);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public static function getThreadsForUser(int $userId, int $schoolId): array
     {
         if ($userId <= 0 || $schoolId <= 0) {
@@ -235,7 +271,7 @@ class SchoolMessage
              FROM school_message_threads t
              INNER JOIN utilisateurs parent ON parent.id = t.parent_user_id
              INNER JOIN utilisateurs staff ON staff.id = t.staff_user_id
-             INNER JOIN eleves e ON e.id = t.student_id
+             LEFT JOIN eleves e ON e.id = t.student_id
              WHERE t.school_id = :school_id
                AND (t.parent_user_id = :parent_user OR t.staff_user_id = :staff_user)
              ORDER BY t.updated_at DESC, t.id DESC'
@@ -264,7 +300,7 @@ class SchoolMessage
              FROM school_message_threads t
              INNER JOIN utilisateurs parent ON parent.id = t.parent_user_id
              INNER JOIN utilisateurs staff ON staff.id = t.staff_user_id
-             INNER JOIN eleves e ON e.id = t.student_id
+             LEFT JOIN eleves e ON e.id = t.student_id
              WHERE t.id = :id AND t.school_id = :school_id
                AND (t.parent_user_id = :parent_user OR t.staff_user_id = :staff_user)
              LIMIT 1'
@@ -418,6 +454,15 @@ class SchoolMessage
         $senderRole = (string) ($sender['role'] ?? '');
         $student = self::findStudent($studentId, $schoolId, $sectionId);
         if ($senderId <= 0 || $schoolId <= 0 || !$student || $recipientUserId <= 0) {
+            if (
+                $studentId === 0
+                && $senderId > 0
+                && $schoolId > 0
+                && $recipientUserId > 0
+                && in_array($senderRole, self::SCHOOL_STAFF_ROLES, true)
+            ) {
+                return self::createStaffThread($sender, $recipientUserId, $subject, $body);
+            }
             throw new \InvalidArgumentException('Le destinataire ou l’élève sélectionné est invalide pour cette école.');
         }
 
@@ -549,7 +594,66 @@ class SchoolMessage
 
     public static function isStaffRole(string $role): bool
     {
+        return in_array($role, self::SCHOOL_STAFF_ROLES, true);
+    }
+
+    public static function canMessageParents(string $role): bool
+    {
         return in_array($role, self::STAFF_ROLES, true);
+    }
+
+    public static function canComposeForRole(string $role): bool
+    {
+        return self::isStaffRole($role) || in_array($role, self::PARENT_ROLES, true);
+    }
+
+    private static function createStaffThread(array $sender, int $recipientUserId, string $subject, string $body): int
+    {
+        $senderId = (int) ($sender['id'] ?? 0);
+        $schoolId = (int) ($sender['ecole_id'] ?? 0);
+        if (
+            $senderId <= 0
+            || $recipientUserId <= 0
+            || $senderId === $recipientUserId
+            || $schoolId <= 0
+            || !self::userHasRoleInSchool($senderId, self::SCHOOL_STAFF_ROLES, $schoolId)
+            || !self::userHasRoleInSchool($recipientUserId, self::SCHOOL_STAFF_ROLES, $schoolId)
+        ) {
+            throw new \InvalidArgumentException('Le destinataire doit être un membre actif du personnel de votre école.');
+        }
+
+        $firstUserId = min($senderId, $recipientUserId);
+        $secondUserId = max($senderId, $recipientUserId);
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        try {
+            $threadStmt = $db->prepare(
+                'INSERT INTO school_message_threads
+                    (school_id, student_id, parent_user_id, staff_user_id, subject)
+                 VALUES (:school_id, 0, :first_user_id, :second_user_id, :subject)
+                 ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id), updated_at = NOW()'
+            );
+            $threadStmt->execute([
+                ':school_id' => $schoolId,
+                ':first_user_id' => $firstUserId,
+                ':second_user_id' => $secondUserId,
+                ':subject' => $subject,
+            ]);
+            $threadId = (int) $db->lastInsertId();
+            if ($threadId <= 0) {
+                throw new \RuntimeException('Impossible de créer la conversation entre membres du personnel.');
+            }
+
+            self::insertMessage($db, $threadId, $senderId, $recipientUserId, $body);
+            $db->commit();
+
+            return $threadId;
+        } catch (\Throwable $exception) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $exception;
+        }
     }
 
     private static function findStudent(int $studentId, int $schoolId, ?int $sectionId): ?array

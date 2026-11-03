@@ -26,6 +26,11 @@ class PaiementsController extends Controller
         $sectionScopeId = $this->getSectionScopeForUser($user);
         $eleveId = !empty($_GET['eleve_id']) ? (int) $_GET['eleve_id'] : null;
         $fraisId = !empty($_GET['frais_id']) ? (int) $_GET['frais_id'] : null;
+        $userSchool = (int) ($user['ecole_id'] ?? 0);
+        $fees = $userSchool > 0 ? FraisScolaire::getAllBySchool($userSchool, $sectionScopeId) : [];
+        if ($fraisId !== null && !in_array($fraisId, array_map('intval', array_column($fees, 'id')), true)) {
+            $fraisId = null;
+        }
         if ($eleveId && $role !== 'super_admin') {
             if ((int) ($user['ecole_id'] ?? 0) <= 0
                 || !Eleve::findByIdAndSchool($eleveId, (int) $user['ecole_id'], $sectionScopeId)) {
@@ -41,7 +46,6 @@ class PaiementsController extends Controller
         $totalDebtByCurrency = $eleveId !== null ? DetteEleve::computeOutstandingFromApplicableFees($eleveId) : [];
         $totalDebt = $eleveId !== null ? array_sum($totalDebtByCurrency) : null;
 
-        $userSchool = (int) ($user['ecole_id'] ?? 0);
         // Show only enrolled (validated) students who still have outstanding debts for selection
         $db = Database::getConnection();
         if ($userSchool > 0) {
@@ -69,8 +73,6 @@ class PaiementsController extends Controller
         } else {
             $students = [];
         }
-        $fees = $userSchool > 0 ? FraisScolaire::getAllBySchool($userSchool) : [];
-
         $authorizedFeeIds = in_array($role, ['super_admin', 'comptable_école'], true)
             ? []
             : PaiementAutorisation::getAuthorizedFeeIdsForUser($user);
@@ -595,6 +597,20 @@ class PaiementsController extends Controller
             return true;
         }
 
+        if ($role === 'DP_école' && $fraisId !== null) {
+            $schoolId = (int) ($user['ecole_id'] ?? 0);
+            $sectionId = $this->getSectionScopeForUser($user);
+            if ($schoolId <= 0
+                || $sectionId === null
+                || !in_array(
+                    $fraisId,
+                    array_map('intval', array_column(FraisScolaire::getAllBySchool($schoolId, $sectionId), 'id')),
+                    true
+                )) {
+                return false;
+            }
+        }
+
         return PaiementAutorisation::canUserRecordFee($user, $fraisId);
     }
 
@@ -730,7 +746,7 @@ class PaiementsController extends Controller
         try {
             $schoolIdForFees = (int) ($user['ecole_id'] ?? 0);
             if ($eleveId > 0) {
-                $allFees = \App\Models\FraisScolaire::getAllBySchool($schoolIdForFees);
+                $allFees = \App\Models\FraisScolaire::getAllBySchool($schoolIdForFees, $this->getSectionScopeForUser($user));
                 $feeDebtsById = [];
                 foreach ($feeDebtDetails as $feeDebt) {
                     $feeDebtsById[(int) ($feeDebt['frais_id'] ?? 0)] = $feeDebt;
@@ -747,7 +763,7 @@ class PaiementsController extends Controller
                     $fees[] = $f;
                 }
             } else {
-                $allFees = \App\Models\FraisScolaire::getAllBySchool($schoolIdForFees);
+                $allFees = \App\Models\FraisScolaire::getAllBySchool($schoolIdForFees, $this->getSectionScopeForUser($user));
                 foreach ($allFees as $f) {
                     $feeId = (int) ($f['id'] ?? 0);
                     if (!empty($authorizedFeeIds) && !in_array($feeId, $authorizedFeeIds, true)) {

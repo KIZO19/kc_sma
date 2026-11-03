@@ -172,6 +172,15 @@ class Auth
             return;
         }
 
+        self::requireActiveSubscription($user);
+    }
+
+    private static function requireActiveSubscription(array $user): void
+    {
+        if (($user['role'] ?? '') === 'super_admin') {
+            return;
+        }
+
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
         $isPendingUnassignedAgent = ($user['role'] ?? '') === 'agent_ecole'
             && ($user['statut'] ?? '') === 'Inactif'
@@ -235,6 +244,8 @@ class Auth
             }
             exit;
         }
+
+        self::requireActiveSubscription($user);
     }
 
     public static function can(string $permission): bool
@@ -280,6 +291,8 @@ class Auth
             header('Location: ' . BASE_URL . '/profile');
             exit;
         }
+
+        self::requireActiveSubscription($user);
     }
 
     public static function requireGuest(): void

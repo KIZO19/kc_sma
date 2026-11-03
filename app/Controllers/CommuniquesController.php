@@ -52,7 +52,7 @@ class CommuniquesController extends Controller
             'role' => $role,
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $this->getModulesForRole($role),
-            'communiques' => Communique::latestBySchool($ecoleId),
+            'communiques' => Communique::latestBySchool($ecoleId, 20, $sectionScopeId),
             'audienceRoles' => array_diff_key(Roles::list(), ['super_admin' => true]),
             'sections' => $sections,
             'formToken' => $_SESSION['communique_form_token'],

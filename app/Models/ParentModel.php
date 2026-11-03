@@ -174,24 +174,34 @@ class ParentModel
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public static function getPendingChildRequestsForParentProfile(int $parentId, int $ecoleId): array
+    public static function getPendingChildRequestsForParentProfile(
+        int $parentId,
+        int $ecoleId,
+        ?int $sectionId = null
+    ): array
     {
         if ($parentId <= 0 || $ecoleId <= 0) {
             return [];
         }
         self::ensureChildRequestsTable();
 
-        $stmt = Database::getConnection()->prepare(
+        $sql =
             'SELECT pcr.id, pcr.created_at, pcr.status, e.id AS student_id, e.nom, e.postnom, e.prenom, '
             . 'e.matricule, u.nom_complet AS requested_by_name '
             . 'FROM parent_child_requests pcr '
             . 'INNER JOIN eleves e ON e.id = pcr.student_id '
             . 'LEFT JOIN utilisateurs u ON u.id = pcr.requested_by '
             . 'WHERE pcr.parent_id = :parent_id AND pcr.school_id = :school_id '
-            . 'AND pcr.status = \'pending\' AND e.parent_id IS NULL '
-            . 'ORDER BY pcr.created_at DESC, pcr.id DESC'
-        );
-        $stmt->execute([':parent_id' => $parentId, ':school_id' => $ecoleId]);
+            . 'AND pcr.status = \'pending\' AND e.parent_id IS NULL';
+        $params = [':parent_id' => $parentId, ':school_id' => $ecoleId];
+        if ($sectionId !== null) {
+            $sql .= ' AND EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id '
+                . 'WHERE i.eleve_id = e.id AND c.ecole_id = :section_school AND c.section_id = :section_id)';
+            $params[':section_school'] = $ecoleId;
+            $params[':section_id'] = $sectionId;
+        }
+        $stmt = Database::getConnection()->prepare($sql . ' ORDER BY pcr.created_at DESC, pcr.id DESC');
+        $stmt->execute($params);
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
