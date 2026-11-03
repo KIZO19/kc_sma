@@ -828,6 +828,9 @@ class EcolesController extends Controller
             $duration = filter_var($durationInput, FILTER_VALIDATE_INT);
             $priceInput = trim((string) ($_POST['prix'] ?? ''));
             $description = trim((string) ($_POST['description'] ?? ''));
+            $maxStudents = filter_var(trim((string) ($_POST['max_students'] ?? '0')), FILTER_VALIDATE_INT);
+            $maxParentAccounts = filter_var(trim((string) ($_POST['max_parent_accounts'] ?? '0')), FILTER_VALIDATE_INT);
+            $maxStaffAccounts = filter_var(trim((string) ($_POST['max_staff_accounts'] ?? '0')), FILTER_VALIDATE_INT);
             $errors = [];
 
             if ($name === '' || mb_strlen($name, 'UTF-8') > 50) {
@@ -838,6 +841,15 @@ class EcolesController extends Controller
             }
             if ($priceInput === '' || !is_numeric($priceInput) || (float) $priceInput < 0) {
                 $errors[] = 'Le tarif doit être un montant positif ou nul.';
+            }
+            foreach ([
+                'maxStudents' => [$maxStudents, 'élèves'],
+                'maxParentAccounts' => [$maxParentAccounts, 'comptes parents'],
+                'maxStaffAccounts' => [$maxStaffAccounts, 'comptes agents'],
+            ] as [$value, $label]) {
+                if ($value === false || $value < 0 || $value > 1000000) {
+                    $errors[] = 'Le maximum de ' . $label . ' doit être compris entre 0 et 1 000 000 (0 = illimité).';
+                }
             }
 
             $existingPlanIds = array_map(static fn (array $plan): int => (int) ($plan['id'] ?? 0), Ecole::getPlans());
@@ -851,10 +863,13 @@ class EcolesController extends Controller
                     'duree_mois' => $duration,
                     'prix' => (float) $priceInput,
                     'description' => $description !== '' ? $description : null,
+                    'max_students' => (int) $maxStudents,
+                    'max_parent_accounts' => (int) $maxParentAccounts,
+                    'max_staff_accounts' => (int) $maxStaffAccounts,
                 ], $planId > 0 ? $planId : null);
                 if ($saved) {
                     $_SESSION['ecoles_plans_success'] = $planId > 0
-                        ? 'Tarif mis à jour. Les abonnements existants conservent leur montant payé.'
+                        ? 'Tarif mis à jour. Les nouveaux plafonds s’appliqueront aux prochains abonnements; les abonnements existants gardent leurs plafonds enregistrés.'
                         : 'Nouveau tarif créé.';
                 } else {
                     $_SESSION['ecoles_plans_errors'] = ['Impossible d’enregistrer ce tarif. Vérifiez les données et réessayez.'];
@@ -892,15 +907,38 @@ class EcolesController extends Controller
             $dateFin = '';
             $amount = 0.0;
             $durationDays = filter_var(trim((string) ($_POST['duree_essai_jours'] ?? '')), FILTER_VALIDATE_INT);
+            $trialMaxStudents = filter_var(trim((string) ($_POST['max_students'] ?? '0')), FILTER_VALIDATE_INT);
+            $trialMaxParentAccounts = filter_var(trim((string) ($_POST['max_parent_accounts'] ?? '0')), FILTER_VALIDATE_INT);
+            $trialMaxStaffAccounts = filter_var(trim((string) ($_POST['max_staff_accounts'] ?? '0')), FILTER_VALIDATE_INT);
+            $additionalDescription = trim((string) ($_POST['description'] ?? ''));
+
+            if (mb_strlen($additionalDescription, 'UTF-8') > 2000) {
+                $errors[] = 'Les détails complémentaires ne peuvent pas dépasser 2 000 caractères.';
+            }
+            $maxStudents = 0;
+            $maxParentAccounts = 0;
+            $maxStaffAccounts = 0;
 
             if ($ecoleId <= 0 || !Ecole::findById($ecoleId)) {
                 $errors[] = 'Sélectionnez une école valide.';
             }
             $selectedPlan = null;
             if ($isTrial) {
+                foreach ([
+                    'trialMaxStudents' => [$trialMaxStudents, 'élèves'],
+                    'trialMaxParentAccounts' => [$trialMaxParentAccounts, 'comptes parents'],
+                    'trialMaxStaffAccounts' => [$trialMaxStaffAccounts, 'comptes agents'],
+                ] as [$value, $label]) {
+                    if ($value === false || $value < 0 || $value > 1000000) {
+                        $errors[] = 'Le maximum de ' . $label . ' doit être compris entre 0 et 1 000 000 (0 = illimité).';
+                    }
+                }
                 if ($durationDays === false || $durationDays <= 0 || $durationDays > 3650) {
                     $errors[] = 'La durée de l’essai doit être comprise entre 1 et 3 650 jours.';
                 }
+                $maxStudents = $trialMaxStudents === false ? 0 : (int) $trialMaxStudents;
+                $maxParentAccounts = $trialMaxParentAccounts === false ? 0 : (int) $trialMaxParentAccounts;
+                $maxStaffAccounts = $trialMaxStaffAccounts === false ? 0 : (int) $trialMaxStaffAccounts;
             } elseif ($subscriptionType === 'plan') {
                 foreach (Ecole::getPlans() as $plan) {
                     if ((int) ($plan['id'] ?? 0) === $planId) {
@@ -912,6 +950,9 @@ class EcolesController extends Controller
                     $errors[] = 'Sélectionnez un plan valide.';
                 } else {
                     $amount = (float) $selectedPlan['prix'];
+                    $maxStudents = (int) ($selectedPlan['max_students'] ?? 0);
+                    $maxParentAccounts = (int) ($selectedPlan['max_parent_accounts'] ?? 0);
+                    $maxStaffAccounts = (int) ($selectedPlan['max_staff_accounts'] ?? 0);
                 }
             } else {
                 $errors[] = 'Sélectionnez un type d’abonnement valide.';
@@ -941,7 +982,32 @@ class EcolesController extends Controller
             }
 
             if (empty($errors)) {
-                if (Ecole::addSubscription($ecoleId, $planId, $dateDebut, $dateFin, $amount)) {
+                $planName = $isTrial ? 'Essai gratuit' : (string) ($selectedPlan['nom_plan'] ?? 'Abonnement');
+                $planDescription = $isTrial
+                    ? 'Essai gratuit de ' . $durationDays . ' jour(s).'
+                    : (string) ($selectedPlan['description'] ?? '');
+                $subscriptionDescription = Ecole::buildSubscriptionDescription(
+                    $planName,
+                    $planDescription,
+                    $amount,
+                    $dateDebut,
+                    $dateFin,
+                    (int) $maxStudents,
+                    (int) $maxParentAccounts,
+                    (int) $maxStaffAccounts,
+                    $additionalDescription
+                );
+                if (Ecole::addSubscription(
+                    $ecoleId,
+                    $planId,
+                    $dateDebut,
+                    $dateFin,
+                    $amount,
+                    (int) $maxStudents,
+                    (int) $maxParentAccounts,
+                    (int) $maxStaffAccounts,
+                    $subscriptionDescription
+                )) {
                     $school = Ecole::findById($ecoleId);
                     ActivityLog::record(
                         (int) (Auth::user()['id'] ?? 0),
@@ -1148,7 +1214,12 @@ class EcolesController extends Controller
             return;
         }
 
-        if (SubscriptionRequest::review((int) $requestId, (int) (Auth::user()['id'] ?? 0), $status, $note)) {
+        if (SubscriptionRequest::review(
+            (int) $requestId,
+            (int) (Auth::user()['id'] ?? 0),
+            $status,
+            $note
+        )) {
             ActivityLog::record(
                 (int) (Auth::user()['id'] ?? 0),
                 $status === 'Approuvee' ? 'subscription_request_approved' : 'subscription_request_rejected',
@@ -1159,7 +1230,7 @@ class EcolesController extends Controller
                     . ($status === 'Approuvee' ? ' approuvée.' : ' refusée.')
             );
             $_SESSION['ecoles_subscription_success'] = $status === 'Approuvee'
-                ? 'Demande approuvée : l’abonnement a été activé selon le tarif demandé.'
+                ? 'Demande approuvée : le tarif et ses plafonds configurés dans les plans ont été appliqués.'
                 : 'Demande refusée.';
         } else {
             $_SESSION['ecoles_subscription_errors'] = ['Impossible de traiter cette demande. Vérifiez le tarif et réessayez.'];
@@ -1178,7 +1249,7 @@ class EcolesController extends Controller
         }
 
         $this->view('ecoles/notification_access', [
-            'title' => APP_NAME . ' - Accès SMS et WhatsApp',
+            'title' => APP_NAME . ' - Accès aux fonctionnalités de communication',
             'user' => $user,
             'role' => $user['role'] ?? 'super_admin',
             'roleLabel' => User::getRoleLabel((string) ($user['role'] ?? 'super_admin')),
@@ -1206,10 +1277,12 @@ class EcolesController extends Controller
         $schoolId = filter_var($_POST['ecole_id'] ?? null, FILTER_VALIDATE_INT);
         $smsInput = $_POST['sms_enabled'] ?? null;
         $whatsappInput = $_POST['whatsapp_enabled'] ?? null;
+        $directMessagesInput = $_POST['direct_messages_enabled'] ?? null;
         if (
             $schoolId === false || $schoolId === null || $schoolId <= 0
             || !in_array($smsInput, ['0', '1', 0, 1], true)
             || !in_array($whatsappInput, ['0', '1', 0, 1], true)
+            || !in_array($directMessagesInput, ['0', '1', 0, 1], true)
             || !Ecole::findById((int) $schoolId)
         ) {
             $_SESSION['notification_access_error'] = 'École ou paramètres de notification invalides.';
@@ -1220,6 +1293,7 @@ class EcolesController extends Controller
             (int) $schoolId,
             (string) $smsInput === '1',
             (string) $whatsappInput === '1',
+            (string) $directMessagesInput === '1',
             (int) ($user['id'] ?? 0)
         )) {
             $school = Ecole::findById((int) $schoolId);
@@ -1230,9 +1304,10 @@ class EcolesController extends Controller
                 (int) $schoolId,
                 (string) ($school['nom_etablissement'] ?? 'École'),
                 'Accès aux notifications mis à jour : SMS ' . ((string) $smsInput === '1' ? 'activé' : 'désactivé')
-                    . ', WhatsApp ' . ((string) $whatsappInput === '1' ? 'activé' : 'désactivé') . '.'
+                    . ', WhatsApp ' . ((string) $whatsappInput === '1' ? 'activé' : 'désactivé')
+                    . ', messagerie interne ' . ((string) $directMessagesInput === '1' ? 'activée' : 'désactivée') . '.'
             );
-            $_SESSION['notification_access_success'] = 'Les accès SMS et WhatsApp de l’école ont été mis à jour.';
+            $_SESSION['notification_access_success'] = 'Les accès de communication de l’école ont été mis à jour.';
         } else {
             $_SESSION['notification_access_error'] = 'Impossible d’enregistrer les accès de notification. Réessayez.';
         }

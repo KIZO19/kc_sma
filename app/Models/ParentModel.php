@@ -492,6 +492,7 @@ class ParentModel
 
     public static function create(array $data): ?array
     {
+        Ecole::assertSubscriptionCapacity((int) ($data['ecole_id'] ?? 0), 'parents');
         $db = Database::getConnection();
         $stmt = $db->prepare(
             'INSERT INTO parents (ecole_id, nom_responsable, telephone, email, mot_de_passe) VALUES (:ecole_id, :nom_responsable, :telephone, :email, :mot_de_passe)'

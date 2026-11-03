@@ -16,10 +16,14 @@ class Controller
             }
             $data['userMessages'] = \App\Models\UserMessage::getUnreadForUser((int) $user['id']);
             $data['userMessagesCount'] = \App\Models\UserMessage::countUnreadForUser((int) $user['id']);
-            $data['directMessagesCount'] = \App\Models\SchoolMessage::countUnreadForUser(
-                (int) $user['id'],
+            $data['directMessagesCount'] = \App\Models\NotificationAccess::isDirectMessagingEnabled(
                 (int) ($user['ecole_id'] ?? 0)
-            );
+            )
+                ? \App\Models\SchoolMessage::countUnreadForUser(
+                    (int) $user['id'],
+                    (int) ($user['ecole_id'] ?? 0)
+                )
+                : 0;
             if (($user['role'] ?? '') === 'comptable_école') {
                 $schoolId = (int) ($user['ecole_id'] ?? 0);
                 $data['pendingDerogationMessages'] = \App\Models\Derogation::getPendingForAccountant($schoolId);
@@ -137,7 +141,7 @@ class Controller
                 ['name' => 'Créer une école', 'path' => '/ecoles/create', 'icon' => 'bi-building-add'],
                 ['name' => 'Demandes des écoles', 'path' => '/ecoles/requests', 'icon' => 'bi-inbox'],
                 ['name' => 'Gestion des abonnements', 'path' => '/ecoles/subscriptions', 'icon' => 'bi-card-checklist'],
-                ['name' => 'Accès SMS / WhatsApp', 'path' => '/ecoles/notificationAccess', 'icon' => 'bi-chat-square-dots'],
+                ['name' => 'Accès aux communications', 'path' => '/ecoles/notificationAccess', 'icon' => 'bi-chat-square-dots'],
                 ['name' => 'Tarifs des abonnements', 'path' => '/ecoles/plans', 'icon' => 'bi-tags'],
                 ['name' => 'Attribuer un abonnement', 'path' => '/ecoles/addSubscription', 'icon' => 'bi-credit-card'],
                 ['name' => 'Validation des comptes', 'path' => '/utilisateurs', 'icon' => 'bi-person-check'],
@@ -312,6 +316,12 @@ class Controller
         }
 
         return array_values(array_filter($modules, static function (array $module) use ($user): bool {
+            if (
+                ($module['path'] ?? '') === '/messages'
+                && !\App\Models\NotificationAccess::isDirectMessagingEnabled((int) ($user['ecole_id'] ?? 0))
+            ) {
+                return false;
+            }
             $permissionModule = match ($module['path'] ?? '') {
                 '/inscriptions' => 'inscriptions',
                 '/notes' => 'notes',

@@ -101,6 +101,7 @@ class Eleve
 
     public static function create(array $data): ?array
     {
+        Ecole::assertSubscriptionCapacity((int) ($data['ecole_id'] ?? 0), 'students');
         $matricule = isset($data['matricule']) ? strtoupper(trim((string) $data['matricule'])) : '';
         if ($matricule !== '' && !self::isValidMatriculeFormat($matricule)) {
             throw new \InvalidArgumentException('Le matricule doit contenir 4 lettres majuscules suivies de 5 chiffres.');

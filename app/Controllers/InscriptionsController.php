@@ -274,6 +274,18 @@ class InscriptionsController extends Controller
             }
 
             if (empty($errors)) {
+                try {
+                    Ecole::assertSubscriptionCapacity($ecoleId, 'students');
+                    if ($parentChoice === 'new') {
+                        Ecole::assertSubscriptionCapacity($ecoleId, 'parents');
+                    }
+                } catch (\DomainException $exception) {
+                    $_SESSION['inscriptions_errors'] = [$exception->getMessage()];
+                    $_SESSION['inscriptions_old'] = $_POST;
+                    $this->redirect('/inscriptions/create');
+                    return;
+                }
+
                 if ($parentChoice === 'new') {
                     try {
                         $newParent = ParentModel::create([
@@ -341,6 +353,9 @@ class InscriptionsController extends Controller
                         'statut_eleve' => 'inactif',
                     ]);
                 } catch (\InvalidArgumentException $e) {
+                    $errors[] = $e->getMessage();
+                    $newStudent = null;
+                } catch (\DomainException $e) {
                     $errors[] = $e->getMessage();
                     $newStudent = null;
                 }

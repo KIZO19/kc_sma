@@ -1,8 +1,8 @@
 <?php require __DIR__ . '/../partials/app_header.php'; ?>
 <section class="content-header">
   <div class="container-fluid">
-    <h1>Accès aux notifications</h1>
-    <p class="text-muted">Le super-administrateur contrôle l’envoi des SMS et messages WhatsApp pour chaque école.</p>
+    <h1>Accès aux fonctionnalités de communication</h1>
+    <p class="text-muted">Le super-administrateur décide, école par école, si la messagerie interne, les SMS et WhatsApp sont autorisés.</p>
   </div>
 </section>
 
@@ -21,7 +21,7 @@
       </div>
     <?php endif; ?>
     <div class="alert alert-info">
-      Les deux canaux restent autorisés par défaut afin de préserver le fonctionnement actuel. Désactivez un canal pour bloquer les notifications de paiement, d’inscription et les communiqués de l’école.
+      Les fonctionnalités restent autorisées par défaut afin de préserver le fonctionnement actuel. La messagerie interne concerne les échanges entre les comptes d’une même école. Les SMS et WhatsApp concernent les notifications envoyées par l’école.
     </div>
 
     <div class="card">
@@ -31,6 +31,7 @@
             <thead class="table-light">
               <tr>
                 <th class="ps-3">École</th>
+                <th>Messagerie interne</th>
                 <th>SMS autorisés</th>
                 <th>WhatsApp autorisé</th>
                 <th class="text-end pe-3">Action</th>
@@ -41,6 +42,17 @@
                 <?php $formId = 'notificationAccess' . (int) $school['ecole_id']; ?>
                 <tr>
                   <td class="ps-3 fw-semibold"><?= htmlspecialchars($school['nom_etablissement'] ?? '', ENT_QUOTES, 'UTF-8') ?></td>
+                  <td>
+                    <input form="<?= $formId ?>" type="hidden" name="direct_messages_enabled" value="0">
+                    <div class="form-check form-switch">
+                      <input form="<?= $formId ?>" class="form-check-input" type="checkbox" role="switch"
+                             id="<?= $formId ?>DirectMessages" name="direct_messages_enabled" value="1"
+                             <?= !empty($school['direct_messages_enabled']) ? 'checked' : '' ?>>
+                      <label class="form-check-label" for="<?= $formId ?>DirectMessages">
+                        <?= !empty($school['direct_messages_enabled']) ? 'Activée' : 'Désactivée' ?>
+                      </label>
+                    </div>
+                  </td>
                   <td>
                     <input form="<?= $formId ?>" type="hidden" name="sms_enabled" value="0">
                     <div class="form-check form-switch">
@@ -75,7 +87,7 @@
                 </tr>
               <?php endforeach; ?>
               <?php if (empty($schoolNotificationAccess)): ?>
-                <tr><td colspan="4" class="text-center text-muted py-4">Aucune école à gérer.</td></tr>
+                <tr><td colspan="5" class="text-center text-muted py-4">Aucune école à gérer.</td></tr>
               <?php endif; ?>
             </tbody>
           </table>

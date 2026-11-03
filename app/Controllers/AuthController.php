@@ -121,7 +121,10 @@ class AuthController extends Controller
                     if (empty($user['id'] ?? null)) {
                         $errors[] = 'Le compte n’a pas pu être créé avec l’école sélectionnée.';
                     }
+                } catch (\DomainException $e) {
+                    $errors[] = $e->getMessage();
                 } catch (\Throwable $e) {
+                    error_log('AuthController::register account creation failed: ' . $e->getMessage());
                     $errors[] = 'Le compte n’a pas pu être créé avec l’école sélectionnée.';
                 }
             }

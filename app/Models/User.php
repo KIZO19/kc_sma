@@ -58,6 +58,30 @@ class User
         return $user ?: null;
     }
 
+    private static function assertAccountCapacity(string $role, ?int $schoolId, ?int $referenceId = null): void
+    {
+        if ($schoolId === null || $schoolId <= 0) {
+            return;
+        }
+
+        if (in_array($role, ['parent_ecole', 'parent_école'], true)) {
+            Ecole::assertSubscriptionCapacity($schoolId, 'parents');
+        } elseif (in_array($role, ['eleve_ecole', 'eleve_école'], true)) {
+            if ($referenceId !== null && $referenceId > 0) {
+                $stmt = Database::getConnection()->prepare(
+                    'SELECT 1 FROM eleves WHERE id = :reference_id AND ecole_id = :ecole_id LIMIT 1'
+                );
+                $stmt->execute([':reference_id' => $referenceId, ':ecole_id' => $schoolId]);
+                if ($stmt->fetchColumn()) {
+                    return;
+                }
+            }
+            Ecole::assertSubscriptionCapacity($schoolId, 'students');
+        } elseif (in_array($role, self::getSchoolScopedRoles(), true)) {
+            Ecole::assertSubscriptionCapacity($schoolId, 'staff');
+        }
+    }
+
     public static function create(array $data): array
     {
         $db = Database::getConnection();
@@ -80,6 +104,12 @@ class User
                 }
             }
         }
+
+        self::assertAccountCapacity(
+            $role,
+            $resolvedSchoolId,
+            isset($data['reference_id']) ? (int) $data['reference_id'] : null
+        );
 
         $fields = ['nom_complet', 'identifiant', 'mot_de_passe', 'role', 'statut'];
         $placeholders = [':nom_complet', ':identifiant', ':mot_de_passe', ':role', ':statut'];
@@ -185,6 +215,11 @@ class User
     public static function createForReference(array $data): array
     {
         $db = Database::getConnection();
+        self::assertAccountCapacity(
+            (string) ($data['role'] ?? ''),
+            isset($data['ecole_id']) ? (int) $data['ecole_id'] : null,
+            isset($data['reference_id']) ? (int) $data['reference_id'] : null
+        );
 
         $fields = ['nom_complet', 'identifiant', 'mot_de_passe', 'role', 'statut', 'reference_id'];
         $placeholders = [':nom_complet', ':identifiant', ':mot_de_passe', ':role', ':statut', ':reference_id'];
@@ -261,6 +296,7 @@ class User
         $existing = self::findByReference($role, $referenceId, $ecoleId);
         if ($existing) {
             if ($ecoleId !== null && !empty($existing['ecole_id']) && (int) $existing['ecole_id'] !== $ecoleId) {
+                self::assertAccountCapacity($role, $ecoleId, $referenceId);
                 $db = Database::getConnection();
                 $stmt = $db->prepare('UPDATE utilisateurs SET ecole_id = :ecole_id WHERE id = :id');
                 $stmt->execute([':ecole_id' => $ecoleId, ':id' => (int) $existing['id']]);

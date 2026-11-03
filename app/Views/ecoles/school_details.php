@@ -96,6 +96,16 @@
 
               <div class="text-muted small">Période</div>
               <div><?= htmlspecialchars(formatDate($subscription['date_debut'] ?? null), ENT_QUOTES, 'UTF-8') ?> – <?= htmlspecialchars(formatDate($subscription['date_fin'] ?? null), ENT_QUOTES, 'UTF-8') ?></div>
+              <div class="text-muted small mt-3">Plafonds</div>
+              <div class="small">
+                Élèves : <?= (int) ($subscription['max_students'] ?? 0) > 0 ? (int) $subscription['max_students'] : 'Illimité' ?><br>
+                Comptes parents : <?= (int) ($subscription['max_parent_accounts'] ?? 0) > 0 ? (int) $subscription['max_parent_accounts'] : 'Illimité' ?><br>
+                Comptes agents : <?= (int) ($subscription['max_staff_accounts'] ?? 0) > 0 ? (int) $subscription['max_staff_accounts'] : 'Illimité' ?>
+              </div>
+              <?php if (!empty($subscription['description'])): ?>
+                <div class="text-muted small mt-3">Description de l’abonnement</div>
+                <div class="small"><?= nl2br(htmlspecialchars((string) $subscription['description'], ENT_QUOTES, 'UTF-8')) ?></div>
+              <?php endif; ?>
             <?php else: ?>
               <p class="text-muted">Aucun abonnement enregistré pour cette école.</p>
             <?php endif; ?>

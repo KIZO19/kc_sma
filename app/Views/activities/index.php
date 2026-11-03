@@ -108,7 +108,7 @@
                     $activityLabels = [
                         'school_created' => 'École créée',
                         'school_access_changed' => 'Accès de l’école modifié',
-                        'school_notification_access_changed' => 'Notifications de l’école modifiées',
+                        'school_notification_access_changed' => 'Accès aux communications de l’école modifiés',
                         'school_admin_created' => 'Compte administrateur créé',
                         'school_admin_assigned' => 'Compte administrateur associé',
                         'school_admin_account_updated' => 'Compte administrateur modifié',

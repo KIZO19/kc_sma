@@ -32,6 +32,7 @@ class Agent
 
     public static function create(array $data): ?array
     {
+        Ecole::assertSubscriptionCapacity((int) ($data['ecole_id'] ?? 0), 'staff');
         $db = Database::getConnection();
         $stmt = $db->prepare(
             'INSERT INTO agents (ecole_id, nom, postnom, prenom, telephone, email, mot_de_passe, role_id, salaire_de_base, est_enseignant_secondaire) VALUES (:ecole_id, :nom, :postnom, :prenom, :telephone, :email, :mot_de_passe, :role_id, :salaire_de_base, :est_enseignant_secondaire)'

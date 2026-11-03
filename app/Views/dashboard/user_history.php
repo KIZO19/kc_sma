@@ -40,6 +40,50 @@
 
       <div class="card">
         <div class="card-header">
+          <h2 class="h6 fw-bold mb-1">Historique des positions partagées</h2>
+          <span class="small text-muted">Les 500 derniers partages volontaires, enregistrés à partir de l’activation de cette fonctionnalité. Actualisé automatiquement : <time id="locationsUpdatedAt">en attente</time></span>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead>
+                <tr>
+                  <th class="ps-3">Date et heure</th>
+                  <th>Coordonnées</th>
+                  <th>Précision</th>
+                  <th>Carte</th>
+                </tr>
+              </thead>
+              <tbody id="userLocationHistory">
+                <?php foreach ($history['locations'] as $location): ?>
+                  <?php
+                    $sharedAt = strtotime((string) ($location['shared_at'] ?? ''));
+                    $latitude = (float) ($location['latitude'] ?? 0);
+                    $longitude = (float) ($location['longitude'] ?? 0);
+                    $mapUrl = 'https://www.openstreetmap.org/?mlat=' . rawurlencode((string) $latitude)
+                        . '&mlon=' . rawurlencode((string) $longitude)
+                        . '#map=16/' . rawurlencode((string) $latitude) . '/' . rawurlencode((string) $longitude);
+                  ?>
+                  <tr>
+                    <td class="ps-3"><?= $sharedAt !== false ? htmlspecialchars(date('d/m/Y H:i:s', $sharedAt)) : '—' ?></td>
+                    <td><code><?= htmlspecialchars((string) $location['latitude']) ?>, <?= htmlspecialchars((string) $location['longitude']) ?></code></td>
+                    <td><?= htmlspecialchars((string) round((float) $location['accuracy_meters'])) ?> m</td>
+                    <td><a href="<?= htmlspecialchars($mapUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer">Voir sur la carte</a></td>
+                  </tr>
+                <?php endforeach; ?>
+                <?php if (empty($history['locations'])): ?>
+                  <tr>
+                    <td colspan="4" class="text-center text-muted py-4">Aucune position n’a encore été partagée volontairement.</td>
+                  </tr>
+                <?php endif; ?>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
           <h2 class="h6 fw-bold mb-1">Pages visitées</h2>
           <span class="small text-muted">Historique conservé depuis l’activation du suivi, jusqu’à 500 visites récentes. Les paramètres des URL ne sont pas enregistrés. Actualisé automatiquement : <time id="historyUpdatedAt">en attente</time></span>
         </div>
@@ -83,7 +127,9 @@
     const historyEndpoint = <?= json_encode(BASE_URL . '/dashboard/userHistoryFeed', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
     const userId = <?= json_encode((int) $history['user']['id']) ?>;
     const visitsTable = document.getElementById('userPageVisits');
+    const locationsTable = document.getElementById('userLocationHistory');
     const updatedAt = document.getElementById('historyUpdatedAt');
+    const locationsUpdatedAt = document.getElementById('locationsUpdatedAt');
     const lastLoginAt = document.getElementById('lastLoginAt');
     const dashboardAccessAt = document.getElementById('dashboardAccessAt');
     let isRefreshing = false;
@@ -130,6 +176,68 @@
       visitsTable.replaceChildren(rows);
     }
 
+    function renderLocations(locations) {
+      if (!locations.length) {
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 4;
+        cell.className = 'text-center text-muted py-4';
+        cell.textContent = 'Aucune position n’a encore été partagée volontairement.';
+        row.appendChild(cell);
+        locationsTable.replaceChildren(row);
+        return;
+      }
+
+      const rows = document.createDocumentFragment();
+      locations.forEach(function (location) {
+        const row = document.createElement('tr');
+        const latitude = Number(location.latitude);
+        const longitude = Number(location.longitude);
+        const coordinatesAreValid = Number.isFinite(latitude)
+          && Number.isFinite(longitude)
+          && latitude >= -90 && latitude <= 90
+          && longitude >= -180 && longitude <= 180;
+        const values = [
+          formatDate(location.shared_at),
+          coordinatesAreValid ? latitude + ', ' + longitude : '—',
+          '±' + Math.round(Number(location.accuracy_meters) || 0) + ' m'
+        ];
+
+        values.forEach(function (value, index) {
+          const cell = document.createElement('td');
+          if (index === 0) {
+            cell.className = 'ps-3';
+          }
+          if (index === 1) {
+            const coordinates = document.createElement('code');
+            coordinates.textContent = value;
+            cell.appendChild(coordinates);
+          } else {
+            cell.textContent = value;
+          }
+          row.appendChild(cell);
+        });
+
+        const mapCell = document.createElement('td');
+        if (coordinatesAreValid) {
+          const mapLink = document.createElement('a');
+          const latitudeValue = encodeURIComponent(String(latitude));
+          const longitudeValue = encodeURIComponent(String(longitude));
+          mapLink.href = 'https://www.openstreetmap.org/?mlat=' + latitudeValue
+            + '&mlon=' + longitudeValue + '#map=16/' + latitudeValue + '/' + longitudeValue;
+          mapLink.target = '_blank';
+          mapLink.rel = 'noopener noreferrer';
+          mapLink.textContent = 'Voir sur la carte';
+          mapCell.appendChild(mapLink);
+        } else {
+          mapCell.textContent = '—';
+        }
+        row.appendChild(mapCell);
+        rows.appendChild(row);
+      });
+      locationsTable.replaceChildren(rows);
+    }
+
     async function refreshHistory() {
       if (document.visibilityState !== 'visible' || isRefreshing) {
         return;
@@ -151,7 +259,9 @@
         lastLoginAt.textContent = formatDate(history.user.last_login_at);
         dashboardAccessAt.textContent = formatDate(history.user.dashboard_accessed_at);
         renderVisits(Array.isArray(history.visits) ? history.visits : []);
+        renderLocations(Array.isArray(history.locations) ? history.locations : []);
         updatedAt.textContent = new Date().toLocaleTimeString('fr-FR');
+        locationsUpdatedAt.textContent = new Date().toLocaleTimeString('fr-FR');
       } catch (error) {
         console.error('Impossible d’actualiser l’historique utilisateur.', error);
       } finally {

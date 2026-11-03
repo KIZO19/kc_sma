@@ -54,6 +54,9 @@
               <div class="fw-semibold"><?= htmlspecialchars((string) ($subscription['nom_plan'] ?? 'Abonnement'), ENT_QUOTES, 'UTF-8') ?></div>
               <div class="mt-1"><span class="badge text-bg-<?= $subscriptionIsActive ? 'success' : 'secondary' ?>"><?= $subscriptionIsActive ? 'Actif' : htmlspecialchars((string) ($subscription['statut_abonnement'] ?? 'Inactif'), ENT_QUOTES, 'UTF-8') ?></span></div>
               <div class="small text-muted mt-2">Valable jusqu’au <?= htmlspecialchars(formatDate($subscription['date_fin'] ?? null), ENT_QUOTES, 'UTF-8') ?></div>
+              <?php if (!empty($subscription['description'])): ?>
+                <div class="small mt-2"><?= nl2br(htmlspecialchars((string) $subscription['description'], ENT_QUOTES, 'UTF-8')) ?></div>
+              <?php endif; ?>
             <?php else: ?>
               <p class="text-muted">Aucun abonnement enregistré.</p>
             <?php endif; ?>
@@ -156,7 +159,11 @@
           <form method="post" action="<?= BASE_URL ?>/ecoles/updateSchoolNotificationAccess">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) ($csrfToken ?? ''), ENT_QUOTES, 'UTF-8') ?>">
             <div class="card-body">
-              <p class="text-muted">Vous pouvez activer ou désactiver les notifications pour votre école. Un canal désactivé par le super-administrateur ne peut pas être activé ici.</p>
+              <p class="text-muted">Le super-administrateur contrôle la messagerie interne entre les comptes de l’école. Vous pouvez gérer les préférences SMS et WhatsApp autorisées ci-dessous.</p>
+              <div class="alert <?= !empty($notificationSettings['direct_messages_allowed']) ? 'alert-success' : 'alert-warning' ?>" role="status">
+                Messagerie entre comptes :
+                <strong><?= !empty($notificationSettings['direct_messages_allowed']) ? 'autorisée' : 'bloquée par le super-administrateur' ?></strong>.
+              </div>
               <div class="row g-3">
                 <?php foreach ([
                     'sms' => ['label' => 'SMS', 'allowed' => 'sms_allowed', 'enabled' => 'sms_enabled'],

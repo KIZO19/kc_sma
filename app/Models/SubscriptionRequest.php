@@ -89,8 +89,10 @@ class SubscriptionRequest
     public static function getAll(): array
     {
         self::ensureTable();
+        Ecole::ensurePlanQuotaDetails();
         $stmt = Database::getConnection()->query(
             'SELECT r.*, e.nom_etablissement, p.nom_plan, p.prix, p.duree_mois,
+                    p.max_students, p.max_parent_accounts, p.max_staff_accounts,
                     requester.nom_complet AS requester_name,
                     reviewer.nom_complet AS reviewer_name
              FROM demandes_abonnement_ecoles r
@@ -112,19 +114,30 @@ class SubscriptionRequest
         )->fetchColumn();
     }
 
-    public static function review(int $requestId, int $reviewerId, string $status, string $note): bool
+    public static function review(
+        int $requestId,
+        int $reviewerId,
+        string $status,
+        string $note
+    ): bool
     {
         self::ensureTable();
         if (!in_array($status, ['Approuvee', 'Refusee'], true)) {
             return false;
         }
 
+        if ($status === 'Approuvee') {
+            Ecole::ensureSubscriptionDetails();
+            Ecole::ensurePlanQuotaDetails();
+        }
         UserMessage::ensureTable();
         $db = Database::getConnection();
         $db->beginTransaction();
         try {
             $stmt = $db->prepare(
-                'SELECT r.*, p.duree_mois, p.prix, p.nom_plan, e.nom_etablissement
+                'SELECT r.*, p.duree_mois, p.prix, p.nom_plan, p.description AS plan_description,
+                        p.max_students, p.max_parent_accounts, p.max_staff_accounts,
+                        e.nom_etablissement
                  FROM demandes_abonnement_ecoles r
                  INNER JOIN plans_abonnement p ON p.id = r.plan_id
                  INNER JOIN ecoles e ON e.id = r.ecole_id
@@ -166,11 +179,25 @@ class SubscriptionRequest
                 $endDate = $endMonth
                     ->setDate((int) $endMonth->format('Y'), (int) $endMonth->format('m'), $endDay)
                     ->modify('-1 day');
+                $description = Ecole::buildSubscriptionDescription(
+                    (string) $request['nom_plan'],
+                    (string) ($request['plan_description'] ?? ''),
+                    (float) ($request['prix'] ?? 0),
+                    $startDate->format('Y-m-d'),
+                    $endDate->format('Y-m-d'),
+                    (int) ($request['max_students'] ?? 0),
+                    (int) ($request['max_parent_accounts'] ?? 0),
+                    (int) ($request['max_staff_accounts'] ?? 0),
+                    (string) ($request['message'] ?? '')
+                );
 
                 $subscription = $db->prepare(
                     "INSERT INTO abonnements_ecoles
-                        (ecole_id, plan_id, date_debut, date_fin, statut_abonnement, montant_paye)
-                     VALUES (:ecole_id, :plan_id, :date_debut, :date_fin, 'Actif', :montant_paye)"
+                        (ecole_id, plan_id, date_debut, date_fin, statut_abonnement, montant_paye,
+                         max_students, max_parent_accounts, max_staff_accounts, description)
+                     VALUES
+                        (:ecole_id, :plan_id, :date_debut, :date_fin, 'Actif', :montant_paye,
+                         :max_students, :max_parent_accounts, :max_staff_accounts, :description)"
                 );
                 $subscription->execute([
                     ':ecole_id' => (int) $request['ecole_id'],
@@ -178,6 +205,10 @@ class SubscriptionRequest
                     ':date_debut' => $startDate->format('Y-m-d'),
                     ':date_fin' => $endDate->format('Y-m-d'),
                     ':montant_paye' => (float) ($request['prix'] ?? 0),
+                    ':max_students' => (int) ($request['max_students'] ?? 0),
+                    ':max_parent_accounts' => (int) ($request['max_parent_accounts'] ?? 0),
+                    ':max_staff_accounts' => (int) ($request['max_staff_accounts'] ?? 0),
+                    ':description' => $description,
                 ]);
             }
 

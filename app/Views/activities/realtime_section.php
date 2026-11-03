@@ -3,7 +3,7 @@
     <div class="row mb-2">
       <div class="col-12"><h2 class="h4 mb-0">Activité en temps réel</h2></div>
     </div>
-    <p class="text-muted">Les données se mettent à jour automatiquement toutes les 10 secondes. Un utilisateur est considéré en ligne si son activité remonte à moins d’une minute. À chaque connexion, l’utilisateur est informé et peut accepter ou refuser le partage de sa position. La localisation n’est visible que si l’appareil est en ligne et que l’utilisateur l’a partagée.</p>
+    <p class="text-muted">Les données se mettent à jour automatiquement toutes les 10 secondes. Un utilisateur est considéré en ligne si son activité remonte à moins d’une minute. À chaque connexion, l’utilisateur est informé et peut accepter ou refuser le partage de sa position. La position actuelle n’est visible que si l’appareil est en ligne et que l’utilisateur l’a partagée. Cliquez sur le nom d’un utilisateur pour consulter ses positions partagées et ses pages visitées.</p>
     <div id="presenceError" class="alert alert-danger d-none" role="alert"></div>
   </div>
 </section>
@@ -76,7 +76,7 @@
               </tr>
             </thead>
             <tbody id="presenceUsersTable">
-              <tr><td colspan="6" class="text-center text-muted py-4">Chargement des utilisateurs…</td></tr>
+              <tr><td colspan="7" class="text-center text-muted py-4">Chargement des utilisateurs…</td></tr>
             </tbody>
           </table>
         </div>

@@ -16,6 +16,10 @@
       <?php unset($_SESSION['messages_error']); ?>
     <?php endif; ?>
 
+    <?php if (empty($directMessagesEnabled)): ?>
+      <div class="alert alert-warning" role="status">La messagerie entre les comptes de votre école est désactivée par le super-administrateur. Les notifications reçues restent accessibles ci-dessous.</div>
+    <?php endif; ?>
+
     <?php if (!empty($canCompose)): ?>
       <div class="card card-outline card-primary mb-4" id="compose-message">
         <div class="card-header"><h2 class="card-title h5 mb-0">Nouveau message</h2></div>
@@ -84,6 +88,7 @@
       </div>
     <?php endif; ?>
 
+    <?php if (!empty($directMessagesEnabled)): ?>
     <div class="card mb-4">
       <div class="card-header"><h2 class="card-title h5 mb-0">Conversations</h2></div>
       <div class="card-body p-0">
@@ -112,6 +117,7 @@
         <?php endif; ?>
       </div>
     </div>
+    <?php endif; ?>
 
     <div class="card">
       <div class="card-header"><h2 class="card-title h5 mb-0">Notifications reçues</h2></div>

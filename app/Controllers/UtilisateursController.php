@@ -339,6 +339,31 @@ class UtilisateursController extends Controller
             $ecoleId = null;
         }
 
+        if (empty($errors) && $ecoleId > 0) {
+            $capacityForRole = static function (string $accountRole): ?string {
+                if (in_array($accountRole, ['eleve_ecole', 'eleve_école'], true)) {
+                    return 'students';
+                }
+                if (in_array($accountRole, ['parent_ecole', 'parent_école'], true)) {
+                    return 'parents';
+                }
+                return in_array($accountRole, User::getSchoolScopedRoles(), true) ? 'staff' : null;
+            };
+            $targetCapacity = $capacityForRole($role);
+            $previousCapacity = $targetUser ? $capacityForRole((string) ($targetUser['role'] ?? '')) : null;
+            $previousSchoolId = (int) ($targetUser['ecole_id'] ?? 0);
+            if (
+                $targetCapacity !== null
+                && ($previousSchoolId !== $ecoleId || $previousCapacity !== $targetCapacity)
+            ) {
+                try {
+                    Ecole::assertSubscriptionCapacity($ecoleId, $targetCapacity);
+                } catch (\DomainException $exception) {
+                    $errors[] = $exception->getMessage();
+                }
+            }
+        }
+
         $sectionScopedRoles = ['préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école'];
         if (in_array($role, $sectionScopedRoles, true)) {
             $section = $sectionId > 0 ? Section::findById($sectionId) : null;
@@ -433,6 +458,13 @@ class UtilisateursController extends Controller
 
             if ($canValidate) {
                 if ($isPendingUnassignedAgent && $isSchoolManager) {
+                    try {
+                        Ecole::assertSubscriptionCapacity($currentSchoolId, 'staff');
+                    } catch (\DomainException $exception) {
+                        $_SESSION['utilisateurs_errors'] = [$exception->getMessage()];
+                        $this->redirect('/utilisateurs');
+                        return;
+                    }
                     if (!User::assignToSchool($userId, $currentSchoolId)) {
                         $_SESSION['utilisateurs_errors'] = ['Impossible d’affecter ce compte à votre école.'];
                         $this->redirect('/utilisateurs');

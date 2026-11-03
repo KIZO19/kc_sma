@@ -32,8 +32,8 @@
           <h2 class="modal-title fs-5" id="locationConsentTitle">Partager la localisation de cet appareil</h2>
         </div>
         <div class="modal-body">
-          <p>Pour la sécurité et le suivi de connexion, le super administrateur souhaite connaître la position approximative de cet appareil. Si vous acceptez, votre position sera visible par le super administrateur et actualisée à votre prochaine connexion. Votre navigateur vous demandera également son autorisation. Cette demande fonctionne sur téléphone lorsque le site est ouvert dans un navigateur et utilise une connexion HTTPS sécurisée.</p>
-          <p class="small text-muted mb-0">Votre position ne sera pas transmise si vous refusez. Vous pouvez aussi refuser l’autorisation dans la demande de votre navigateur.</p>
+          <p>Pour la sécurité et le suivi de connexion, le super administrateur souhaite connaître la position approximative de cet appareil. Si vous acceptez, la position partagée sera visible par le super administrateur et conservée avec sa date dans l’historique de votre compte. Le partage n’est demandé qu’à cette connexion et votre navigateur vous demandera également son autorisation. Cette demande fonctionne sur téléphone lorsque le site est ouvert dans un navigateur et utilise une connexion HTTPS sécurisée.</p>
+          <p class="small text-muted mb-0">Votre position ne sera ni transmise ni enregistrée si vous refusez. Vous pouvez aussi refuser l’autorisation dans la demande de votre navigateur.</p>
           <div id="locationConsentStatus" class="small mt-3" role="status" aria-live="polite"></div>
         </div>
         <div class="modal-footer">

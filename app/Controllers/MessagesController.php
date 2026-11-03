@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Core\Auth;
 use App\Core\Controller;
+use App\Models\NotificationAccess;
 use App\Models\SchoolMessage;
 use App\Models\UserMessage;
 use App\Models\User;
@@ -36,6 +37,7 @@ class MessagesController extends Controller
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
         $schoolId = (int) ($user['ecole_id'] ?? 0);
+        $directMessagesEnabled = NotificationAccess::isDirectMessagingEnabled($schoolId);
         $isParent = in_array($role, ['parent_ecole', 'parent_école'], true);
         $isStaff = SchoolMessage::isStaffRole((string) $role);
         if (empty($_SESSION['school_messages_csrf'])) {
@@ -49,20 +51,25 @@ class MessagesController extends Controller
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $this->getModulesForRole($role),
             'messages' => UserMessage::getForUser((int) ($user['id'] ?? 0)),
-            'threads' => SchoolMessage::getThreadsForUser((int) ($user['id'] ?? 0), $schoolId),
-            'children' => $isParent
+            'threads' => $directMessagesEnabled
+                ? SchoolMessage::getThreadsForUser((int) ($user['id'] ?? 0), $schoolId)
+                : [],
+            'children' => $directMessagesEnabled && $isParent
                 ? SchoolMessage::getChildrenForParent((int) ($user['reference_id'] ?? 0), $schoolId)
                 : [],
-            'contacts' => $isParent
+            'contacts' => !$directMessagesEnabled
+                ? []
+                : ($isParent
                 ? SchoolMessage::getParentContacts((int) ($user['reference_id'] ?? 0), $schoolId)
                 : (SchoolMessage::canMessageParents((string) $role)
                     ? SchoolMessage::getStaffParentContacts($schoolId, $this->getSectionScopeForUser($user))
-                    : []),
-            'staffContacts' => $isStaff
+                    : [])),
+            'staffContacts' => $directMessagesEnabled && $isStaff
                 ? SchoolMessage::getStaffContacts($schoolId, (int) ($user['id'] ?? 0))
                 : [],
             'isParent' => $isParent,
-            'canCompose' => SchoolMessage::canComposeForRole((string) $role),
+            'canCompose' => $directMessagesEnabled && SchoolMessage::canComposeForRole((string) $role),
+            'directMessagesEnabled' => $directMessagesEnabled,
             'csrfToken' => $_SESSION['school_messages_csrf'],
         ]);
     }
@@ -72,6 +79,11 @@ class MessagesController extends Controller
         Auth::requireAuth();
         Auth::requireRoles(self::ACCESS_ROLES);
         $user = Auth::refresh() ?: Auth::user();
+        if (!$user || !NotificationAccess::isDirectMessagingEnabled((int) ($user['ecole_id'] ?? 0))) {
+            $_SESSION['messages_error'] = 'La messagerie interne est désactivée pour votre école.';
+            $this->redirect('/messages');
+            return;
+        }
         $threadId = filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT);
         $thread = $user && $threadId && $threadId > 0
             ? SchoolMessage::getThread((int) $threadId, (int) $user['id'], (int) ($user['ecole_id'] ?? 0))
@@ -101,6 +113,11 @@ class MessagesController extends Controller
         Auth::requireAuth();
         Auth::requireRoles(self::ACCESS_ROLES);
         $user = Auth::refresh() ?: Auth::user();
+        if (!$user || !NotificationAccess::isDirectMessagingEnabled((int) ($user['ecole_id'] ?? 0))) {
+            $_SESSION['messages_error'] = 'La messagerie interne est désactivée pour votre école.';
+            $this->redirect('/messages');
+            return;
+        }
         $token = (string) ($_POST['csrf_token'] ?? '');
         if (
             $_SERVER['REQUEST_METHOD'] !== 'POST'
@@ -184,6 +201,11 @@ class MessagesController extends Controller
         Auth::requireAuth();
         Auth::requireRoles(self::ACCESS_ROLES);
         $user = Auth::refresh() ?: Auth::user();
+        if (!$user || !NotificationAccess::isDirectMessagingEnabled((int) ($user['ecole_id'] ?? 0))) {
+            $_SESSION['messages_error'] = 'La messagerie interne est désactivée pour votre école.';
+            $this->redirect('/messages');
+            return;
+        }
         $token = (string) ($_POST['csrf_token'] ?? '');
         $threadId = filter_var($_POST['thread_id'] ?? null, FILTER_VALIDATE_INT);
         $body = trim((string) ($_POST['body'] ?? ''));
@@ -224,6 +246,10 @@ class MessagesController extends Controller
         $threadId = filter_var($_GET['thread_id'] ?? null, FILTER_VALIDATE_INT);
         $afterId = filter_var($_GET['after_id'] ?? 0, FILTER_VALIDATE_INT);
         $this->jsonResponse(function () use ($user, $threadId, $afterId): array {
+            if (!$user || !NotificationAccess::isDirectMessagingEnabled((int) ($user['ecole_id'] ?? 0))) {
+                http_response_code(403);
+                return ['error' => 'La messagerie interne est désactivée pour votre école.'];
+            }
             if (!$user || !$threadId || $threadId <= 0 || $afterId === false || $afterId < 0) {
                 http_response_code(400);
                 return ['error' => 'Paramètres de conversation invalides.'];
@@ -253,6 +279,10 @@ class MessagesController extends Controller
         $threadId = filter_var($_POST['thread_id'] ?? null, FILTER_VALIDATE_INT);
         $body = trim((string) ($_POST['body'] ?? ''));
         $this->jsonResponse(function () use ($user, $token, $threadId, $body): array {
+            if (!$user || !NotificationAccess::isDirectMessagingEnabled((int) ($user['ecole_id'] ?? 0))) {
+                http_response_code(403);
+                return ['error' => 'La messagerie interne est désactivée pour votre école.'];
+            }
             if (
                 ($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST'
                 || !$user
@@ -284,6 +314,10 @@ class MessagesController extends Controller
         $token = (string) ($_POST['csrf_token'] ?? '');
         $threadId = filter_var($_POST['thread_id'] ?? null, FILTER_VALIDATE_INT);
         $this->jsonResponse(function () use ($user, $token, $threadId): array {
+            if (!$user || !NotificationAccess::isDirectMessagingEnabled((int) ($user['ecole_id'] ?? 0))) {
+                http_response_code(403);
+                return ['error' => 'La messagerie interne est désactivée pour votre école.'];
+            }
             if (
                 ($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST'
                 || !$user

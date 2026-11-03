@@ -6,6 +6,7 @@ use App\Core\Auth;
 use App\Core\PersonName;
 use App\Models\Derogation;
 use App\Models\EvenementNotification;
+use App\Models\NotificationAccess;
 use App\Models\SchoolMessage;
 use App\Models\UserMessage;
 
@@ -30,13 +31,16 @@ class NotificationsController
             $userId = (int) $user['id'];
             $schoolId = (int) ($user['ecole_id'] ?? 0);
             $role = (string) ($user['role'] ?? '');
+            $directMessagingEnabled = NotificationAccess::isDirectMessagingEnabled($schoolId);
 
             if ($schoolId > 0) {
                 EvenementNotification::deliverDueForUser($user);
             }
 
             $messages = UserMessage::getUnreadForUser($userId, 10);
-            $directMessages = SchoolMessage::getUnreadForUser($userId, $schoolId, 10);
+            $directMessages = $directMessagingEnabled
+                ? SchoolMessage::getUnreadForUser($userId, $schoolId, 10)
+                : [];
             $pendingDerogations = $role === 'comptable_école'
                 ? Derogation::getPendingForAccountant($schoolId, 10)
                 : [];
@@ -51,7 +55,9 @@ class NotificationsController
                 'messages' => $messages,
                 'messageCount' => UserMessage::countUnreadForUser($userId),
                 'directMessages' => $directMessages,
-                'directMessageCount' => SchoolMessage::countUnreadForUser($userId, $schoolId),
+                'directMessageCount' => $directMessagingEnabled
+                    ? SchoolMessage::countUnreadForUser($userId, $schoolId)
+                    : 0,
                 'pendingDerogations' => array_map(
                     static function (array $item): array {
                         $item['eleve_nom'] = PersonName::format($item);

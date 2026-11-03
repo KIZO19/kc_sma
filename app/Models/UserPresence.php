@@ -76,21 +76,40 @@ class UserPresence
     public static function recordLocation(array $user, float $latitude, float $longitude, float $accuracy): void
     {
         self::ensureTable();
-        $stmt = Database::getConnection()->prepare(
-            'INSERT INTO utilisateur_locations (user_id, latitude, longitude, accuracy_meters, shared_at)
-             VALUES (:user_id, :latitude, :longitude, :accuracy, NOW())
-             ON DUPLICATE KEY UPDATE
-                latitude = VALUES(latitude),
-                longitude = VALUES(longitude),
-                accuracy_meters = VALUES(accuracy_meters),
-                shared_at = NOW()'
-        );
-        $stmt->execute([
+        $db = Database::getConnection();
+        $location = [
             ':user_id' => (int) ($user['id'] ?? 0),
             ':latitude' => $latitude,
             ':longitude' => $longitude,
             ':accuracy' => $accuracy,
-        ]);
+        ];
+
+        $db->beginTransaction();
+        try {
+            $historyStmt = $db->prepare(
+                'INSERT INTO utilisateur_location_history
+                    (user_id, latitude, longitude, accuracy_meters, shared_at)
+                 VALUES (:user_id, :latitude, :longitude, :accuracy, NOW())'
+            );
+            $historyStmt->execute($location);
+
+            $latestStmt = $db->prepare(
+                'INSERT INTO utilisateur_locations (user_id, latitude, longitude, accuracy_meters, shared_at)
+                 VALUES (:user_id, :latitude, :longitude, :accuracy, NOW())
+                 ON DUPLICATE KEY UPDATE
+                    latitude = VALUES(latitude),
+                    longitude = VALUES(longitude),
+                    accuracy_meters = VALUES(accuracy_meters),
+                    shared_at = NOW()'
+            );
+            $latestStmt->execute($location);
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
     }
 
     public static function getUserHistory(int $userId): ?array
@@ -122,9 +141,19 @@ class UserPresence
         );
         $visitsStmt->execute([':user_id' => $userId]);
 
+        $locationsStmt = $db->prepare(
+            'SELECT latitude, longitude, accuracy_meters, shared_at
+             FROM utilisateur_location_history
+             WHERE user_id = :user_id
+             ORDER BY shared_at DESC, id DESC
+             LIMIT 500'
+        );
+        $locationsStmt->execute([':user_id' => $userId]);
+
         return [
             'user' => $user,
             'visits' => $visitsStmt->fetchAll(PDO::FETCH_ASSOC),
+            'locations' => $locationsStmt->fetchAll(PDO::FETCH_ASSOC),
         ];
     }
 
@@ -225,6 +254,17 @@ class UserPresence
                 accuracy_meters DECIMAL(10, 2) NOT NULL,
                 shared_at DATETIME NOT NULL,
                 KEY idx_utilisateur_locations_shared_at (shared_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+        );
+        Database::getConnection()->exec(
+            'CREATE TABLE IF NOT EXISTS utilisateur_location_history (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                latitude DECIMAL(10, 7) NOT NULL,
+                longitude DECIMAL(10, 7) NOT NULL,
+                accuracy_meters DECIMAL(10, 2) NOT NULL,
+                shared_at DATETIME NOT NULL,
+                KEY idx_utilisateur_location_history_user_date (user_id, shared_at)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
         );
         self::$tableEnsured = true;

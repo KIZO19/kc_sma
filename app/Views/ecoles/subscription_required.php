@@ -31,6 +31,9 @@
                     Période : <?= htmlspecialchars(formatDate($subscription['date_debut'] ?? null)) ?>
                     au <?= htmlspecialchars(formatDate($subscription['date_fin'] ?? null)) ?>
                   </div>
+                  <?php if (!empty($subscription['description'])): ?>
+                    <div class="small mt-2"><?= nl2br(htmlspecialchars((string) $subscription['description'], ENT_QUOTES, 'UTF-8')) ?></div>
+                  <?php endif; ?>
                 <?php else: ?>
                   <div class="small text-danger mt-2">Aucun abonnement n’est enregistré pour cet établissement.</div>
                 <?php endif; ?>

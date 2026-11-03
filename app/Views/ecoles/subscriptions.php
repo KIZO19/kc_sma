@@ -55,6 +55,11 @@
               <div class="col-md-3"><div class="text-muted small">Début</div><?= htmlspecialchars(formatDate($currentSubscription['date_debut'] ?? null), ENT_QUOTES, 'UTF-8') ?></div>
               <div class="col-md-3"><div class="text-muted small">Fin</div><?= htmlspecialchars(formatDate($currentSubscription['date_fin'] ?? null), ENT_QUOTES, 'UTF-8') ?></div>
             </div>
+            <?php if (!empty($currentSubscription['description'])): ?>
+              <hr>
+              <div class="text-muted small">Description de l’abonnement</div>
+              <div class="small"><?= nl2br(htmlspecialchars((string) $currentSubscription['description'], ENT_QUOTES, 'UTF-8')) ?></div>
+            <?php endif; ?>
           <?php else: ?>
             <p class="mb-0 text-muted">Aucun abonnement actif n’est en cours actuellement.</p>
             <?php if ($latestSubscription): ?>
@@ -172,9 +177,17 @@
                 <td class="fw-semibold"><?= htmlspecialchars((string) ($request['nom_etablissement'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                 <td><?= htmlspecialchars((string) ($request['requester_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?><div class="small text-muted"><?= htmlspecialchars(formatDate($request['created_at'] ?? null), ENT_QUOTES, 'UTF-8') ?></div></td>
                 <td><?= $request['type_demande'] === 'renouvellement' ? 'Renouvellement' : 'Nouvel abonnement' ?></td>
-                <td><?= htmlspecialchars((string) ($request['nom_plan'] ?? ''), ENT_QUOTES, 'UTF-8') ?><div class="small text-muted"><?= htmlspecialchars(number_format((float) ($request['prix'] ?? 0), 2, ',', ' '), ENT_QUOTES, 'UTF-8') ?> USD / <?= (int) ($request['duree_mois'] ?? 0) ?> mois</div></td>
+                <td>
+                  <?= htmlspecialchars((string) ($request['nom_plan'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                  <div class="small text-muted"><?= htmlspecialchars(number_format((float) ($request['prix'] ?? 0), 2, ',', ' '), ENT_QUOTES, 'UTF-8') ?> USD / <?= (int) ($request['duree_mois'] ?? 0) ?> mois</div>
+                  <div class="small text-muted">
+                    Élèves : <?= (int) ($request['max_students'] ?? 0) > 0 ? (int) $request['max_students'] : 'Illimité' ?>
+                    · Parents : <?= (int) ($request['max_parent_accounts'] ?? 0) > 0 ? (int) $request['max_parent_accounts'] : 'Illimité' ?>
+                    · Agents : <?= (int) ($request['max_staff_accounts'] ?? 0) > 0 ? (int) $request['max_staff_accounts'] : 'Illimité' ?>
+                  </div>
+                </td>
                 <td><?= htmlspecialchars((string) ($request['message'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
-                <td style="min-width: 230px">
+                <td style="min-width: 220px">
                   <form id="<?= $reviewFormId ?>" method="post" action="<?= BASE_URL ?>/ecoles/reviewSubscriptionRequest">
                     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) ($csrfToken ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                     <input type="hidden" name="request_id" value="<?= (int) $request['id'] ?>">
@@ -246,6 +259,14 @@
                         </option>
                       <?php endforeach; ?>
                     </select>
+                    <div class="small text-muted mt-1">
+                      Élèves : <?= (int) ($subscription['max_students'] ?? 0) > 0 ? (int) $subscription['max_students'] : 'Illimité' ?>
+                      · Parents : <?= (int) ($subscription['max_parent_accounts'] ?? 0) > 0 ? (int) $subscription['max_parent_accounts'] : 'Illimité' ?>
+                      · Agents : <?= (int) ($subscription['max_staff_accounts'] ?? 0) > 0 ? (int) $subscription['max_staff_accounts'] : 'Illimité' ?>
+                    </div>
+                    <?php if (!empty($subscription['description'])): ?>
+                      <div class="small mt-1"><?= nl2br(htmlspecialchars((string) $subscription['description'], ENT_QUOTES, 'UTF-8')) ?></div>
+                    <?php endif; ?>
                   </td>
                   <td><input form="<?= $formId ?>" type="date" name="date_debut" class="form-control form-control-sm" value="<?= htmlspecialchars(substr((string) ($subscription['date_debut'] ?? ''), 0, 10)) ?>" required></td>
                   <td><input form="<?= $formId ?>" type="date" name="date_fin" class="form-control form-control-sm" value="<?= htmlspecialchars(substr((string) ($subscription['date_fin'] ?? ''), 0, 10)) ?>" required></td>

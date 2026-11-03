@@ -7,6 +7,9 @@ use PDO;
 
 class Ecole
 {
+    private static bool $subscriptionDetailsEnsured = false;
+    private static bool $planQuotaDetailsEnsured = false;
+
     public static function getAll(): array
     {
         try {
@@ -67,6 +70,7 @@ class Ecole
     public static function getLatestSubscription(int $ecoleId): ?array
     {
         try {
+            self::ensureSubscriptionDetails();
             $db = Database::getConnection();
             $stmt = $db->prepare(
                 "SELECT a.*, COALESCE(p.nom_plan, 'Essai gratuit') AS nom_plan
@@ -92,6 +96,7 @@ class Ecole
         }
 
         try {
+            self::ensureSubscriptionDetails();
             $stmt = Database::getConnection()->prepare(
                 "SELECT a.*, COALESCE(p.nom_plan, 'Essai gratuit') AS nom_plan
                  FROM abonnements_ecoles a
@@ -115,6 +120,7 @@ class Ecole
     public static function getSubscriptions(?int $ecoleId = null): array
     {
         try {
+            self::ensureSubscriptionDetails();
             $sql = "SELECT a.*, e.nom_etablissement,
                            CASE
                                WHEN a.plan_id IS NULL THEN 'Essai gratuit'
@@ -141,6 +147,123 @@ class Ecole
         }
     }
 
+    public static function assertSubscriptionCapacity(int $schoolId, string $resource): void
+    {
+        if ($schoolId <= 0) {
+            return;
+        }
+
+        $columns = [
+            'students' => ['max_students', 'eleves', 'Limite d’élèves'],
+            'parents' => ['max_parent_accounts', 'parents', 'Limite de comptes parents'],
+            'staff' => ['max_staff_accounts', 'agents', 'Limite de comptes agents'],
+        ];
+        if (!isset($columns[$resource])) {
+            throw new \InvalidArgumentException('Type de capacité d’abonnement invalide.');
+        }
+
+        self::ensureSubscriptionDetails();
+        $db = Database::getConnection();
+        $activeSubscription = $db->prepare(
+            "SELECT {$columns[$resource][0]}
+             FROM abonnements_ecoles
+             WHERE ecole_id = :ecole_id
+               AND statut_abonnement = 'Actif'
+               AND date_debut <= NOW()
+               AND date_fin >= CURRENT_DATE
+             ORDER BY date_debut DESC, id DESC
+             LIMIT 1"
+        );
+        $activeSubscription->execute([':ecole_id' => $schoolId]);
+        $limit = $activeSubscription->fetchColumn();
+        if ($limit === false || (int) $limit === 0) {
+            return;
+        }
+
+        if ($resource === 'students') {
+            $count = $db->prepare('SELECT COUNT(*) FROM eleves WHERE ecole_id = :ecole_id');
+        } elseif ($resource === 'parents') {
+            $count = $db->prepare(
+                "SELECT COUNT(*) FROM utilisateurs
+                 WHERE ecole_id = :ecole_id AND role IN ('parent_ecole', 'parent_école')"
+            );
+        } else {
+            $count = $db->prepare(
+                "SELECT COUNT(*) FROM utilisateurs
+                 WHERE ecole_id = :ecole_id
+                   AND role NOT IN ('super_admin', 'eleve_ecole', 'eleve_école', 'parent_ecole', 'parent_école')"
+            );
+        }
+        $count->execute([':ecole_id' => $schoolId]);
+        if ((int) $count->fetchColumn() >= (int) $limit) {
+            throw new \DomainException(
+                $columns[$resource][2] . ' atteinte (' . (int) $limit
+                . '). Contactez le super-administrateur pour modifier votre abonnement.'
+            );
+        }
+    }
+
+    public static function buildSubscriptionDescription(
+        string $planName,
+        ?string $planDescription,
+        float $amount,
+        string $dateStart,
+        string $dateEnd,
+        int $maxStudents,
+        int $maxParentAccounts,
+        int $maxStaffAccounts,
+        string $additionalDetails = ''
+    ): string {
+        $formatDate = static function (string $date): string {
+            $timestamp = strtotime($date);
+            return $timestamp === false ? $date : date('d/m/Y', $timestamp);
+        };
+        $formatLimit = static fn (int $limit): string => $limit > 0 ? (string) $limit : 'illimité';
+        $description = 'Plan : ' . $planName
+            . ' · Tarif : ' . number_format($amount, 2, ',', ' ') . ' USD'
+            . ' · Période : ' . $formatDate($dateStart) . ' au ' . $formatDate($dateEnd)
+            . ' · Maximum : ' . $formatLimit($maxStudents) . ' élèves, '
+            . $formatLimit($maxParentAccounts) . ' comptes parents et '
+            . $formatLimit($maxStaffAccounts) . ' comptes agents (enseignants et administratifs).';
+        $planDescription = trim((string) $planDescription);
+        $additionalDetails = trim($additionalDetails);
+        if ($planDescription !== '') {
+            $description .= "\n" . $planDescription;
+        }
+        if ($additionalDetails !== '') {
+            $description .= "\n" . $additionalDetails;
+        }
+
+        return $description;
+    }
+
+    public static function ensureSubscriptionDetails(): void
+    {
+        if (self::$subscriptionDetailsEnsured) {
+            return;
+        }
+
+        $db = Database::getConnection();
+        $columns = [
+            'max_students' => 'INT UNSIGNED NOT NULL DEFAULT 0',
+            'max_parent_accounts' => 'INT UNSIGNED NOT NULL DEFAULT 0',
+            'max_staff_accounts' => 'INT UNSIGNED NOT NULL DEFAULT 0',
+            'description' => 'TEXT NULL',
+        ];
+        foreach ($columns as $name => $definition) {
+            $column = $db->query(
+                "SHOW COLUMNS FROM abonnements_ecoles LIKE " . $db->quote($name)
+            )->fetch(PDO::FETCH_ASSOC);
+            if ($column === false) {
+                $db->exec(
+                    'ALTER TABLE abonnements_ecoles ADD COLUMN ' . $name . ' ' . $definition
+                );
+            }
+        }
+
+        self::$subscriptionDetailsEnsured = true;
+    }
+
     public static function updateSubscription(
         int $subscriptionId,
         ?int $planId,
@@ -149,6 +272,7 @@ class Ecole
         string $status
     ): bool {
         try {
+            self::ensureSubscriptionDetails();
             $stmt = Database::getConnection()->prepare(
                 'UPDATE abonnements_ecoles
                  SET plan_id = :plan_id, date_debut = :date_debut, date_fin = :date_fin,
@@ -312,6 +436,7 @@ class Ecole
     public static function getPlans(): array
     {
         try {
+            self::ensurePlanQuotaDetails();
             $db = Database::getConnection();
             $stmt = $db->query('SELECT * FROM plans_abonnement ORDER BY prix ASC');
 
@@ -324,18 +449,23 @@ class Ecole
     public static function savePlan(array $data, ?int $planId = null): bool
     {
         try {
+            self::ensurePlanQuotaDetails();
             $db = Database::getConnection();
             if ($planId !== null) {
                 $stmt = $db->prepare(
                     'UPDATE plans_abonnement
-                     SET nom_plan = :nom_plan, duree_mois = :duree_mois, prix = :prix, description = :description
+                     SET nom_plan = :nom_plan, duree_mois = :duree_mois, prix = :prix, description = :description,
+                         max_students = :max_students, max_parent_accounts = :max_parent_accounts,
+                         max_staff_accounts = :max_staff_accounts
                      WHERE id = :id'
                 );
                 $stmt->bindValue(':id', $planId, PDO::PARAM_INT);
             } else {
                 $stmt = $db->prepare(
-                    'INSERT INTO plans_abonnement (nom_plan, duree_mois, prix, description)
-                     VALUES (:nom_plan, :duree_mois, :prix, :description)'
+                    'INSERT INTO plans_abonnement
+                        (nom_plan, duree_mois, prix, description, max_students, max_parent_accounts, max_staff_accounts)
+                     VALUES
+                        (:nom_plan, :duree_mois, :prix, :description, :max_students, :max_parent_accounts, :max_staff_accounts)'
                 );
             }
             $stmt->bindValue(':nom_plan', $data['nom_plan'], PDO::PARAM_STR);
@@ -343,12 +473,39 @@ class Ecole
             $stmt->bindValue(':prix', (float) $data['prix']);
             $description = $data['description'] ?? null;
             $stmt->bindValue(':description', $description, $description === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+            $stmt->bindValue(':max_students', (int) $data['max_students'], PDO::PARAM_INT);
+            $stmt->bindValue(':max_parent_accounts', (int) $data['max_parent_accounts'], PDO::PARAM_INT);
+            $stmt->bindValue(':max_staff_accounts', (int) $data['max_staff_accounts'], PDO::PARAM_INT);
 
             return $stmt->execute();
         } catch (\Throwable $e) {
             error_log('Ecole::savePlan failed: ' . $e->getMessage());
             return false;
         }
+    }
+
+    public static function ensurePlanQuotaDetails(): void
+    {
+        if (self::$planQuotaDetailsEnsured) {
+            return;
+        }
+
+        $db = Database::getConnection();
+        $columns = [
+            'max_students' => 'INT UNSIGNED NOT NULL DEFAULT 0',
+            'max_parent_accounts' => 'INT UNSIGNED NOT NULL DEFAULT 0',
+            'max_staff_accounts' => 'INT UNSIGNED NOT NULL DEFAULT 0',
+        ];
+        foreach ($columns as $name => $definition) {
+            $column = $db->query(
+                'SHOW COLUMNS FROM plans_abonnement LIKE ' . $db->quote($name)
+            )->fetch(PDO::FETCH_ASSOC);
+            if ($column === false) {
+                $db->exec('ALTER TABLE plans_abonnement ADD COLUMN ' . $name . ' ' . $definition);
+            }
+        }
+
+        self::$planQuotaDetailsEnsured = true;
     }
 
     public static function getSchoolPopulationCounts(): array
@@ -422,13 +579,28 @@ class Ecole
         }
     }
 
-    public static function addSubscription(int $ecoleId, ?int $planId, string $dateDebut, string $dateFin, float $montant): bool
+    public static function addSubscription(
+        int $ecoleId,
+        ?int $planId,
+        string $dateDebut,
+        string $dateFin,
+        float $montant,
+        int $maxStudents,
+        int $maxParentAccounts,
+        int $maxStaffAccounts,
+        string $description
+    ): bool
     {
         try {
+            self::ensureSubscriptionDetails();
             $db = Database::getConnection();
             $stmt = $db->prepare(
-                'INSERT INTO abonnements_ecoles (ecole_id, plan_id, date_debut, date_fin, statut_abonnement, montant_paye)
-                 VALUES (:ecole_id, :plan_id, :date_debut, :date_fin, :statut_abonnement, :montant_paye)'
+                'INSERT INTO abonnements_ecoles
+                    (ecole_id, plan_id, date_debut, date_fin, statut_abonnement, montant_paye,
+                     max_students, max_parent_accounts, max_staff_accounts, description)
+                 VALUES
+                    (:ecole_id, :plan_id, :date_debut, :date_fin, :statut_abonnement, :montant_paye,
+                     :max_students, :max_parent_accounts, :max_staff_accounts, :description)'
             );
 
             $stmt->bindValue(':ecole_id', $ecoleId, PDO::PARAM_INT);
@@ -437,6 +609,10 @@ class Ecole
             $stmt->bindValue(':date_fin', $dateFin, PDO::PARAM_STR);
             $stmt->bindValue(':statut_abonnement', 'Actif', PDO::PARAM_STR);
             $stmt->bindValue(':montant_paye', $montant);
+            $stmt->bindValue(':max_students', $maxStudents, PDO::PARAM_INT);
+            $stmt->bindValue(':max_parent_accounts', $maxParentAccounts, PDO::PARAM_INT);
+            $stmt->bindValue(':max_staff_accounts', $maxStaffAccounts, PDO::PARAM_INT);
+            $stmt->bindValue(':description', $description, PDO::PARAM_STR);
 
             return $stmt->execute();
         } catch (\Throwable $e) {
