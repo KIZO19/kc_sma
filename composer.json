@@ -4,6 +4,7 @@
   "license": "proprietary",
   "require": {
     "php": ">=8.0",
-    "phpmailer/phpmailer": "^6.10"
+    "phpmailer/phpmailer": "^6.10",
+    "minishlink/web-push": "^8.0"
   }
 }

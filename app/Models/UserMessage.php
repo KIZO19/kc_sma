@@ -327,7 +327,8 @@ class UserMessage
             return;
         }
 
-        $stmt = Database::getConnection()->prepare(
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
             'INSERT INTO messages_utilisateurs
                 (utilisateur_id, type, reference_id, title, body)
              VALUES (:utilisateur_id, :type, :reference_id, :title, :body)
@@ -340,6 +341,15 @@ class UserMessage
             ':title' => $title,
             ':body' => $body,
         ]);
+        if ($stmt->rowCount() > 0) {
+            PushNotification::sendToUser(
+                $userId,
+                $title,
+                $body,
+                BASE_URL . '/messages',
+                'kc-sma-message-' . (int) $db->lastInsertId()
+            );
+        }
     }
 
     private static function userHasSelectedSection(int $schoolId, array $user, array $selectedSections): bool

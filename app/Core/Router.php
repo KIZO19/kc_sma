@@ -92,8 +92,12 @@ class Router
             $controllerName = 'Profile';
             $actionName = $segments[1] ?? 'index';
         } else {
-            $controllerName = $this->formatSegment($segments[0]);
-            $actionName = $this->formatSegment($segments[1] ?? $defaultAction);
+            $controllerName = $this->formatSegment(rawurldecode($segments[0]));
+            $actionSegment = rawurldecode($segments[1] ?? $defaultAction);
+            $normalizedActionSegment = strtolower(strtr($actionSegment, ['é' => 'e', 'É' => 'E']));
+            $actionName = $normalizedActionSegment === 'verifiersolvabilite'
+                ? 'verifierSolvabilite'
+                : $this->formatSegment($actionSegment);
         }
 
         $controllerClass = 'App\\Controllers\\' . $controllerName . 'Controller';
@@ -128,7 +132,7 @@ class Router
                 'App\\Controllers\\ElevesController' => ['index', 'show'],
                 'App\\Controllers\\MonEmploiController' => ['index'],
                 'App\\Controllers\\MessagesController' => ['index', 'open', 'thread', 'chatpoll', 'chatreply', 'chattyping'],
-                'App\\Controllers\\NotificationsController' => ['poll'],
+                'App\\Controllers\\NotificationsController' => ['poll', 'pushsubscribe', 'pushunsubscribe'],
                 'App\\Controllers\\ContactController' => ['index', 'send'],
                 'App\\Controllers\\ProfileController' => ['index', 'update'],
                 'App\\Controllers\\AuthController' => ['logout'],

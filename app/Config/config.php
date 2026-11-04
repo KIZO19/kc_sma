@@ -67,3 +67,14 @@ define('MAIL_SMTP_PASSWORD', $paymentConfig('MAIL_SMTP_PASSWORD'));
 define('MAIL_SMTP_ENCRYPTION', strtolower($paymentConfig('MAIL_SMTP_ENCRYPTION', 'tls')));
 define('MAIL_FROM_ADDRESS', $paymentConfig('MAIL_FROM_ADDRESS'));
 define('MAIL_FROM_NAME', $paymentConfig('MAIL_FROM_NAME', APP_NAME));
+
+// Web Push (VAPID) keys. Generate a key pair with scripts/generate_vapid_keys.php.
+define('PUSH_VAPID_PUBLIC_KEY', $paymentConfig('PUSH_VAPID_PUBLIC_KEY'));
+define('PUSH_VAPID_PRIVATE_KEY', $paymentConfig('PUSH_VAPID_PRIVATE_KEY'));
+define(
+    'PUSH_VAPID_SUBJECT',
+    $paymentConfig(
+        'PUSH_VAPID_SUBJECT',
+        'mailto:' . (MAIL_FROM_ADDRESS !== '' ? MAIL_FROM_ADDRESS : 'admin@localhost')
+    )
+);

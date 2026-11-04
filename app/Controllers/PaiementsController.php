@@ -1468,10 +1468,29 @@ class PaiementsController extends Controller
     public function verifierSolvabilite(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['ecole_admin', 'promoteur_école', 'comptable_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'parent_ecole']);
+        Auth::requireRoles(['ecole_admin', 'promoteur_école', 'comptable_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'parent_ecole', 'parent_école']);
 
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
+
+        if (in_array($role, ['parent_ecole', 'parent_école'], true)) {
+            $parentId = (int) ($user['reference_id'] ?? 0);
+            $schoolId = (int) ($user['ecole_id'] ?? 0);
+            $children = Eleve::getChildrenForParent($parentId, $schoolId);
+
+            $this->view('paiements_enfant/index', [
+                'title' => APP_NAME . ' - Solvabilité de mes enfants',
+                'user' => $user,
+                'role' => $role,
+                'roleLabel' => User::getRoleLabel($role),
+                'modules' => $this->getModulesForRole($role),
+                'children' => $children,
+                'paymentsByChild' => Eleve::getPaymentsForParent($parentId, $schoolId),
+                'solvencyByChild' => Eleve::getOutstandingByChild($children),
+            ]);
+            return;
+        }
+
         $this->view('paiements/verify_solvency', [
             'title' => 'Vérifier solvabilité',
             'user' => $user,

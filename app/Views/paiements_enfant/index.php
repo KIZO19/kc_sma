@@ -29,6 +29,7 @@ $displayDate = static function ($value): string {
             $childName = \App\Core\PersonName::format($child);
             $childPayments = $paymentsByChild[$childId]['payments'] ?? [];
             $totals = $paymentsByChild[$childId]['total_by_currency'] ?? [];
+            $outstanding = $solvencyByChild[$childId] ?? [];
           ?>
           <div class="col-12" id="enfant-<?= $childId ?>">
             <article class="card card-outline card-success">
@@ -41,15 +42,29 @@ $displayDate = static function ($value): string {
                     Classe : <?= $escape($child['nom_classe'] ?: 'Non renseignée') ?><?= !empty($child['nom_option']) ? ' · ' . $escape($child['nom_option']) : '' ?>
                   </div>
                 </div>
-                <div class="text-sm-end">
-                  <div class="small text-muted">Total payé</div>
-                  <?php if ($totals === []): ?>
-                    <strong>0,00</strong>
-                  <?php else: ?>
-                    <?php foreach ($totals as $currency => $amount): ?>
-                      <strong class="d-block"><?= $escape($currency) ?> <?= number_format((float) $amount, 2, ',', ' ') ?></strong>
-                    <?php endforeach; ?>
-                  <?php endif; ?>
+                <div class="d-flex flex-wrap justify-content-end gap-3 text-sm-end">
+                  <div>
+                    <div class="small text-muted">Solvabilité</div>
+                    <?php if ($outstanding === []): ?>
+                      <span class="badge text-bg-success">À jour</span>
+                      <div class="small">Aucun solde dû</div>
+                    <?php else: ?>
+                      <span class="badge text-bg-warning">Reste à payer</span>
+                      <?php foreach ($outstanding as $currency => $amount): ?>
+                        <strong class="d-block"><?= $escape($currency) ?> <?= number_format((float) $amount, 2, ',', ' ') ?></strong>
+                      <?php endforeach; ?>
+                    <?php endif; ?>
+                  </div>
+                  <div>
+                    <div class="small text-muted">Total payé</div>
+                    <?php if ($totals === []): ?>
+                      <strong>0,00</strong>
+                    <?php else: ?>
+                      <?php foreach ($totals as $currency => $amount): ?>
+                        <strong class="d-block"><?= $escape($currency) ?> <?= number_format((float) $amount, 2, ',', ' ') ?></strong>
+                      <?php endforeach; ?>
+                    <?php endif; ?>
+                  </div>
                 </div>
               </div>
               <div class="card-body p-0">

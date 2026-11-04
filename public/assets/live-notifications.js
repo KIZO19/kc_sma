@@ -19,6 +19,8 @@
     const endpoint = header.dataset.notificationsEndpoint;
     const baseUrl = header.dataset.notificationsBaseUrl;
     const notificationIcon = header.dataset.notificationsIcon;
+    const vapidPublicKey = header.dataset.pushVapidPublicKey || '';
+    const pushCsrfToken = header.dataset.pushCsrfToken || '';
     const canComposeMessages = header.dataset.canComposeMessages === '1';
     const soundStorageKey = 'adminkc_notification_sound';
     const phoneNotificationStorageKey = 'adminkc_phone_notifications';
@@ -89,8 +91,23 @@
 
       if (!('Notification' in window) || !('serviceWorker' in navigator)) {
         phoneNotificationToggle.disabled = true;
-        phoneNotificationToggle.innerHTML = '<i class="bi bi-phone me-2" aria-hidden="true"></i>Notifications du téléphone indisponibles';
-        phoneNotificationHelp.textContent = 'Ce navigateur ne prend pas en charge les notifications système.';
+        phoneNotificationToggle.innerHTML = '<i class="bi bi-bell-slash me-2" aria-hidden="true"></i>Notifications push indisponibles';
+        phoneNotificationHelp.textContent = 'Ce navigateur ne prend pas en charge les notifications push système.';
+        return;
+      }
+
+      if (!('PushManager' in window)) {
+        phoneNotificationToggle.disabled = true;
+        phoneNotificationToggle.innerHTML = '<i class="bi bi-bell-slash me-2" aria-hidden="true"></i>Notifications push indisponibles';
+        phoneNotificationHelp.textContent = 'Ce navigateur ne prend pas en charge les notifications push système.';
+        return;
+      }
+
+      if (!vapidPublicKey) {
+        phoneNotificationToggle.disabled = true;
+        phoneNotificationToggle.setAttribute('aria-pressed', 'false');
+        phoneNotificationToggle.innerHTML = '<i class="bi bi-bell-slash me-2" aria-hidden="true"></i>Notifications push non configurées';
+        phoneNotificationHelp.textContent = 'L’administrateur doit configurer les clés VAPID du serveur.';
         return;
       }
 
@@ -106,40 +123,71 @@
       phoneNotificationToggle.disabled = false;
       phoneNotificationToggle.setAttribute('aria-pressed', isEnabled ? 'true' : 'false');
       phoneNotificationToggle.innerHTML = isEnabled
-        ? '<i class="bi bi-phone-vibrate me-2" aria-hidden="true"></i>Notifications du téléphone activées'
-        : '<i class="bi bi-phone me-2" aria-hidden="true"></i>Activer les notifications du téléphone';
+        ? '<i class="bi bi-bell-fill me-2" aria-hidden="true"></i>Sonnerie système activée'
+        : '<i class="bi bi-bell me-2" aria-hidden="true"></i>Utiliser la sonnerie du système';
       phoneNotificationHelp.textContent = isEnabled
-        ? 'Le son suit les réglages du téléphone ; la vibration dépend du navigateur et des réglages système.'
-        : 'Autorisez les alertes système pour utiliser les réglages de notification du téléphone.';
+        ? 'Le navigateur utilise le son de notification choisi dans les réglages de cet appareil.'
+        : 'Autorisez les notifications système. Leur son se règle dans les paramètres de l’appareil ou du navigateur.';
     }
 
-    async function showPhoneNotification(item) {
-      if (
-        !phoneNotificationsEnabled
-        || !('Notification' in window)
-        || Notification.permission !== 'granted'
-        || !('serviceWorker' in navigator)
-      ) {
+    function decodeApplicationServerKey(value) {
+      const padding = '='.repeat((4 - value.length % 4) % 4);
+      const base64 = (value + padding).replace(/-/g, '+').replace(/_/g, '/');
+      const raw = window.atob(base64);
+      return Uint8Array.from(raw, character => character.charCodeAt(0));
+    }
+
+    async function updateServerSubscription(path, subscription) {
+      const response = await fetch(baseUrl + path, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': pushCsrfToken
+        },
+        body: JSON.stringify(subscription)
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Impossible de modifier l’abonnement push.');
+      }
+    }
+
+    async function enableSystemPush() {
+      if (!vapidPublicKey) {
+        throw new Error('Les notifications push ne sont pas encore configurées sur le serveur.');
+      }
+      if (!('PushManager' in window) || !('serviceWorker' in navigator)) {
+        throw new Error('Les notifications push ne sont pas prises en charge par ce navigateur.');
+      }
+
+      const registration = await navigator.serviceWorker.ready;
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: decodeApplicationServerKey(vapidPublicKey)
+        });
+      }
+      await updateServerSubscription('/notifications/pushSubscribe', subscription.toJSON());
+      return subscription;
+    }
+
+    async function disableSystemPush() {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
         return;
       }
 
-      try {
-        const registration = await navigator.serviceWorker.ready;
-        await registration.showNotification(item.title || 'Nouvelle notification KC_SMA', {
-          body: item.body || '',
-          icon: notificationIcon,
-          badge: notificationIcon,
-          tag: 'kc-sma-' + item.id,
-          renotify: true,
-          vibrate: [200, 100, 200],
-          data: { url: new URL(item.href, window.location.origin).href }
-        });
-      } catch (error) {
-        console.warn('Impossible d’afficher la notification système :', error);
-        if (soundEnabled && navigator.vibrate) {
-          navigator.vibrate([200, 100, 200]);
-        }
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        return;
       }
+
+      await updateServerSubscription('/notifications/pushUnsubscribe', {
+        endpoint: subscription.endpoint
+      });
+      await subscription.unsubscribe();
     }
 
     function createElement(tag, className, text) {
@@ -402,7 +450,6 @@
         items.forEach(function (item) {
           if (!knownNotificationIds.has(item.id)) {
             showToast(item);
-            showPhoneNotification(item);
             void playNotificationSound();
           }
         });
@@ -484,13 +531,31 @@
           } else {
             phoneNotificationsEnabled = !phoneNotificationsEnabled;
           }
+          if (phoneNotificationsEnabled) {
+            await enableSystemPush();
+          } else {
+            await disableSystemPush();
+          }
           localStorage.setItem(phoneNotificationStorageKey, phoneNotificationsEnabled ? 'true' : 'false');
           updatePhoneNotificationControl();
         } catch (error) {
           console.error('Impossible de modifier l’autorisation des notifications :', error);
-          phoneNotificationHelp.textContent = 'Impossible de modifier cette autorisation dans le navigateur.';
+          phoneNotificationsEnabled = false;
+          localStorage.setItem(phoneNotificationStorageKey, 'false');
+          updatePhoneNotificationControl();
+          phoneNotificationHelp.textContent = error.message || 'Impossible de configurer les notifications système.';
         }
       });
+
+      if (phoneNotificationsEnabled && Notification.permission === 'granted') {
+        void enableSystemPush().catch(function (error) {
+          console.error('Impossible de rétablir l’abonnement aux notifications push :', error);
+          phoneNotificationsEnabled = false;
+          localStorage.setItem(phoneNotificationStorageKey, 'false');
+          updatePhoneNotificationControl();
+          phoneNotificationHelp.textContent = error.message || 'Impossible de rétablir les notifications système.';
+        });
+      }
     }
 
     document.addEventListener('pointerdown', function () {

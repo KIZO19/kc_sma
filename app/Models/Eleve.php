@@ -66,6 +66,29 @@ class Eleve
         return $paymentsByChild;
     }
 
+    public static function getOutstandingByChild(array $children): array
+    {
+        $outstandingByChild = [];
+        foreach ($children as $child) {
+            $childId = (int) ($child['id'] ?? 0);
+            if ($childId <= 0) {
+                continue;
+            }
+
+            $outstanding = array_filter(
+                DetteEleve::getTotalOutstandingGroupedByDevise($childId),
+                static fn ($amount): bool => (float) $amount > 0
+            );
+            if ($outstanding === []) {
+                $outstanding = DetteEleve::computeOutstandingFromApplicableFees($childId);
+            }
+            ksort($outstanding);
+            $outstandingByChild[$childId] = $outstanding;
+        }
+
+        return $outstandingByChild;
+    }
+
     public static function findByMatricule(string $matricule, ?int $excludeId = null): ?array
     {
         $normalized = trim($matricule);

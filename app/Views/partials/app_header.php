@@ -21,6 +21,9 @@
   }
   $title = $title ?? APP_NAME; ?>
   <?php
+  if (!empty($user['id']) && empty($_SESSION['push_notifications_csrf'])) {
+      $_SESSION['push_notifications_csrf'] = bin2hex(random_bytes(32));
+  }
   $faviconUrl = BASE_URL . '/assets/kc-logo.svg';
   $faviconMime = 'image/svg+xml';
   $schoolForHeader = null;
@@ -317,6 +320,8 @@ if (!empty($schoolContext['logo_url'])) {
        data-notifications-base-url="<?= BASE_URL ?>"
        data-notifications-interval="<?= ($user['role'] ?? '') === 'comptable_école' ? '2000' : '5000' ?>"
        data-notifications-icon="<?= BASE_URL ?>/assets/icons/kc-sma-192.png"
+       data-push-vapid-public-key="<?= htmlspecialchars(PUSH_VAPID_PUBLIC_KEY, ENT_QUOTES, 'UTF-8') ?>"
+       data-push-csrf-token="<?= htmlspecialchars((string) ($_SESSION['push_notifications_csrf'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
        data-can-compose-messages="<?= !empty($user['id']) && \App\Models\SchoolMessage::canComposeForRole((string) ($user['role'] ?? '')) ? '1' : '0' ?>">
       <div class="container-fluid">
         <ul class="navbar-nav">
@@ -466,9 +471,9 @@ if (!empty($schoolContext['logo_url'])) {
                 <span class="dropdown-item-text text-muted small">Aucun nouveau message.</span>
               <?php endif; ?>
               <div class="dropdown-divider"></div>
-              <span class="dropdown-item-text small text-muted">Sur mobile, le son suit les réglages du téléphone ; la vibration dépend du navigateur. Sur iPhone, installez KC_SMA sur l’écran d’accueil pour autoriser les notifications.</span>
+              <span class="dropdown-item-text small text-muted">Les alertes système utilisent le son choisi dans les réglages de l’appareil ou du navigateur. Sur iPhone, installez KC_SMA sur l’écran d’accueil. Les notifications push nécessitent Internet et un serveur actif.</span>
               <button id="phoneNotificationToggle" class="dropdown-item small" type="button" aria-pressed="false">
-                <i class="bi bi-phone me-2" aria-hidden="true"></i>Activer les notifications du téléphone
+                <i class="bi bi-bell me-2" aria-hidden="true"></i>Utiliser la sonnerie du système
               </button>
               <span id="phoneNotificationHelp" class="dropdown-item-text small text-muted"></span>
               <div class="dropdown-divider"></div>

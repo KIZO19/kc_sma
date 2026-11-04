@@ -7,11 +7,81 @@ use App\Core\PersonName;
 use App\Models\Derogation;
 use App\Models\EvenementNotification;
 use App\Models\NotificationAccess;
+use App\Models\PushNotification;
 use App\Models\SchoolMessage;
 use App\Models\UserMessage;
 
 class NotificationsController
 {
+    public function pushSubscribe(): void
+    {
+        $this->handlePushSubscription(true);
+    }
+
+    public function pushUnsubscribe(): void
+    {
+        $this->handlePushSubscription(false);
+    }
+
+    private function handlePushSubscription(bool $subscribe): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store, private');
+        header('X-Content-Type-Options: nosniff');
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['error' => 'Méthode non autorisée.']);
+            return;
+        }
+
+        Auth::requireAuth();
+        $user = Auth::user();
+        if ($user === null) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Authentification requise.']);
+            return;
+        }
+
+        $csrfToken = (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
+        if (
+            $csrfToken === ''
+            || !hash_equals((string) ($_SESSION['push_notifications_csrf'] ?? ''), $csrfToken)
+        ) {
+            http_response_code(403);
+            echo json_encode(['error' => 'La session a expiré. Rechargez la page puis réessayez.']);
+            return;
+        }
+
+        try {
+            $payload = json_decode((string) file_get_contents('php://input'), true, 16, JSON_THROW_ON_ERROR);
+            if (!is_array($payload)) {
+                throw new \InvalidArgumentException('Données d’abonnement invalides.');
+            }
+            if ($subscribe) {
+                if (!PushNotification::isConfigured()) {
+                    http_response_code(503);
+                    echo json_encode(['error' => 'Les notifications push ne sont pas encore configurées sur le serveur.']);
+                    return;
+                }
+                PushNotification::saveSubscription((int) $user['id'], $payload);
+            } else {
+                PushNotification::removeSubscription(
+                    (int) $user['id'],
+                    (string) ($payload['endpoint'] ?? '')
+                );
+            }
+
+            echo json_encode(['success' => true]);
+        } catch (\JsonException | \InvalidArgumentException $exception) {
+            http_response_code(400);
+            echo json_encode(['error' => $exception->getMessage()]);
+        } catch (\Throwable $exception) {
+            error_log('NotificationsController::handlePushSubscription failed: ' . $exception->getMessage());
+            http_response_code(500);
+            echo json_encode(['error' => 'Impossible de modifier l’abonnement aux notifications système.']);
+        }
+    }
+
     public function poll(): void
     {
         Auth::requireAuth();

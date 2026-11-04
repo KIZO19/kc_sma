@@ -42,6 +42,16 @@ class EvenementNotification
                 ':utilisateur_id' => $userId,
                 ':evenement_id' => (int) $event['id'],
             ]);
+            if ($insert->rowCount() > 0) {
+                $notificationId = (int) Database::getConnection()->lastInsertId();
+                PushNotification::sendToUser(
+                    $userId,
+                    (string) ($event['titre'] ?? 'Nouvel événement'),
+                    'Un événement commence maintenant.',
+                    BASE_URL . '/evenements/open-notification?id=' . $notificationId,
+                    'kc-sma-event-' . $notificationId
+                );
+            }
         }
     }
 

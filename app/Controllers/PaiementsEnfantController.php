@@ -16,6 +16,9 @@ class PaiementsEnfantController extends Controller
 
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
+        $parentId = (int) ($user['reference_id'] ?? 0);
+        $schoolId = (int) ($user['ecole_id'] ?? 0);
+        $children = Eleve::getChildrenForParent($parentId, $schoolId);
 
         $this->view('paiements_enfant/index', [
             'title' => APP_NAME . ' - Paiements enfant',
@@ -23,14 +26,9 @@ class PaiementsEnfantController extends Controller
             'role' => $role,
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $this->getModulesForRole($role),
-            'children' => Eleve::getChildrenForParent(
-                (int) ($user['reference_id'] ?? 0),
-                (int) ($user['ecole_id'] ?? 0)
-            ),
-            'paymentsByChild' => Eleve::getPaymentsForParent(
-                (int) ($user['reference_id'] ?? 0),
-                (int) ($user['ecole_id'] ?? 0)
-            ),
+            'children' => $children,
+            'paymentsByChild' => Eleve::getPaymentsForParent($parentId, $schoolId),
+            'solvencyByChild' => Eleve::getOutstandingByChild($children),
         ]);
     }
 }

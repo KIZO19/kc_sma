@@ -508,7 +508,15 @@ class SchoolMessage
                 throw new \RuntimeException('Impossible de créer la conversation.');
             }
             self::insertMessage($db, $threadId, $senderId, $senderId === $parentUserId ? $staffUserId : $parentUserId, $body);
+            $messageId = (int) $db->lastInsertId();
             $db->commit();
+            PushNotification::sendToUser(
+                $senderId === $parentUserId ? $staffUserId : $parentUserId,
+                $subject !== '' ? $subject : 'Nouveau message',
+                $body,
+                BASE_URL . '/messages/thread?id=' . $threadId,
+                'kc-sma-direct-message-' . $messageId
+            );
 
             return $threadId;
         } catch (\Throwable $exception) {
@@ -541,9 +549,17 @@ class SchoolMessage
         $db->beginTransaction();
         try {
             self::insertMessage($db, $threadId, $senderId, $recipientId, $body);
+            $messageId = (int) $db->lastInsertId();
             $update = $db->prepare('UPDATE school_message_threads SET updated_at = NOW() WHERE id = :id');
             $update->execute([':id' => $threadId]);
             $db->commit();
+            PushNotification::sendToUser(
+                $recipientId,
+                'Nouveau message',
+                $body,
+                BASE_URL . '/messages/thread?id=' . $threadId,
+                'kc-sma-direct-message-' . $messageId
+            );
             return true;
         } catch (\Throwable $exception) {
             if ($db->inTransaction()) {
@@ -645,7 +661,15 @@ class SchoolMessage
             }
 
             self::insertMessage($db, $threadId, $senderId, $recipientUserId, $body);
+            $messageId = (int) $db->lastInsertId();
             $db->commit();
+            PushNotification::sendToUser(
+                $recipientUserId,
+                $subject !== '' ? $subject : 'Nouveau message',
+                $body,
+                BASE_URL . '/messages/thread?id=' . $threadId,
+                'kc-sma-direct-message-' . $messageId
+            );
 
             return $threadId;
         } catch (\Throwable $exception) {

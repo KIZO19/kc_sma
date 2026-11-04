@@ -10,14 +10,15 @@
 
   const installStyle = document.createElement('style');
   installStyle.textContent = [
-    '#pwaInstallButton { position:fixed; right:1rem; bottom:calc(1rem + env(safe-area-inset-bottom)); z-index:1100; box-shadow:0 .25rem .75rem rgba(0,0,0,.2); }',
+    '#pwaInstallButton { position:fixed !important; right:1rem; bottom:calc(1rem + env(safe-area-inset-bottom)); z-index:1100; display:inline-flex; align-items:center; border-radius:999px; padding:.75rem 1.1rem; box-shadow:0 .35rem 1rem rgba(0,0,0,.3); cursor:grab; touch-action:none; user-select:none; }',
+    '#pwaInstallButton.pwa-install-dragging { cursor:grabbing; }',
     '#pwaInstallOverlay { position:fixed; inset:0; z-index:1200; display:flex; align-items:center; justify-content:center; padding:1rem; background:rgba(15,23,42,.6); }',
     '#pwaInstallOverlay[hidden] { display:none !important; }',
     '#pwaInstallDialog { width:min(100%, 28rem); max-height:calc(100vh - 2rem); overflow:auto; padding:1.25rem; border-radius:1rem; background:#fff; color:#1f2937; box-shadow:0 1rem 3rem rgba(0,0,0,.25); }',
     '#pwaInstallDialog h2 { margin:0 2.5rem .75rem 0; font-size:1.25rem; }',
     '#pwaInstallDialog p { margin:0 0 .75rem; line-height:1.5; }',
     '#pwaInstallClose { float:right; }',
-    '@media (max-width:480px) { #pwaInstallButton { right:.75rem; bottom:calc(.75rem + env(safe-area-inset-bottom)); } #pwaInstallDialog { padding:1rem; } }'
+    '@media (max-width:480px) { #pwaInstallButton { right:.75rem; bottom:calc(.75rem + env(safe-area-inset-bottom)); padding:.7rem 1rem; } #pwaInstallDialog { padding:1rem; } }'
   ].join('\n');
   document.head.appendChild(installStyle);
 
@@ -29,6 +30,115 @@
   installButton.setAttribute('aria-label', 'Installer KC_SMA sur cet appareil');
   installButton.setAttribute('aria-controls', 'pwaInstallOverlay');
   document.body.appendChild(installButton);
+
+  let dragState = null;
+  let ignoreNextClick = false;
+  const savedPositionKey = 'kc_sma_pwa_install_position';
+
+  function clampButtonPosition(left, top) {
+    const maxLeft = Math.max(0, window.innerWidth - installButton.offsetWidth);
+    const maxTop = Math.max(0, window.innerHeight - installButton.offsetHeight);
+    return {
+      left: Math.min(Math.max(0, left), maxLeft),
+      top: Math.min(Math.max(0, top), maxTop)
+    };
+  }
+
+  function setButtonPosition(left, top) {
+    const position = clampButtonPosition(left, top);
+    installButton.style.left = position.left + 'px';
+    installButton.style.top = position.top + 'px';
+    installButton.style.right = 'auto';
+    installButton.style.bottom = 'auto';
+    return position;
+  }
+
+  function saveButtonPosition(position) {
+    try {
+      window.localStorage.setItem(savedPositionKey, JSON.stringify(position));
+    } catch (error) {
+      console.warn('Unable to save the app install button position:', error);
+    }
+  }
+
+  try {
+    const savedPosition = JSON.parse(window.localStorage.getItem(savedPositionKey) || 'null');
+    if (
+      savedPosition
+      && Number.isFinite(savedPosition.left)
+      && Number.isFinite(savedPosition.top)
+    ) {
+      setButtonPosition(savedPosition.left, savedPosition.top);
+    }
+  } catch (error) {
+    console.warn('Unable to restore the app install button position:', error);
+  }
+
+  installButton.addEventListener('pointerdown', function (event) {
+    if (event.button !== undefined && event.button !== 0) {
+      return;
+    }
+
+    const rect = installButton.getBoundingClientRect();
+    dragState = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      left: rect.left,
+      top: rect.top,
+      moved: false
+    };
+    installButton.setPointerCapture(event.pointerId);
+  });
+
+  installButton.addEventListener('pointermove', function (event) {
+    if (!dragState || dragState.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const deltaX = event.clientX - dragState.startX;
+    const deltaY = event.clientY - dragState.startY;
+    if (!dragState.moved && Math.hypot(deltaX, deltaY) < 5) {
+      return;
+    }
+
+    dragState.moved = true;
+    installButton.classList.add('pwa-install-dragging');
+    event.preventDefault();
+    setButtonPosition(dragState.left + deltaX, dragState.top + deltaY);
+  });
+
+  function finishButtonDrag(event, suppressClick) {
+    if (!dragState || dragState.pointerId !== event.pointerId) {
+      return;
+    }
+
+    if (dragState.moved) {
+      ignoreNextClick = suppressClick;
+      const rect = installButton.getBoundingClientRect();
+      saveButtonPosition({ left: rect.left, top: rect.top });
+    }
+    dragState = null;
+    installButton.classList.remove('pwa-install-dragging');
+  }
+
+  installButton.addEventListener('pointerup', function (event) {
+    finishButtonDrag(event, true);
+  });
+  installButton.addEventListener('pointercancel', function (event) {
+    finishButtonDrag(event, false);
+  });
+
+  window.addEventListener('resize', function () {
+    if (!installButton.style.left || !installButton.style.top) {
+      return;
+    }
+    const position = setButtonPosition(
+      Number.parseFloat(installButton.style.left),
+      Number.parseFloat(installButton.style.top)
+    );
+    saveButtonPosition(position);
+  });
 
   const overlay = document.createElement('div');
   overlay.id = 'pwaInstallOverlay';
@@ -108,6 +218,11 @@
   }
 
   installButton.addEventListener('click', async function () {
+    if (ignoreNextClick) {
+      ignoreNextClick = false;
+      return;
+    }
+
     if (!installPrompt) {
       showInstallInstructions();
       return;
