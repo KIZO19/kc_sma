@@ -378,7 +378,7 @@
         sidebarColorReset.addEventListener('click', function (e) {
           e.preventDefault();
           localStorage.removeItem(sidebarColorKey);
-          sidebarColorInput.value = '#172230';
+          sidebarColorInput.value = '#3c8dbc';
           applySidebarColor(null);
         });
       }
@@ -567,6 +567,6 @@
   </script>
   <?php endif; ?>
   <?= $pageScripts ?? '' ?>
-  <script src="<?= BASE_URL ?>/assets/pwa-install.js" defer></script>
+  <script src="<?= BASE_URL ?>/assets/pwa-install.js?v=blue-white-20261105" defer></script>
 </body>
 </html>

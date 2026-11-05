@@ -1,19 +1,13 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteBase /kc_sma/public/
 
-    # Redirect all requests to index.php
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteRule ^ index.php [L,QSA]
 </IfModule>
 
-<IfModule mod_mime.c>
-    AddType application/manifest+json .webmanifest
-</IfModule>
-
 <IfModule mod_headers.c>
-    Header set Service-Worker-Allowed "/kc_sma/"
+    Header set Service-Worker-Allowed "/"
 </IfModule>
 
 <IfModule mod_authz_core.c>
@@ -28,5 +22,4 @@
     </FilesMatch>
 </IfModule>
 
-# Prevent directory listing
 Options -Indexes

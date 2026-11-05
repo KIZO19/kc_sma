@@ -277,7 +277,8 @@
       const manifestUrl = new URL(manifestLink.href);
       const appScope = new URL('../../', manifestUrl);
       navigator.serviceWorker.register(new URL('../service-worker.js', manifestUrl), {
-        scope: appScope.pathname
+        scope: appScope.pathname,
+        updateViaCache: 'none'
       }).catch(function (error) {
         console.error('Unable to register the app service worker:', error);
       });

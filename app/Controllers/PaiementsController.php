@@ -1092,6 +1092,13 @@ class PaiementsController extends Controller
             return;
         }
 
+        $oldInput = $_SESSION['paiements_edit_old'] ?? [];
+        unset($_SESSION['paiements_edit_old']);
+        if ((int) ($oldInput['id'] ?? 0) === $id) {
+            $payment['montant'] = $oldInput['montant'] ?? $payment['montant'];
+            $payment['libelle'] = $oldInput['libelle'] ?? $payment['libelle'];
+        }
+
         $this->view('paiements/edit', [
             'title' => APP_NAME . ' - Modifier paiement',
             'user' => $user,
@@ -1113,7 +1120,8 @@ class PaiementsController extends Controller
         }
 
         $id = (int) ($_POST['id'] ?? 0);
-        $newAmount = (float) ($_POST['montant'] ?? 0);
+        $amountInput = trim((string) ($_POST['montant'] ?? ''));
+        $newAmount = is_numeric($amountInput) ? (float) $amountInput : 0.0;
         $newLabel = trim((string) ($_POST['libelle'] ?? 'Paiement élève'));
         $db = Database::getConnection();
         $schoolId = (int) ($user['ecole_id'] ?? 0);
@@ -1133,7 +1141,7 @@ class PaiementsController extends Controller
             );
             $stmt->execute([':id' => $id, ':ecole' => $schoolId, ':inscription_ecole' => $schoolId]);
             $payment = $stmt->fetch(\PDO::FETCH_ASSOC);
-            if (!$payment || $newAmount <= 0) {
+            if (!$payment || $newAmount <= 0 || $newLabel === '') {
                 throw new \RuntimeException('Paiement ou montant invalide.');
             }
 
@@ -1186,6 +1194,13 @@ class PaiementsController extends Controller
                 $db->rollBack();
             }
             $_SESSION['paiements_errors'] = [$e->getMessage()];
+            $_SESSION['paiements_edit_old'] = [
+                'id' => $id,
+                'montant' => $amountInput,
+                'libelle' => $newLabel,
+            ];
+            $this->redirect('/paiements/edit?id=' . $id);
+            return;
         }
         $this->redirect('/paiements');
     }

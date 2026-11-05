@@ -8,10 +8,10 @@ $identifiant = $identifiant ?? '';
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#172230">
+  <meta name="theme-color" content="#3c8dbc">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="KC_SMA">
-  <link rel="manifest" href="<?= BASE_URL ?>/assets/manifest.webmanifest">
+  <link rel="manifest" href="<?= BASE_URL ?>/manifest.php">
   <link rel="apple-touch-icon" href="<?= BASE_URL ?>/assets/icons/kc-sma-192.png">
   <title>Connexion - <?= htmlspecialchars($title) ?></title>
   <link rel="icon" href="<?= BASE_URL ?>/assets/favicon.ico" type="image/x-icon">
@@ -26,6 +26,7 @@ $identifiant = $identifiant ?? '';
     .card { border-radius: 1rem; }
     .login-logo { width: 110px; height: 110px; object-fit: cover; border-radius: 50%; }
   </style>
+  <link rel="stylesheet" href="<?= BASE_URL ?>/assets/theme.css?v=blue-sidebar-20261105">
 </head>
 <body class="hold-transition login-page">
 <div class="login-box">
@@ -96,6 +97,6 @@ $identifiant = $identifiant ?? '';
     });
   });
 </script>
-<script src="<?= BASE_URL ?>/assets/pwa-install.js" defer></script>
+<script src="<?= BASE_URL ?>/assets/pwa-install.js?v=blue-white-20261105" defer></script>
 </body>
 </html>

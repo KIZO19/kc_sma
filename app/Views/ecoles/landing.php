@@ -11,15 +11,16 @@
   <link rel="alternate icon" href="<?= BASE_URL ?>/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="<?= BASE_URL ?>/assets/adminlte.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css" crossorigin="anonymous">
+  <link rel="stylesheet" href="<?= BASE_URL ?>/assets/theme.css?v=blue-sidebar-20261105">
   <style>
     body { background: #f4f7fb; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     .hero { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 1rem; }
     .hero-content { max-width: 960px; width: 100%; text-align: center; }
-    .hero-title { font-size: clamp(2.5rem, 5vw, 4.5rem); font-weight: 700; margin-bottom: 1rem; color: #0d6efd; }
+    .hero-title { font-size: clamp(2.5rem, 5vw, 4.5rem); font-weight: 700; margin-bottom: 1rem; color: #3c8dbc; }
     .hero-text { font-size: 1.1rem; color: #4b5563; margin-bottom: 2rem; }
     .hero-buttons .btn { min-width: 180px; margin: 0.25rem; }
     .features { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-top: 3rem; }
-    .feature-card { background: #fff; border: 1px solid rgba(13,110,253,.12); border-radius: 1rem; padding: 1.5rem; box-shadow: 0 12px 30px rgba(15,23,42,.06); }
+    .feature-card { background: #fff; border: 1px solid rgba(60,141,188,.2); border-radius: 1rem; padding: 1.5rem; box-shadow: 0 12px 30px rgba(15,23,42,.06); }
     .feature-card h3 { margin-bottom: 0.75rem; font-size: 1.2rem; }
     .feature-card p { color: #6b7280; line-height: 1.7; }
     .footer { padding: 2rem 0 1rem; text-align: center; color: #6b7280; }

@@ -25,6 +25,15 @@ class ProfileController extends Controller
                 static fn (array $account): bool => ($account['role'] ?? '') === 'agent_ecole'
             ));
         }
+        $profileOld = $_SESSION['profile_old'] ?? [];
+        unset($_SESSION['profile_old']);
+        if (is_array($user)) {
+            foreach (['nom_complet', 'identifiant'] as $field) {
+                if (array_key_exists($field, $profileOld)) {
+                    $user[$field] = $profileOld[$field];
+                }
+            }
+        }
 
         $this->view('profile/index', [
             'title' => APP_NAME . ' - Mon profil',
@@ -120,6 +129,10 @@ class ProfileController extends Controller
 
         if (!empty($errors)) {
             $_SESSION['profile_errors'] = $errors;
+            $_SESSION['profile_old'] = [
+                'nom_complet' => $nomComplet,
+                'identifiant' => $identifiant,
+            ];
             $this->redirect('/profile');
         }
 
@@ -143,6 +156,10 @@ class ProfileController extends Controller
 
         if (!empty($errors)) {
             $_SESSION['profile_errors'] = $errors;
+            $_SESSION['profile_old'] = [
+                'nom_complet' => $nomComplet,
+                'identifiant' => $identifiant,
+            ];
             $this->redirect('/profile');
         }
 

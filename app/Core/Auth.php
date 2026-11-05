@@ -9,8 +9,35 @@ class Auth
 {
     public static function start(): void
     {
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
+        $sessionStatus = session_status();
+        if ($sessionStatus === PHP_SESSION_ACTIVE) {
+            return;
+        }
+        if ($sessionStatus === PHP_SESSION_DISABLED) {
+            throw new \RuntimeException('Sessions are disabled in the PHP configuration.');
+        }
+
+        ini_set('session.use_strict_mode', '1');
+        ini_set('session.use_only_cookies', '1');
+        ini_set('session.use_cookies', '1');
+
+        $isHttps = (
+            !empty($_SERVER['HTTPS'])
+            && strtolower((string) $_SERVER['HTTPS']) !== 'off'
+        ) || (int) ($_SERVER['SERVER_PORT'] ?? 0) === 443;
+
+        if (!session_set_cookie_params([
+            'lifetime' => 0,
+            'path' => '/',
+            'secure' => $isHttps,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ])) {
+            throw new \RuntimeException('Unable to configure session cookie parameters.');
+        }
+
+        if (!session_start()) {
+            throw new \RuntimeException('Unable to start the user session.');
         }
     }
 
@@ -19,10 +46,16 @@ class Auth
         self::start();
         session_regenerate_id(true);
 
+        self::storeUser($user);
+    }
+
+    private static function storeUser(array $user): void
+    {
         $role = self::canonicalizeRole((string) ($user['role'] ?? ''));
         $_SESSION['user'] = [
             'id' => (int) $user['id'],
             'nom_complet' => $user['nom_complet'],
+            'identifiant' => $user['identifiant'] ?? '',
             'role' => $role,
             'ecole_id' => isset($user['ecole_id']) ? (int) $user['ecole_id'] : null,
             'section_id' => isset($user['section_id']) ? (int) $user['section_id'] : null,
@@ -298,7 +331,7 @@ class Auth
     public static function requireGuest(): void
     {
         if (self::check()) {
-            header('Location: ' . BASE_URL . self::getLandingPage(self::user()['role'] ?? null));
+            header('Location: ' . BASE_URL . '/dashboard');
             exit;
         }
     }
@@ -338,7 +371,7 @@ class Auth
             return null;
         }
 
-        self::login($freshUser);
+        self::storeUser($freshUser);
         return self::user();
     }
 }

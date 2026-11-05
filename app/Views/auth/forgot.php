@@ -21,6 +21,7 @@ $csrfToken = $csrfToken ?? '';
     .login-box { width: 420px; margin: 6% auto; }
     .card { border-radius: 1rem; }
   </style>
+  <link rel="stylesheet" href="<?= BASE_URL ?>/assets/theme.css?v=blue-sidebar-20261105">
 </head>
 <body class="hold-transition login-page">
 <div class="login-box">

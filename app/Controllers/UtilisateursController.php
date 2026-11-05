@@ -188,6 +188,13 @@ class UtilisateursController extends Controller
             $this->redirect('/error/accessDenied');
         }
 
+        $oldInput = $_SESSION['utilisateurs_edit_old'] ?? [];
+        unset($_SESSION['utilisateurs_edit_old']);
+        if ((int) ($oldInput['user_id'] ?? 0) === (int) $account['id']) {
+            $account['nom_complet'] = $oldInput['nom_complet'] ?? $account['nom_complet'];
+            $account['identifiant'] = $oldInput['identifiant'] ?? $account['identifiant'];
+        }
+
         $this->view('utilisateurs/edit_account', [
             'title' => APP_NAME . ' - Modifier le compte',
             'user' => $currentUser,
@@ -243,6 +250,11 @@ class UtilisateursController extends Controller
 
         if ($errors) {
             $_SESSION['utilisateurs_errors'] = $errors;
+            $_SESSION['utilisateurs_edit_old'] = [
+                'user_id' => $userId,
+                'nom_complet' => $name,
+                'identifiant' => $identifier,
+            ];
             $this->redirect('/utilisateurs/editAccount?id=' . $userId);
         }
 
@@ -269,6 +281,11 @@ class UtilisateursController extends Controller
         }
 
         $_SESSION['utilisateurs_errors'] = ['Impossible de mettre à jour les informations du compte.'];
+        $_SESSION['utilisateurs_edit_old'] = [
+            'user_id' => $userId,
+            'nom_complet' => $name,
+            'identifiant' => $identifier,
+        ];
         $this->redirect('/utilisateurs/editAccount?id=' . $userId);
     }
 

@@ -1,4 +1,4 @@
-var STATIC_CACHE = 'kc-sma-static-v4';
+var STATIC_CACHE = 'kc-sma-static-v8';
 var CDN_CACHE = 'kc-sma-cdn-v4';
 var CDN_URLS = [
   'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css',
@@ -70,7 +70,8 @@ function cacheApplicationShell() {
     'live-notifications.js',
     'pwa-install.js',
     'responsive.css',
-    'manifest.webmanifest',
+    'theme.css',
+    '../manifest.php',
     'favicon.svg',
     'icons/kc-sma-192.png',
     'icons/kc-sma-512.png',

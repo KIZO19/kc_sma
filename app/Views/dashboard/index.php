@@ -1155,8 +1155,8 @@ require __DIR__ . '/../partials/app_header.php';
     const debtCurrencyFilter = document.getElementById('debtChartCurrency');
     if (debtChartCanvas && debtCurrencyFilter) {
       const debtChartData = __DASHBOARD_DEBT_CHART_DATA__;
-      const sectionPalette = ['#0d6efd', '#198754', '#d08a00', '#dc3545', '#20c997', '#fd7e14', '#6f42c1'];
-      const currencyPalette = ['#1769aa', '#138a57', '#b56b00', '#ba3342', '#178e82', '#c85b12'];
+      const sectionPalette = ['#0d6efd', '#0b5ed7', '#0a58ca', '#3d8bfd', '#6ea8fe', '#084298', '#052c65'];
+      const currencyPalette = ['#1769aa', '#1d70b8', '#2878c7', '#367fa9', '#4a90d9', '#5b9bd5'];
       let debtChartType = 'bar';
       const selectedCurrency = debtCurrencyFilter.value;
       const debtDatasets = (debtChartData.datasets || []).map(function (dataset, index) {

@@ -13,15 +13,17 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css" crossorigin="anonymous">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/overlayscrollbars@2.11.0/styles/overlayscrollbars.min.css" crossorigin="anonymous">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/css/jsvectormap.min.css" crossorigin="anonymous">
+  <link rel="stylesheet" href="<?= BASE_URL ?>/assets/theme.css?v=blue-sidebar-20261105">
   <style>
     body { background: #f4f7fb; }
     .app-header { border-bottom: 1px solid rgba(0,0,0,0.08); }
-    .app-sidebar { background: #343a40; }
-    .app-sidebar .menu-title, .app-sidebar .nav-link { color: #cfd8dc; }
-    .app-sidebar .nav-link.active, .app-sidebar .nav-link:hover { background: rgba(255,255,255,0.08); color: #fff; }
-    .app-sidebar .brand-link { border-bottom: 1px solid rgba(255,255,255,0.08); }
-    .app-sidebar .brand-link .brand-text { color: #fff; font-size: 1.1rem; }
-    .app-sidebar .user-panel { border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .app-sidebar { background: #3c8dbc; }
+    .app-sidebar .menu-title, .app-sidebar .nav-link { color: #fff; }
+    .app-sidebar .nav-link.active { background: #3c8dbc; color: #fff; }
+    .app-sidebar .nav-link:hover { background: rgba(0,0,0,.12); color: #fff; }
+    .app-sidebar .brand-link { border-bottom: 1px solid rgba(255,255,255,.2); }
+    .app-sidebar .brand-link .brand-text { color: #3c8dbc; font-size: 1.1rem; }
+    .app-sidebar .user-panel { border-bottom: 1px solid rgba(255,255,255,.2); }
     .app-sidebar .user-panel .info a { color: #fff; }
     .info-box { border-radius: 1rem; }
     .card { border-radius: 1rem; }

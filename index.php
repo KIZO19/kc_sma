@@ -1,3 +1,3 @@
 <?php
-header('Location: /kc_sma/public/index.php');
+header('Location: public/index.php');
 exit;

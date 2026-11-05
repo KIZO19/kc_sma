@@ -1,3 +1,4 @@
 COMPTES_TEST.txt
 .env.local
 vendor/
+.rnd

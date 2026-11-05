@@ -409,7 +409,7 @@ class DashboardController extends Controller
 
         $sectionLabels = array_keys($sections);
         $currencyCodes = array_keys($currencies);
-        $palette = ['#0d6efd', '#198754', '#d08a00', '#dc3545', '#20c997', '#fd7e14'];
+        $palette = ['#0d6efd', '#0b5ed7', '#0a58ca', '#3d8bfd', '#6ea8fe', '#084298'];
         $datasets = [];
         foreach ($currencyCodes as $index => $currency) {
             $datasets[] = [
@@ -694,7 +694,7 @@ class DashboardController extends Controller
             }
         }
 
-        $palette = ['#0d6efd', '#198754', '#d08a00', '#dc3545', '#20c997', '#fd7e14', '#6f42c1'];
+        $palette = ['#0d6efd', '#0b5ed7', '#0a58ca', '#3d8bfd', '#6ea8fe', '#084298', '#052c65'];
         $datasets = [];
         foreach ($sections as $index => $section) {
             $sectionId = (int) $section['id'];

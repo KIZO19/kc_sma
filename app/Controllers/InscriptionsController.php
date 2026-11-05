@@ -20,12 +20,14 @@ class InscriptionsController extends Controller
 {
     private const SUBMISSION_ROLES = [
         'super_admin',
+        'ecole_admin',
         'agent_ecole',
         'comptable_école',
         'préfet_école',
         'DE_école',
         'DP_école',
         'DA_école',
+        'sec_école',
     ];
 
     private const IDENTITY_EDIT_ROLES = ['super_admin', 'comptable_école', 'préfet_école', 'sec_école'];

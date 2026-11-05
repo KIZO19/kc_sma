@@ -514,6 +514,7 @@ class EcolesController extends Controller
 
             if (!empty($errors)) {
                 $_SESSION['ecole_edit_errors'] = $errors;
+                $_SESSION['ecole_edit_old'] = ['id' => $id, 'data' => $data];
             } else {
                 $ok = Ecole::update($id, $data);
                 if ($ok) {
@@ -532,8 +533,9 @@ class EcolesController extends Controller
                     $_SESSION['ecole_edit_success'] = 'École mise à jour.';
                 } else {
                     $_SESSION['ecole_edit_errors'] = ['Erreur lors de la mise à jour.'];
+                    $_SESSION['ecole_edit_old'] = ['id' => $id, 'data' => $data];
                 }
-                $this->redirect('/ecoles');
+                $this->redirect('/ecoles/edit?id=' . $id);
                 return;
             }
         }
@@ -542,6 +544,12 @@ class EcolesController extends Controller
         if (!$school) {
             $this->redirect('/ecoles');
             return;
+        }
+
+        $oldInput = $_SESSION['ecole_edit_old'] ?? [];
+        unset($_SESSION['ecole_edit_old']);
+        if ((int) ($oldInput['id'] ?? 0) === $id && is_array($oldInput['data'] ?? null)) {
+            $school = array_merge($school, $oldInput['data']);
         }
 
         $this->view('ecoles/edit', [

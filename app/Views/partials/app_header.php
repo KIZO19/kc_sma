@@ -33,7 +33,7 @@
   if (!empty($schoolForHeader['logo_url'])) {
       $faviconUrl = $schoolForHeader['logo_url'];
       if (strpos($faviconUrl, 'http') !== 0) {
-          $faviconUrl = '/kc_sma/public' . '/' . ltrim($faviconUrl, '/');
+          $faviconUrl = BASE_URL . '/' . ltrim($faviconUrl, '/');
       }
       if (preg_match('/\.png$/i', $faviconUrl)) {
           $faviconMime = 'image/png';
@@ -43,10 +43,10 @@
   }
   ?>
   <title><?= htmlspecialchars($title) ?></title>
-  <meta name="theme-color" content="#172230">
+  <meta name="theme-color" content="#3c8dbc">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="<?= htmlspecialchars(APP_NAME) ?>">
-  <link rel="manifest" href="<?= BASE_URL ?>/assets/manifest.webmanifest">
+  <link rel="manifest" href="<?= BASE_URL ?>/manifest.php">
   <link rel="apple-touch-icon" href="<?= BASE_URL ?>/assets/icons/kc-sma-192.png">
   <link rel="icon" href="<?= htmlspecialchars($faviconUrl) ?>" type="<?= htmlspecialchars($faviconMime) ?>">
   <link rel="shortcut icon" href="<?= htmlspecialchars($faviconUrl) ?>" type="<?= htmlspecialchars($faviconMime) ?>">
@@ -68,11 +68,11 @@
       --card: #ffffff;
       --navbar: #ffffff;
       --navbar-text: #495057;
-      --sidebar: #172230;
-      --sidebar-surface: rgba(255,255,255,.05);
-      --sidebar-text: #cfd8e3;
+      --sidebar: #3c8dbc;
+      --sidebar-surface: #367fa9;
+      --sidebar-text: #ffffff;
       --sidebar-text-active: #ffffff;
-      --sidebar-active: #1f6feb;
+      --sidebar-active: #3c8dbc;
       --border: rgba(0,0,0,.08);
     }
 
@@ -104,11 +104,11 @@
       --card: #ffffff;
       --navbar: #ffffff;
       --navbar-text: #495057;
-      --sidebar: #172230;
-      --sidebar-surface: rgba(255,255,255,.05);
-      --sidebar-text: #cfd8e3;
+      --sidebar: #3c8dbc;
+      --sidebar-surface: #367fa9;
+      --sidebar-text: #ffffff;
       --sidebar-text-active: #ffffff;
-      --sidebar-active: #1f6feb;
+      --sidebar-active: #3c8dbc;
       --border: rgba(0,0,0,.08);
     }
 
@@ -158,7 +158,7 @@
     }
     .app-sidebar .nav-header {
       padding: .85rem .65rem .45rem;
-      color: rgba(207,216,227,.62);
+      color: rgba(255,255,255,.72);
       font-size: .64rem;
       font-weight: 800;
       letter-spacing: .1em;
@@ -172,17 +172,18 @@
     }
     .app-sidebar .nav-sidebar .nav-link:hover {
       color: var(--sidebar-text-active);
-      background: rgba(255,255,255,.08);
+      background: rgba(0,0,0,.12);
+      color: #fff;
     }
     .app-sidebar .nav-sidebar .nav-link.active {
       color: var(--sidebar-text-active);
-      background: linear-gradient(100deg, var(--sidebar-active), rgba(31,111,235,.78));
+      background: linear-gradient(100deg, var(--sidebar-active), #367fa9);
       box-shadow: 0 .35rem .8rem rgba(0,0,0,.15);
     }
     .app-sidebar .nav-treeview {
       margin: .2rem 0 .45rem .25rem;
       padding-left: .45rem !important;
-      border-left: 1px solid rgba(255,255,255,.14);
+      border-left: 1px solid rgba(255,255,255,.28);
     }
     .app-sidebar .nav-treeview .nav-link {
       padding-top: .55rem;
@@ -190,14 +191,14 @@
       font-size: .9rem;
     }
     .app-sidebar .sidebar-role-label {
-      color: rgba(207,216,227,.68);
+      color: #6c757d;
       font-size: .68rem;
       font-weight: 700;
       letter-spacing: .04em;
       text-transform: uppercase;
     }
     .app-sidebar .user-panel {
-      background: rgba(255,255,255,.04);
+      background: rgba(255,255,255,.1);
       border-radius: 0.75rem;
       margin: 0.75rem 0;
       padding: 0.75rem;
@@ -208,12 +209,12 @@
       color: var(--sidebar-text);
     }
     .app-sidebar .nav-sidebar .nav-link:hover {
-      background: rgba(255,255,255,.08);
-      color: var(--sidebar-text-active);
+      background: rgba(0,0,0,.12);
+      color: #fff;
     }
     .app-sidebar .nav-sidebar .nav-link.active {
       background-color: var(--sidebar-active);
-      color: var(--sidebar-text-active);
+      color: #fff;
     }
     .app-sidebar .nav-sidebar .nav-treeview {
       display: none;
@@ -222,7 +223,7 @@
       display: block;
     }
     .app-sidebar .nav-header {
-      color: #a2b1c4;
+      color: rgba(255,255,255,.72);
       margin-top: 1rem;
     }
     .brand-link { font-weight: 700; }
@@ -278,6 +279,7 @@
       .app-sidebar { width: 220px; }
     }
   </style>
+  <link rel="stylesheet" href="<?= BASE_URL ?>/assets/theme.css?v=blue-sidebar-20261105">
 </head>
 <body class="layout-fixed sidebar-mini">
 <?php
@@ -309,7 +311,7 @@ if (!empty($schoolContext['nom_etablissement'])) {
 if (!empty($schoolContext['logo_url'])) {
     $brandLogo = $schoolContext['logo_url'];
     if (strpos($brandLogo, 'http') !== 0) {
-        $brandLogo = '/kc_sma/public' . '/' . ltrim($brandLogo, '/');
+        $brandLogo = BASE_URL . '/' . ltrim($brandLogo, '/');
     }
 }
 ?>
@@ -401,7 +403,7 @@ if (!empty($schoolContext['logo_url'])) {
               <li class="px-3 py-2">
                 <div class="d-flex align-items-center">
                   <label class="me-2 mb-0 small">Couleur sidebar</label>
-                  <input type="color" id="sidebarColorInput" value="#172230" title="Choisir la couleur de la sidebar">
+                  <input type="color" id="sidebarColorInput" value="#3c8dbc" title="Choisir la couleur de la sidebar">
                   <button class="btn btn-sm btn-link ms-2" id="sidebarColorReset">Réinitialiser</button>
                 </div>
               </li>

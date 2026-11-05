@@ -29,7 +29,5 @@ spl_autoload_register(function ($class) {
 
 App\Core\Auth::start();
 
-App\Core\Auth::start();
-
 $router = new App\Core\Router();
 $router->dispatch();

@@ -124,6 +124,11 @@ class Router
             $actionName = 'notFound';
         }
 
+        if (Auth::guest() && !$this->isGuestRoute($controllerClass, $actionName)) {
+            header('Location: ' . BASE_URL . '/Ecole/landing');
+            exit;
+        }
+
         if ((Auth::user()['role'] ?? '') === 'enseignant_école') {
             $teacherRoutes = [
                 'App\\Controllers\\DashboardController' => ['index', 'presence'],
@@ -145,6 +150,23 @@ class Router
         }
 
         $controller->{$actionName}();
+    }
+
+    private function isGuestRoute(string $controllerClass, string $actionName): bool
+    {
+        return in_array(
+            [$controllerClass, $actionName],
+            [
+                ['App\\Controllers\\HomeController', 'index'],
+                ['App\\Controllers\\EcolesController', 'landing'],
+                ['App\\Controllers\\AuthController', 'login'],
+                ['App\\Controllers\\AuthController', 'register'],
+                ['App\\Controllers\\AuthController', 'forgotPassword'],
+                ['App\\Controllers\\AuthController', 'resetPassword'],
+                ['App\\Controllers\\AuthController', 'logout'],
+            ],
+            true
+        );
     }
 
     private function formatSegment(string $segment): string

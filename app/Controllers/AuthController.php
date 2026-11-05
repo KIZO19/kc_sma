@@ -300,6 +300,6 @@ class AuthController extends Controller
     public function logout(): void
     {
         Auth::logout();
-        $this->redirect('/login');
+        $this->redirect('/Ecole/landing');
     }
 }

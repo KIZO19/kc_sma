@@ -165,7 +165,7 @@ $pageScripts = <<<SCRIPT
           datasets: [{
             data: data,
             backgroundColor: [
-              '#0d6efd','#198754','#ffc107','#dc3545','#6610f2','#0dcaf0','#fd7e14','#6f42c1','#20c997','#e83e8c'
+              '#0d6efd','#0b5ed7','#0a58ca','#3d8bfd','#6ea8fe','#084298','#052c65','#367fa9','#4a90d9','#5b9bd5'
             ],
             borderColor: '#ffffff',
             borderWidth: 2
