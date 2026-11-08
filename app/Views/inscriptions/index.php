@@ -2,6 +2,8 @@
 $pendingCount = count($pendingStudents);
 $enrolledCount = count($enrolledStudents);
 $totalStudentsCount = $pendingCount + $enrolledCount;
+$canManageAccountAccess = $canManageAccountAccess ?? false;
+$accountAccessCsrf = $accountAccessCsrf ?? '';
 $pageStyles = <<<'CSS'
 <style>
   .inscriptions-page .enrolled-grid-card { overflow: hidden; border: 1px solid var(--border, #dee2e6); border-radius: .85rem; background: var(--surface, #fff); box-shadow: 0 .35rem 1.2rem rgba(31, 41, 55, .06); }
@@ -20,6 +22,8 @@ $pageStyles = <<<'CSS'
   .inscriptions-page .enrolled-students-table tbody tr:hover { background: rgba(60, 141, 188, .045); }
   .inscriptions-page .enrolled-students-table .student-name { color: var(--text, #212529); font-weight: 600; }
   .inscriptions-page .enrolled-students-table .student-reference { color: var(--text-muted, #6c757d); font-size: .82rem; }
+  .inscriptions-page .enrolled-students-table .student-account-actions { min-width: 190px; }
+  .inscriptions-page .enrolled-students-table .student-account-actions form { display: inline-block; margin: .15rem; }
   .inscriptions-page .enrolled-grid-toolbar .dt-buttons { display: flex; flex-wrap: wrap; gap: .4rem; }
   .inscriptions-page .enrolled-grid-toolbar .dt-button { margin: 0; padding: .45rem .75rem; border: 1px solid #c9ddea; border-radius: .45rem; background: var(--surface, #fff); color: #367fa9; font-size: .8125rem; }
   .inscriptions-page .enrolled-grid-toolbar .dt-button:hover { border-color: #3c8dbc; background: rgba(60, 141, 188, .08); color: #2c698e; }
@@ -99,12 +103,25 @@ $pageScripts = <<<'SCRIPT'
     const table = document.querySelector('#enrolledStudentsGrid');
     if (!table || !window.jQuery || !jQuery.fn.DataTable) return;
 
+    const headerCells = Array.from(table.querySelectorAll('thead th'));
+    const actionsColumn = headerCells.findIndex(function (header) {
+      return header.classList.contains('student-account-actions-column');
+    });
+    const exportColumns = [];
+    for (let index = 1; index < headerCells.length; index += 1) {
+      if (index !== actionsColumn) exportColumns.push(index);
+    }
     const exportOptions = {
-      columns: Array.from({ length: table.querySelectorAll('thead th').length - 1 }, function (_, index) {
-        return index + 1;
-      }),
+      columns: exportColumns,
       modifier: { search: 'applied', order: 'applied', page: 'all' }
     };
+    const columnDefs = [
+      { targets: [0], orderable: false, searchable: false, className: 'text-muted' },
+      { targets: [6], type: 'date' }
+    ];
+    if (actionsColumn >= 0) {
+      columnDefs.push({ targets: [actionsColumn], orderable: false, searchable: false });
+    }
     const dataTable = jQuery(table).DataTable({
       dom: '<"enrolled-grid-toolbar"Bf>t<"enrolled-grid-footer"lip>',
       buttons: [
@@ -129,10 +146,7 @@ $pageScripts = <<<'SCRIPT'
       pageLength: 10,
       lengthMenu: [[10, 25, 50, -1], [10, 25, 50, 'Tous']],
       order: [[1, 'asc']],
-      columnDefs: [
-        { targets: [0], orderable: false, searchable: false, className: 'text-muted' },
-        { targets: [6], type: 'date' }
-      ],
+      columnDefs: columnDefs,
       language: {
         search: 'Rechercher',
         searchPlaceholder: 'Nom, matricule, parent, coordonnées…',
@@ -260,6 +274,17 @@ require __DIR__ . '/../partials/app_header.php';
             </div>
             <?php unset($_SESSION['inscriptions_errors']); ?>
           <?php endif; ?>
+          <?php if (!empty($_SESSION['account_access_notification'])): ?>
+            <?php $accountAccessNotification = $_SESSION['account_access_notification']; unset($_SESSION['account_access_notification']); ?>
+            <?php
+              $accountAccessStatus = $accountAccessNotification['status'] ?? '';
+              $accountAccessAlertClass = $accountAccessStatus === 'success' ? 'alert-success' : 'alert-warning';
+            ?>
+            <div class="alert <?= $accountAccessAlertClass ?> alert-dismissible" role="status">
+              <?= htmlspecialchars($accountAccessNotification['message'] ?? '', ENT_QUOTES, 'UTF-8') ?>
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
+            </div>
+          <?php endif; ?>
           <?php if (!empty($_SESSION['inscriptions_notification'])): ?>
             <?php $registrationNotification = $_SESSION['inscriptions_notification']; unset($_SESSION['inscriptions_notification']); ?>
             <?php
@@ -369,7 +394,13 @@ require __DIR__ . '/../partials/app_header.php';
                             <i class="bi bi-person-check"></i>
                             Élèves déjà inscrits <span class="badge rounded-pill text-bg-primary"><?= $enrolledCount ?></span>
                           </h4>
-                          <small class="text-muted">Filtrez par genre, section ou classe, puis exportez les résultats.</small>
+                          <small class="text-muted">Filtrez par genre, section ou classe, puis exportez les résultats. Les liens d’accès sont envoyés au téléphone du parent/tuteur.</small>
+                          <?php if ($canManageAccountAccess): ?>
+                            <div class="small text-muted mt-2">
+                              <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>
+                              Le secrétariat peut créer l’accès ou renvoyer un lien sécurisé pour que le parent ou l’élève choisisse un nouveau mot de passe. Le lien expire après 24 heures ; celui de l’élève exige son matricule.
+                            </div>
+                          <?php endif; ?>
                         </div>
                         <?php if (!empty($enrolledStudents)): ?>
                           <button type="button" class="btn btn-sm btn-outline-secondary" id="resetEnrolledStudentFilters">
@@ -430,6 +461,9 @@ require __DIR__ . '/../partials/app_header.php';
                               <th>Lieu de naissance</th>
                               <th>Adresse</th>
                               <th>Photo</th>
+                              <?php if ($canManageAccountAccess): ?>
+                                <th class="student-account-actions-column" data-grid-sort="off">Accès comptes</th>
+                              <?php endif; ?>
                             </tr>
                           </thead>
                           <tbody>
@@ -467,6 +501,26 @@ require __DIR__ . '/../partials/app_header.php';
                                 <td><?= htmlspecialchars($student['lieu_naissance'] ?? '-', ENT_QUOTES, 'UTF-8') ?></td>
                                 <td><?= htmlspecialchars($student['adresse'] ?? '-', ENT_QUOTES, 'UTF-8') ?></td>
                                 <td><?= !empty($student['photo']) ? 'Oui' : 'Non' ?></td>
+                                <?php if ($canManageAccountAccess): ?>
+                                  <td class="student-account-actions">
+                                    <form method="post" action="<?= BASE_URL ?>/inscriptions/sendAccountAccess">
+                                      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($accountAccessCsrf, ENT_QUOTES, 'UTF-8') ?>">
+                                      <input type="hidden" name="eleve_id" value="<?= (int) ($student['id'] ?? 0) ?>">
+                                      <input type="hidden" name="account_type" value="student">
+                                      <button type="submit" class="btn btn-sm btn-outline-primary" title="Créer l’accès élève ou renvoyer son lien de mot de passe">
+                                        <i class="bi bi-mortarboard me-1" aria-hidden="true"></i>Mot de passe élève
+                                      </button>
+                                    </form>
+                                    <form method="post" action="<?= BASE_URL ?>/inscriptions/sendAccountAccess">
+                                      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($accountAccessCsrf, ENT_QUOTES, 'UTF-8') ?>">
+                                      <input type="hidden" name="eleve_id" value="<?= (int) ($student['id'] ?? 0) ?>">
+                                      <input type="hidden" name="account_type" value="parent">
+                                      <button type="submit" class="btn btn-sm btn-outline-success" title="Créer l’accès parent ou renvoyer son lien de mot de passe">
+                                        <i class="bi bi-people me-1" aria-hidden="true"></i>Mot de passe parent
+                                      </button>
+                                    </form>
+                                  </td>
+                                <?php endif; ?>
                               </tr>
                             <?php endforeach; ?>
                           </tbody>

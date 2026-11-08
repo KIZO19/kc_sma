@@ -4,6 +4,7 @@
 $title = $title ?? APP_NAME;
 $error = $error ?? '';
 $identifiant = $identifiant ?? '';
+$portal = in_array($portal ?? 'parent', ['parent', 'eleve', 'personnel'], true) ? $portal : 'parent';
 ?>
 <head>
   <meta charset="utf-8">
@@ -25,6 +26,10 @@ $identifiant = $identifiant ?? '';
     .login-box { width: 420px; margin: 6% auto; }
     .card { border-radius: 1rem; }
     .login-logo { width: 110px; height: 110px; object-fit: cover; border-radius: 50%; }
+    .portal-choice { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; margin-bottom: 1.25rem; }
+    .portal-choice button { padding: .65rem .35rem; border-radius: .65rem; }
+    .portal-choice button.active { color: #fff; background: #0d6efd; border-color: #0d6efd; }
+    @media (max-width: 480px) { .login-box { width: min(100% - 1.5rem, 420px); } }
   </style>
   <link rel="stylesheet" href="<?= BASE_URL ?>/assets/theme.css?v=blue-sidebar-20261105">
 </head>
@@ -37,13 +42,32 @@ $identifiant = $identifiant ?? '';
       </a>
     </div>
     <div class="card-body">
-      <p class="login-box-msg">Connectez-vous pour accéder au tableau de bord</p>
+      <p class="login-box-msg">Choisissez votre portail de connexion</p>
+      <div class="portal-choice" role="group" aria-label="Choisir le portail">
+        <button type="button" class="btn btn-outline-primary<?= $portal === 'parent' ? ' active' : '' ?>" data-portal="parent" aria-pressed="<?= $portal === 'parent' ? 'true' : 'false' ?>">
+          <i class="bi bi-people me-1" aria-hidden="true"></i> Parent
+        </button>
+        <button type="button" class="btn btn-outline-primary<?= $portal === 'eleve' ? ' active' : '' ?>" data-portal="eleve" aria-pressed="<?= $portal === 'eleve' ? 'true' : 'false' ?>">
+          <i class="bi bi-backpack me-1" aria-hidden="true"></i> Élève
+        </button>
+        <button type="button" class="btn btn-outline-secondary<?= $portal === 'personnel' ? ' active' : '' ?>" data-portal="personnel" aria-pressed="<?= $portal === 'personnel' ? 'true' : 'false' ?>">
+          <i class="bi bi-person-badge me-1" aria-hidden="true"></i> Personnel
+        </button>
+      </div>
+      <p id="portal-description" class="small text-muted text-center mb-3">
+        <?= $portal === 'parent'
+          ? 'Accédez au portail parent avec le numéro de téléphone renseigné lors de l’inscription.'
+          : ($portal === 'eleve'
+            ? 'Accédez au portail élève avec le matricule attribué lors de l’inscription.'
+            : 'Connexion réservée au personnel et aux administrateurs de l’école.') ?>
+      </p>
       <?php if (!empty($error)): ?>
         <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
       <?php endif; ?>
       <form action="<?= BASE_URL ?>/login" method="post">
+        <input type="hidden" name="portal" id="loginPortal" value="<?= htmlspecialchars($portal, ENT_QUOTES, 'UTF-8') ?>">
         <div class="input-group mb-3">
-          <input type="text" name="identifiant" class="form-control" placeholder="Email, téléphone ou matricule" value="<?= htmlspecialchars($identifiant) ?>" required>
+          <input type="text" name="identifiant" id="loginIdentifier" class="form-control" placeholder="<?= $portal === 'parent' ? 'Numéro de téléphone du parent' : ($portal === 'eleve' ? 'Matricule de l’élève' : 'Email ou identifiant') ?>" value="<?= htmlspecialchars($identifiant) ?>" autocomplete="username" required>
           <div class="input-group-append"><div class="input-group-text"><span class="bi bi-person"></span></div></div>
         </div>
         <div class="input-group mb-3">
@@ -76,6 +100,41 @@ $identifiant = $identifiant ?? '';
 <script src="<?= BASE_URL ?>/assets/adminlte.min.js"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function () {
+    const portalField = document.getElementById('loginPortal');
+    const identifierField = document.getElementById('loginIdentifier');
+    const portalDescription = document.getElementById('portal-description');
+    const portalButtons = document.querySelectorAll('[data-portal]');
+    const portalSettings = {
+      parent: {
+        placeholder: 'Numéro de téléphone du parent',
+        description: 'Accédez au portail parent avec le numéro de téléphone renseigné lors de l’inscription.'
+      },
+      eleve: {
+        placeholder: 'Matricule de l’élève',
+        description: 'Accédez au portail élève avec le matricule attribué lors de l’inscription.'
+      },
+      personnel: {
+        placeholder: 'Email ou identifiant',
+        description: 'Connexion réservée au personnel et aux administrateurs de l’école.'
+      }
+    };
+
+    portalButtons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        const selectedPortal = button.dataset.portal;
+        const settings = portalSettings[selectedPortal];
+        if (!settings) return;
+        portalField.value = selectedPortal;
+        identifierField.placeholder = settings.placeholder;
+        portalDescription.textContent = settings.description;
+        portalButtons.forEach(function (item) {
+          const isActive = item === button;
+          item.classList.toggle('active', isActive);
+          item.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+      });
+    });
+
     const passwordField = document.getElementById('passwordField');
     const togglePassword = document.getElementById('togglePassword');
     const togglePasswordIcon = document.getElementById('togglePasswordIcon');

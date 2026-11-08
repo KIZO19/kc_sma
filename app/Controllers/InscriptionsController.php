@@ -12,9 +12,11 @@ use App\Models\Ecole;
 use App\Models\Inscription;
 use App\Models\Option;
 use App\Models\OriginesRDC;
+use App\Models\PasswordReset;
 use App\Models\ParentModel;
 use App\Models\Section;
 use App\Models\User;
+use App\Services\PaymentParentNotifier;
 
 class InscriptionsController extends Controller
 {
@@ -53,6 +55,9 @@ class InscriptionsController extends Controller
 
         $user = Auth::refresh() ?: Auth::user();
         $this->requireAdministrationModuleAccess($user, 'inscriptions');
+        if (empty($_SESSION['inscriptions_access_csrf'])) {
+            $_SESSION['inscriptions_access_csrf'] = bin2hex(random_bytes(32));
+        }
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
@@ -83,9 +88,162 @@ class InscriptionsController extends Controller
             'sections' => $sections,
             'options' => $options,
             'canSubmit' => in_array($role, self::SUBMISSION_ROLES, true),
+            'canManageAccountAccess' => in_array($role, ['super_admin', 'ecole_admin', 'sec_école'], true),
+            'accountAccessCsrf' => $_SESSION['inscriptions_access_csrf'],
             'canEdit' => in_array($role, self::IDENTITY_EDIT_ROLES, true),
             'canApprove' => in_array($role, ['super_admin', 'sec_école', 'préfet_école', 'DP_école', 'comptable_école'], true),
         ]);
+    }
+
+    public function managePasswords(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin', 'ecole_admin', 'sec_école']);
+
+        $user = Auth::refresh() ?: Auth::user();
+        $this->requireAdministrationModuleAccess($user, 'inscriptions');
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        $sectionScopeId = $this->getSectionScopeForUser($user);
+        if ($ecoleId <= 0) {
+            $this->redirect('/error/accessDenied');
+        }
+
+        if (empty($_SESSION['inscriptions_access_csrf'])) {
+            $_SESSION['inscriptions_access_csrf'] = bin2hex(random_bytes(32));
+        }
+
+        $this->view('inscriptions/manage_passwords', [
+            'title' => APP_NAME . ' - Gérer les mots de passe',
+            'user' => $user,
+            'role' => $user['role'] ?? '',
+            'roleLabel' => User::getRoleLabel((string) ($user['role'] ?? '')),
+            'modules' => $this->getModulesForRole((string) ($user['role'] ?? '')),
+            'students' => Eleve::getAllBySchool($ecoleId, null, $sectionScopeId),
+            'accountAccessCsrf' => $_SESSION['inscriptions_access_csrf'],
+        ]);
+    }
+
+    public function sendAccountAccess(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin', 'ecole_admin', 'sec_école']);
+        $user = Auth::refresh() ?: Auth::user();
+        $this->requireAdministrationModuleAccess($user, 'inscriptions');
+
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+            $this->redirect('/inscriptions');
+        }
+
+        $returnPath = ($_POST['return_to'] ?? '') === 'passwords'
+            ? '/inscriptions/managePasswords'
+            : '/inscriptions';
+        $postedCsrf = (string) ($_POST['csrf_token'] ?? '');
+        if (
+            $postedCsrf === ''
+            || !hash_equals((string) ($_SESSION['inscriptions_access_csrf'] ?? ''), $postedCsrf)
+        ) {
+            $_SESSION['inscriptions_errors'] = ['Le formulaire a expiré. Rechargez la page et réessayez.'];
+            $this->redirect($returnPath);
+        }
+
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        $studentId = (int) ($_POST['eleve_id'] ?? 0);
+        $accountType = trim((string) ($_POST['account_type'] ?? ''));
+        $sectionScopeId = $this->getSectionScopeForUser($user);
+
+        try {
+            if ($ecoleId <= 0 || $studentId <= 0 || !in_array($accountType, ['student', 'parent'], true)) {
+                throw new \InvalidArgumentException('Élève ou type de compte invalide.');
+            }
+
+            $student = Eleve::findByIdAndSchool($studentId, $ecoleId, $sectionScopeId);
+            if (!$student) {
+                throw new \RuntimeException('Cet élève n’appartient pas à votre école ou à votre section.');
+            }
+
+            if ($accountType === 'student') {
+                $matricule = trim((string) ($student['matricule'] ?? ''));
+                if ($matricule === '') {
+                    throw new \RuntimeException('L’élève n’a pas encore de matricule. Attribuez-lui un matricule avant de créer son accès.');
+                }
+                $account = Eleve::createUserAccount($studentId);
+                $accountLabel = 'élève';
+            } else {
+                $parentId = (int) ($student['parent_id'] ?? 0);
+                $parent = $parentId > 0 ? ParentModel::findById($parentId) : null;
+                if (!$parent || (int) ($parent['ecole_id'] ?? 0) !== $ecoleId) {
+                    throw new \RuntimeException('Aucun parent/tuteur de cette école n’est associé à l’élève.');
+                }
+                if (trim((string) ($parent['telephone'] ?? '')) === '') {
+                    throw new \RuntimeException('Le parent/tuteur doit avoir un numéro de téléphone renseigné.');
+                }
+                $account = ParentModel::createUserAccount($parentId);
+                $accountLabel = 'parent/tuteur';
+            }
+
+            if (($account['statut'] ?? '') !== 'Actif') {
+                throw new \RuntimeException('Le compte lié est inactif. Activez-le avant d’envoyer un lien.');
+            }
+
+            $routeBase = Auth::getSchoolRouteBaseUrl();
+            if ($routeBase === null) {
+                throw new \RuntimeException('L’école associée à votre compte est introuvable.');
+            }
+
+            $publicUrl = parse_url(APP_PUBLIC_URL);
+            if (
+                is_array($publicUrl)
+                && in_array(strtolower((string) ($publicUrl['scheme'] ?? '')), ['http', 'https'], true)
+                && !empty($publicUrl['host'])
+                && !isset($publicUrl['user'])
+                && !isset($publicUrl['pass'])
+            ) {
+                $origin = strtolower((string) $publicUrl['scheme']) . '://' . $publicUrl['host']
+                    . (isset($publicUrl['port']) ? ':' . $publicUrl['port'] : '');
+            } else {
+                $host = trim((string) ($_SERVER['HTTP_HOST'] ?? ''));
+                if (
+                    $host === ''
+                    || preg_match('/^(?:[a-zA-Z0-9.-]+|\[[a-fA-F0-9:]+\])(?::\d{1,5})?$/D', $host) !== 1
+                ) {
+                    throw new \RuntimeException('Impossible de construire le lien sécurisé pour cet hôte.');
+                }
+
+                $scheme = !empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off'
+                    ? 'https'
+                    : 'http';
+                $origin = $scheme . '://' . $host;
+            }
+
+            $token = PasswordReset::createToken((int) $account['id'], 1440);
+            $link = $origin . $routeBase . '/reset-password?token=' . rawurlencode($token);
+            $result = (new PaymentParentNotifier())->sendAccountSetupLink(
+                $studentId,
+                $ecoleId,
+                $accountType,
+                $link
+            );
+            $status = (string) ($result['status'] ?? 'failed');
+            if (!in_array($status, ['success', 'partial'], true)) {
+                PasswordReset::revokeToken($token);
+                $token = null;
+                $_SESSION['inscriptions_errors'] = [
+                    (string) ($result['message'] ?? 'Le lien n’a pas pu être envoyé. Vérifiez le téléphone du parent et la configuration SMS/WhatsApp.'),
+                ];
+            } else {
+                $_SESSION['account_access_notification'] = [
+                    'status' => $status,
+                    'message' => 'Le lien de configuration du compte ' . $accountLabel . ' a été accepté par le fournisseur. La livraison au téléphone n’est pas confirmée.',
+                ];
+            }
+        } catch (\PDOException $exception) {
+            error_log('InscriptionsController::sendAccountAccess database error: ' . $exception->getMessage());
+            $_SESSION['inscriptions_errors'] = ['Impossible de préparer ou d’envoyer le lien du compte. Vérifiez la base de données et la configuration des notifications.'];
+        } catch (\DomainException|\InvalidArgumentException|\RuntimeException $exception) {
+            $_SESSION['inscriptions_errors'] = [$exception->getMessage()];
+        }
+
+        $this->redirect($returnPath);
     }
 
     public function create(): void
@@ -246,6 +404,13 @@ class InscriptionsController extends Controller
                 }
                 if ($newParentTelephone === '') {
                     $errors[] = 'Le téléphone du parent/tuteur est requis lorsque vous créez un nouveau parent.';
+                } elseif ($ecoleId > 0) {
+                    $existingParent = ParentModel::findByTelephoneAndSchool($newParentTelephone, $ecoleId);
+                    if ($existingParent) {
+                        $errors[] = 'Ce numéro appartient déjà à '
+                            . $existingParent['nom_responsable']
+                            . '. Sélectionnez ce parent dans « Parent existant » au lieu de créer un doublon.';
+                    }
                 }
             }
 
@@ -288,6 +453,9 @@ class InscriptionsController extends Controller
                     return;
                 }
 
+                $registrationDb = Database::getConnection();
+                $registrationDb->beginTransaction();
+
                 if ($parentChoice === 'new') {
                     try {
                         $newParent = ParentModel::create([
@@ -310,7 +478,7 @@ class InscriptionsController extends Controller
                 }
 
                 if ($parentChoice === 'existing' && $parentId > 0) {
-                    $parentBelongsToSchool = ParentModel::findByIdAndSchool($parentId, $ecoleId, $sectionScopeId);
+                    $parentBelongsToSchool = ParentModel::findByIdAndSchool($parentId, $ecoleId);
                     if (!$parentBelongsToSchool) {
                         $errors[] = 'Le parent sélectionné n’appartient pas à votre école.';
                     }
@@ -321,9 +489,13 @@ class InscriptionsController extends Controller
                 }
 
                 if (!empty($errors)) {
+                    if ($registrationDb->inTransaction()) {
+                        $registrationDb->rollBack();
+                    }
                     $_SESSION['inscriptions_errors'] = $errors;
                     $_SESSION['inscriptions_old'] = $_POST;
                     $this->redirect('/inscriptions/create');
+                    return;
                 }
 
                 $studentSchoolId = $ecoleId;
@@ -360,33 +532,82 @@ class InscriptionsController extends Controller
                 } catch (\DomainException $e) {
                     $errors[] = $e->getMessage();
                     $newStudent = null;
+                } catch (\PDOException $e) {
+                    error_log('InscriptionsController::create student error: ' . $e->getMessage());
+                    $errors[] = 'Impossible d’enregistrer l’élève dans la base de données.';
+                    $newStudent = null;
                 }
 
-                if ($newStudent && empty($newStudent['matricule'])) {
-                    $school = Ecole::findById($ecoleId);
-                    $activeYear = AnneeScolaire::getActiveBySchool($ecoleId);
-                    $yearString = $activeYear['annee'] ?? date('Y') . '-' . (date('Y') + 1);
-                    $generatedMatricule = $this->generateUniqueMatriculeFromSchool(
-                        $school['nom_etablissement'] ?? 'ECOLE',
-                        $nom,
-                        $postnom,
-                        $prenom,
-                        (int) $newStudent['id'],
-                        $yearString,
-                        (int) $newStudent['id']
-                    );
-                    Eleve::updateMatricule((int) $newStudent['id'], $generatedMatricule);
-                    $newStudent['matricule'] = $generatedMatricule;
-                }
-
-                if ($newStudent) {
-                    if ($activeYear) {
-                        Inscription::create([
-                            'eleve_id' => (int) $newStudent['id'],
-                            'classe_id' => $classeId,
-                            'annee_scolaire_id' => (int) $activeYear['id'],
-                        ]);
+                if (!$newStudent || !empty($errors)) {
+                    if ($registrationDb->inTransaction()) {
+                        $registrationDb->rollBack();
                     }
+                    $_SESSION['inscriptions_errors'] = $errors ?: ['Impossible de créer le dossier de l’élève.'];
+                    $_SESSION['inscriptions_old'] = $_POST;
+                    $this->redirect('/inscriptions/create');
+                    return;
+                }
+
+                try {
+                    if (empty($newStudent['matricule'])) {
+                        $school = Ecole::findById($ecoleId);
+                        $yearString = $activeYear['annee'] ?? date('Y') . '-' . (date('Y') + 1);
+                        $generatedMatricule = $this->generateUniqueMatriculeFromSchool(
+                            $school['nom_etablissement'] ?? 'ECOLE',
+                            $nom,
+                            $postnom,
+                            $prenom,
+                            (int) $newStudent['id'],
+                            $yearString,
+                            (int) $newStudent['id']
+                        );
+                        if (!Eleve::updateMatricule((int) $newStudent['id'], $generatedMatricule)) {
+                            throw new \RuntimeException('Impossible d’attribuer un matricule à l’élève.');
+                        }
+                        User::syncReferenceIdentifier(
+                            'eleve_ecole',
+                            (int) $newStudent['id'],
+                            $studentSchoolId,
+                            $generatedMatricule
+                        );
+                        $newStudent['matricule'] = $generatedMatricule;
+                    }
+
+                    $createdRegistration = Inscription::create([
+                        'eleve_id' => (int) $newStudent['id'],
+                        'classe_id' => $classeId,
+                        'annee_scolaire_id' => (int) $activeYear['id'],
+                    ]);
+                    if (!$createdRegistration) {
+                        throw new \RuntimeException('La création de l’inscription n’a retourné aucun dossier.');
+                    }
+                    $registrationDb->commit();
+                } catch (\PDOException $e) {
+                    if ($registrationDb->inTransaction()) {
+                        $registrationDb->rollBack();
+                    }
+                    error_log('InscriptionsController::create registration error: ' . $e->getMessage());
+                    $_SESSION['inscriptions_errors'] = ['Impossible d’enregistrer l’inscription dans la base de données.'];
+                    $_SESSION['inscriptions_old'] = $_POST;
+                    $this->redirect('/inscriptions/create');
+                    return;
+                } catch (\InvalidArgumentException $e) {
+                    if ($registrationDb->inTransaction()) {
+                        $registrationDb->rollBack();
+                    }
+                    $_SESSION['inscriptions_errors'] = [$e->getMessage()];
+                    $_SESSION['inscriptions_old'] = $_POST;
+                    $this->redirect('/inscriptions/create');
+                    return;
+                } catch (\RuntimeException $e) {
+                    if ($registrationDb->inTransaction()) {
+                        $registrationDb->rollBack();
+                    }
+                    error_log('InscriptionsController::create registration error: ' . $e->getMessage());
+                    $_SESSION['inscriptions_errors'] = ['Impossible de finaliser le dossier d’inscription.'];
+                    $_SESSION['inscriptions_old'] = $_POST;
+                    $this->redirect('/inscriptions/create');
+                    return;
                 }
 
                 // After creating the inscription, assign applicable fees to the student's account
@@ -892,6 +1113,37 @@ class InscriptionsController extends Controller
         header('Content-Type: application/json');
         $province = trim($_GET['province'] ?? '');
         echo json_encode(OriginesRDC::territoriesFor($province), JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    public function findParentByPhone(): void
+    {
+        Auth::requireAuth();
+        $user = Auth::refresh() ?: Auth::user();
+        $this->requireAdministrationModuleAccess($user, 'inscriptions');
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store');
+
+        $telephone = trim((string) ($_GET['telephone'] ?? ''));
+        if (!preg_match('/^[0-9+() .-]{7,25}$/', $telephone)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Numéro de téléphone invalide.'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $ecoleId = (int) ($user['ecole_id'] ?? 0);
+        $parent = $ecoleId > 0
+            ? ParentModel::findByTelephoneAndSchool($telephone, $ecoleId)
+            : null;
+
+        echo json_encode(
+            ['parent' => $parent ? [
+                'id' => (int) $parent['id'],
+                'nom_responsable' => (string) $parent['nom_responsable'],
+                'telephone' => (string) $parent['telephone'],
+            ] : null],
+            JSON_UNESCAPED_UNICODE
+        );
         exit;
     }
 

@@ -85,6 +85,7 @@ class EcolesController extends Controller
             'roleLabel' => User::getRoleLabel((string) ($user['role'] ?? 'ecole_admin')),
             'modules' => $this->getModulesForRole((string) ($user['role'] ?? 'ecole_admin')),
             'school' => $school,
+            'schoolFormValues' => $_SESSION['school_settings_old'] ?? [],
             'subscription' => Ecole::getLatestSubscription($schoolId),
             'notificationSettings' => NotificationAccess::getSchoolPreferences($schoolId),
             'derogationRecipientOptions' => Derogation::getRecipientOptions($schoolId),
@@ -95,7 +96,111 @@ class EcolesController extends Controller
             'success' => $_SESSION['school_settings_success'] ?? null,
             'error' => $_SESSION['school_settings_error'] ?? null,
         ]);
-        unset($_SESSION['school_settings_success'], $_SESSION['school_settings_error']);
+        unset(
+            $_SESSION['school_settings_success'],
+            $_SESSION['school_settings_error'],
+            $_SESSION['school_settings_old']
+        );
+    }
+
+    public function updateSchoolProfile(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['ecole_admin']);
+
+        $user = Auth::refresh() ?: Auth::user();
+        $schoolId = (int) ($user['ecole_id'] ?? 0);
+        $token = (string) ($_POST['csrf_token'] ?? '');
+        if (
+            $_SERVER['REQUEST_METHOD'] !== 'POST'
+            || $schoolId <= 0
+            || $token === ''
+            || !hash_equals((string) ($_SESSION['school_settings_csrf'] ?? ''), $token)
+        ) {
+            $_SESSION['school_settings_error'] = 'Le formulaire a expiré. Rechargez la page et réessayez.';
+            $this->redirect('/ecoles/settings');
+            return;
+        }
+
+        $profile = [
+            'nom_etablissement' => is_string($_POST['nom_etablissement'] ?? null)
+                ? trim($_POST['nom_etablissement'])
+                : '',
+            'email_officiel' => is_string($_POST['email_officiel'] ?? null)
+                ? trim($_POST['email_officiel'])
+                : '',
+            'telephone_contact' => is_string($_POST['telephone_contact'] ?? null)
+                ? trim($_POST['telephone_contact'])
+                : '',
+            'adresse' => is_string($_POST['adresse'] ?? null)
+                ? trim($_POST['adresse'])
+                : '',
+        ];
+        $errors = [];
+
+        if ($profile['nom_etablissement'] === '' || mb_strlen($profile['nom_etablissement'], 'UTF-8') > 150) {
+            $errors[] = 'Le nom de l’établissement est requis et ne peut pas dépasser 150 caractères.';
+        }
+        if (
+            mb_strlen($profile['email_officiel'], 'UTF-8') > 100
+            || ($profile['email_officiel'] !== '' && !filter_var($profile['email_officiel'], FILTER_VALIDATE_EMAIL))
+        ) {
+            $errors[] = 'Saisissez une adresse e-mail valide de 100 caractères maximum.';
+        }
+        if (mb_strlen($profile['telephone_contact'], 'UTF-8') > 20) {
+            $errors[] = 'Le numéro de téléphone ne peut pas dépasser 20 caractères.';
+        }
+
+        $logoFile = $_FILES['logo'] ?? null;
+        if (is_array($logoFile) && ($logoFile['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+            if (($logoFile['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+                $errors[] = 'Erreur lors du téléchargement du logo.';
+            } elseif (($logoFile['size'] ?? 0) > 250 * 1024) {
+                $errors[] = 'Le logo doit faire au maximum 250 KB.';
+            }
+        }
+
+        $logoUrl = null;
+        if (empty($errors) && is_array($logoFile) && ($logoFile['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+            $logoUrl = $this->uploadLogoFile($logoFile);
+            if ($logoUrl === null) {
+                $errors[] = 'Impossible de téléverser le logo. Utilisez une image PNG ou JPEG de 250 KB maximum.';
+            }
+        }
+
+        if (!empty($errors)) {
+            $_SESSION['school_settings_error'] = implode(' ', $errors);
+            $_SESSION['school_settings_old'] = $profile;
+        } else {
+            $data = $profile;
+            if ($logoUrl !== null) {
+                $data['logo_url'] = $logoUrl;
+            }
+
+            if (Ecole::update($schoolId, $data)) {
+                ActivityLog::record(
+                    (int) ($user['id'] ?? 0),
+                    'school_profile_updated',
+                    'school',
+                    $schoolId,
+                    $profile['nom_etablissement'],
+                    'Informations de l’école mises à jour.'
+                );
+                $_SESSION['school_settings_success'] = 'Les informations de l’école ont été mises à jour.';
+            } else {
+                if ($logoUrl !== null) {
+                    $uploadedPath = dirname(__DIR__, 2) . '/public' . $logoUrl;
+                    if (is_file($uploadedPath)) {
+                        unlink($uploadedPath);
+                    }
+                }
+                $_SESSION['school_settings_error'] = 'Impossible d’enregistrer les informations de l’école. Réessayez.';
+                $_SESSION['school_settings_old'] = $profile;
+            }
+        }
+
+        $_SESSION['school_settings_csrf'] = bin2hex(random_bytes(32));
+        $this->redirect('/ecoles/settings');
     }
 
     public function updateDerogationRecipients(): void
@@ -763,22 +868,29 @@ class EcolesController extends Controller
 
     private function uploadLogoFile(array $file): ?string
     {
-        if ($file['error'] !== UPLOAD_ERR_OK) {
+        if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
             return null;
         }
-        $allowedTypes = ['image/png', 'image/jpeg'];
-        if (!in_array($file['type'], $allowedTypes, true)) {
+        $tmpPath = $file['tmp_name'] ?? '';
+        if (!is_string($tmpPath) || $tmpPath === '' || !is_file($tmpPath)) {
             return null;
         }
 
-        // Enforce max size 250 KB
         $maxBytes = 250 * 1024;
-        if (!empty($file['size']) && $file['size'] > $maxBytes) {
+        if (filesize($tmpPath) > $maxBytes) {
             return null;
         }
 
-        $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
-        $filename = 'school_' . time() . '_' . bin2hex(random_bytes(5)) . '.' . strtolower($extension);
+        $mimeType = (new \finfo(FILEINFO_MIME_TYPE))->file($tmpPath);
+        $extensionsByMimeType = [
+            'image/png' => 'png',
+            'image/jpeg' => 'jpg',
+        ];
+        if (!is_string($mimeType) || !isset($extensionsByMimeType[$mimeType])) {
+            return null;
+        }
+
+        $filename = 'school_' . time() . '_' . bin2hex(random_bytes(5)) . '.' . $extensionsByMimeType[$mimeType];
         $uploadDir = dirname(__DIR__, 2) . '/public/uploads/school_logos';
 
         if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true) && !is_dir($uploadDir)) {
@@ -1167,9 +1279,9 @@ class EcolesController extends Controller
                 'school_subscription',
                 $schoolId,
                 (string) ($school['nom_etablissement'] ?? 'École'),
-                'Demande de renouvellement d’abonnement soumise.'
+                'Demande de renouvellement ou de changement de tarif soumise.'
             );
-            $_SESSION['subscription_request_success'] = 'Votre demande de renouvellement a été transmise à KC_SMA.';
+            $_SESSION['subscription_request_success'] = 'Votre demande concernant l’abonnement a été transmise à KC_SMA.';
         } else {
             $_SESSION['subscription_request_errors'] = [
                 'La demande n’a pas pu être soumise. Une demande peut déjà être en attente pour votre école; vérifiez l’historique puis réessayez.'

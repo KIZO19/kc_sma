@@ -296,6 +296,8 @@ STYLE;
                         <div class="col-md-6 mb-3">
                           <label class="form-label">Téléphone du parent/tuteur</label>
                           <input id="new-parent-phone" type="tel" name="new_parent_telephone" class="form-control" maxlength="25" pattern="[0-9+() .-]{7,25}" value="<?= htmlspecialchars($oldInput['new_parent_telephone'] ?? '') ?>">
+                          <div id="parent-phone-check" class="mt-2 small" role="status" aria-live="polite"></div>
+                          <button id="use-found-parent" type="button" class="btn btn-sm btn-outline-primary mt-2" hidden>Utiliser ce parent</button>
                         </div>
                       </div>
                       <div class="row">
@@ -475,6 +477,13 @@ STYLE;
           const newSection = document.querySelector('.parent-choice-new-section');
           const newParentName = document.getElementById('new-parent-name');
           const newParentPhone = document.getElementById('new-parent-phone');
+          const parentSelect = document.querySelector('.parent-choice-existing-section select[name="parent_id"]');
+          const parentPhoneCheck = document.getElementById('parent-phone-check');
+          const useFoundParent = document.getElementById('use-found-parent');
+          const baseUrl = <?= json_encode(BASE_URL, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+          let foundParent = null;
+          let phoneCheckTimer = null;
+          let phoneCheckRequest = null;
 
           function toggleParentSections() {
             const useNew = newRadio && newRadio.checked;
@@ -488,6 +497,83 @@ STYLE;
             if (newParentPhone) newParentPhone.required = useNew;
           }
 
+          function checkParentPhone() {
+            const telephone = newParentPhone ? newParentPhone.value.trim() : '';
+            foundParent = null;
+            if (useFoundParent) useFoundParent.hidden = true;
+            if (phoneCheckRequest) phoneCheckRequest.abort();
+            if (!telephone || !newParentPhone.checkValidity()) {
+              if (parentPhoneCheck) parentPhoneCheck.textContent = '';
+              return;
+            }
+
+            if (parentPhoneCheck) {
+              parentPhoneCheck.textContent = 'Vérification du numéro…';
+              parentPhoneCheck.className = 'mt-2 small text-muted';
+            }
+            phoneCheckRequest = new AbortController();
+            const query = new URLSearchParams({ telephone: telephone });
+            fetch(baseUrl + '/inscriptions/find-parent-by-phone?' + query.toString(), {
+              credentials: 'same-origin',
+              signal: phoneCheckRequest.signal
+            }).then(function (response) {
+              if (!response.ok) throw new Error('Vérification du numéro impossible.');
+              return response.json();
+            }).then(function (data) {
+              if (!data.parent) {
+                if (parentPhoneCheck) {
+                  parentPhoneCheck.textContent = 'Aucun parent trouvé avec ce numéro dans cette école.';
+                  parentPhoneCheck.className = 'mt-2 small text-muted';
+                }
+                return;
+              }
+
+              foundParent = data.parent;
+              if (parentPhoneCheck) {
+                parentPhoneCheck.textContent = 'Ce numéro est déjà enregistré au nom de '
+                  + foundParent.nom_responsable + ' (' + foundParent.telephone + ').';
+                parentPhoneCheck.className = 'mt-2 small text-warning';
+              }
+              if (useFoundParent) useFoundParent.hidden = false;
+            }).catch(function (error) {
+              if (error.name === 'AbortError') return;
+              if (parentPhoneCheck) {
+                parentPhoneCheck.textContent = error.message
+                  + ' Le numéro sera aussi vérifié lors de l’enregistrement.';
+                parentPhoneCheck.className = 'mt-2 small text-danger';
+              }
+            });
+          }
+
+          if (newParentPhone) {
+            newParentPhone.addEventListener('input', function () {
+              window.clearTimeout(phoneCheckTimer);
+              phoneCheckTimer = window.setTimeout(checkParentPhone, 350);
+            });
+          }
+          if (useFoundParent) {
+            useFoundParent.addEventListener('click', function () {
+              if (!foundParent || !parentSelect) return;
+              let parentOption = Array.from(parentSelect.options).find(function (option) {
+                return option.value === String(foundParent.id);
+              });
+              if (!parentOption) {
+                parentOption = document.createElement('option');
+                parentOption.value = String(foundParent.id);
+                parentOption.textContent = foundParent.nom_responsable + ' - ' + foundParent.telephone;
+                parentSelect.appendChild(parentOption);
+              }
+              parentSelect.value = String(foundParent.id);
+              existingRadio.checked = true;
+              existingRadio.dispatchEvent(new Event('change', { bubbles: true }));
+              if (parentPhoneCheck) {
+                parentPhoneCheck.textContent = 'Parent sélectionné : ' + foundParent.nom_responsable + '.';
+                parentPhoneCheck.className = 'mt-2 small text-success';
+              }
+              useFoundParent.hidden = true;
+            });
+          }
+
           if (existingRadio) {
             existingRadio.addEventListener('change', toggleParentSections);
           }
@@ -496,6 +582,9 @@ STYLE;
           }
 
           toggleParentSections();
+          if (newParentPhone && newParentPhone.value.trim()) {
+            checkParentPhone();
+          }
 
           if (registrationForm) {
             registrationForm.addEventListener('submit', function (event) {

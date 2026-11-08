@@ -208,6 +208,73 @@ class PaymentParentNotifier
         );
     }
 
+    public function sendAccountSetupLink(
+        int $eleveId,
+        int $ecoleId,
+        string $accountType,
+        string $link
+    ): array {
+        if ($eleveId <= 0 || $ecoleId <= 0 || !in_array($accountType, ['student', 'parent'], true)) {
+            return ['sent' => false, 'status' => 'failed', 'message' => 'Élève ou type de compte invalide.'];
+        }
+
+        $stmt = Database::getConnection()->prepare(
+            'SELECT e.id, e.nom, e.postnom, e.prenom, p.telephone AS parent_phone, '
+            . 'ec.nom_etablissement AS school_name, '
+            . 'COALESCE(NULLIF(TRIM(admin_agent.telephone), \'\'), NULLIF(TRIM(ec.telephone_contact), \'\')) AS school_whatsapp_sender '
+            . 'FROM eleves e '
+            . 'LEFT JOIN parents p ON p.id = e.parent_id '
+            . 'LEFT JOIN ecoles ec ON ec.id = :ecole_id '
+            . 'LEFT JOIN utilisateurs admin_user ON admin_user.id = ec.admin_ecole_id '
+            . 'LEFT JOIN agents admin_agent ON admin_agent.id = admin_user.reference_id '
+            . 'WHERE e.id = :eleve_id AND (e.ecole_id = :student_school OR EXISTS ('
+            . 'SELECT 1 FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id '
+            . 'WHERE i.eleve_id = e.id AND c.ecole_id = :class_school)) LIMIT 1'
+        );
+        $stmt->execute([
+            ':ecole_id' => $ecoleId,
+            ':eleve_id' => $eleveId,
+            ':student_school' => $ecoleId,
+            ':class_school' => $ecoleId,
+        ]);
+        $student = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$student) {
+            return ['sent' => false, 'status' => 'failed', 'message' => 'Élève introuvable dans cette école.'];
+        }
+
+        $phone = $this->normalizePhone((string) ($student['parent_phone'] ?? ''));
+        if ($phone === '') {
+            return [
+                'sent' => false,
+                'status' => 'failed',
+                'message' => 'Aucun numéro de téléphone valide n’est associé au parent/tuteur de cet élève.',
+            ];
+        }
+
+        $studentName = trim(implode(' ', array_filter(
+            [$student['nom'] ?? '', $student['postnom'] ?? '', $student['prenom'] ?? ''],
+            static fn ($value): bool => trim((string) $value) !== ''
+        )));
+        $schoolName = trim((string) ($student['school_name'] ?? '')) ?: 'Établissement scolaire';
+        $recipient = $accountType === 'student' ? 'compte élève' : 'compte parent/tuteur';
+        $message = '[' . $schoolName . "]\n"
+            . 'Lien unique de configuration du ' . $recipient . ' de ' . $studentName
+            . ' (valable 24 heures) : ' . $link;
+        if ($accountType === 'student') {
+            $message .= "\nSaisissez le matricule de l’élève sur la page pour choisir son mot de passe.";
+        } else {
+            $message .= "\nAprès avoir choisi votre mot de passe, connectez-vous avec le numéro de téléphone de l’inscription.";
+        }
+
+        return $this->dispatchMessage(
+            $phone,
+            $message,
+            $ecoleId,
+            $schoolName,
+            (string) ($student['school_whatsapp_sender'] ?? '')
+        );
+    }
+
     public function sendSchoolAnnouncement(int $ecoleId, string $title, string $body, array $sectionIds = []): array
     {
         if ($ecoleId <= 0) {

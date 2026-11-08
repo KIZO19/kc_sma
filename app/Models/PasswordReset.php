@@ -96,8 +96,12 @@ class PasswordReset
         return true;
     }
 
-    public static function createToken(int $userId): string
+    public static function createToken(int $userId, int $lifetimeMinutes = self::TOKEN_LIFETIME_MINUTES): string
     {
+        if ($userId <= 0) {
+            throw new \InvalidArgumentException('Le compte utilisateur est invalide.');
+        }
+        $lifetimeMinutes = max(1, min(1440, $lifetimeMinutes));
         $db = Database::getConnection();
         $token = bin2hex(random_bytes(32));
         $tokenHash = hash('sha256', $token);
@@ -110,7 +114,7 @@ class PasswordReset
 
             $insert = $db->prepare(
                 'INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) '
-                . 'VALUES (:user_id, :token_hash, DATE_ADD(NOW(), INTERVAL ' . self::TOKEN_LIFETIME_MINUTES . ' MINUTE))'
+                . 'VALUES (:user_id, :token_hash, DATE_ADD(NOW(), INTERVAL ' . $lifetimeMinutes . ' MINUTE))'
             );
             $insert->execute([':user_id' => $userId, ':token_hash' => $tokenHash]);
             $db->commit();
@@ -122,6 +126,25 @@ class PasswordReset
         }
 
         return $token;
+    }
+
+    public static function findAccountForToken(string $token): ?array
+    {
+        if (!preg_match('/^[a-f0-9]{64}$/', $token)) {
+            return null;
+        }
+
+        $stmt = Database::getConnection()->prepare(
+            'SELECT u.id, u.nom_complet, u.role, u.reference_id, u.ecole_id, u.identifiant, e.matricule '
+            . 'FROM password_reset_tokens t '
+            . 'INNER JOIN utilisateurs u ON u.id = t.user_id '
+            . "LEFT JOIN eleves e ON u.role IN ('eleve_ecole', 'eleve_école') AND e.id = u.reference_id "
+            . 'WHERE t.token_hash = :token_hash AND t.used_at IS NULL AND t.expires_at > NOW() LIMIT 1'
+        );
+        $stmt->execute([':token_hash' => hash('sha256', $token)]);
+        $account = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $account ?: null;
     }
 
     public static function isTokenValid(string $token): bool
@@ -138,7 +161,7 @@ class PasswordReset
         return (bool) $stmt->fetchColumn();
     }
 
-    public static function resetPassword(string $token, string $passwordHash): bool
+    public static function resetPassword(string $token, string $passwordHash, ?string $matricule = null): bool
     {
         if (!preg_match('/^[a-f0-9]{64}$/', $token)) {
             return false;
@@ -148,26 +171,42 @@ class PasswordReset
         $db->beginTransaction();
         try {
             $stmt = $db->prepare(
-                'SELECT user_id FROM password_reset_tokens '
-                . 'WHERE token_hash = :token_hash AND used_at IS NULL AND expires_at > NOW() '
+                'SELECT u.id AS user_id, u.role, e.matricule '
+                . 'FROM password_reset_tokens t '
+                . 'INNER JOIN utilisateurs u ON u.id = t.user_id '
+                . "LEFT JOIN eleves e ON u.role IN ('eleve_ecole', 'eleve_école') AND e.id = u.reference_id "
+                . 'WHERE t.token_hash = :token_hash AND t.used_at IS NULL AND t.expires_at > NOW() '
                 . 'LIMIT 1 FOR UPDATE'
             );
             $stmt->execute([':token_hash' => hash('sha256', $token)]);
-            $userId = $stmt->fetchColumn();
-            if ($userId === false) {
+            $account = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$account) {
                 $db->rollBack();
                 return false;
             }
 
+            if (
+                in_array($account['role'], ['eleve_ecole', 'eleve_école'], true)
+                && (
+                    $matricule === null
+                    || trim($matricule) === ''
+                    || !hash_equals((string) ($account['matricule'] ?? ''), trim($matricule))
+                )
+            ) {
+                $db->rollBack();
+                return false;
+            }
+
+            $userId = (int) $account['user_id'];
             $updateUser = $db->prepare('UPDATE utilisateurs SET mot_de_passe = :password_hash WHERE id = :user_id');
-            $updateUser->execute([':password_hash' => $passwordHash, ':user_id' => (int) $userId]);
+            $updateUser->execute([':password_hash' => $passwordHash, ':user_id' => $userId]);
             if ($updateUser->rowCount() !== 1) {
                 $db->rollBack();
                 return false;
             }
 
             $deleteTokens = $db->prepare('DELETE FROM password_reset_tokens WHERE user_id = :user_id');
-            $deleteTokens->execute([':user_id' => (int) $userId]);
+            $deleteTokens->execute([':user_id' => $userId]);
             $db->commit();
 
             return true;

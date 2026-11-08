@@ -6,6 +6,9 @@ $csrfToken = $csrfToken ?? '';
 $token = $token ?? '';
 $errors = $errors ?? [];
 $message = $message ?? null;
+$isStudentAccount = $isStudentAccount ?? false;
+$studentMatricule = $studentMatricule ?? '';
+$loginUrl = $loginUrl ?? (BASE_URL . '/login');
 ?>
 <head>
   <meta charset="utf-8">
@@ -35,11 +38,17 @@ $message = $message ?? null;
       <?php endforeach; ?>
       <?php if ($message !== null): ?>
         <div class="alert alert-success" role="status"><?= htmlspecialchars($message) ?></div>
-        <a href="<?= BASE_URL ?>/login" class="btn btn-primary w-100">Se connecter</a>
+        <a href="<?= htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8') ?>" class="btn btn-primary w-100">Se connecter</a>
       <?php elseif ($token !== ''): ?>
         <form action="<?= BASE_URL ?>/reset-password" method="post">
           <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
           <input type="hidden" name="token" value="<?= htmlspecialchars($token) ?>">
+          <?php if ($isStudentAccount): ?>
+            <div class="mb-3">
+              <label class="form-label" for="matricule">Matricule de l’élève</label>
+              <input id="matricule" type="text" name="matricule" class="form-control" value="<?= htmlspecialchars($studentMatricule, ENT_QUOTES, 'UTF-8') ?>" autocomplete="username" required>
+            </div>
+          <?php endif; ?>
           <div class="mb-3">
             <label class="form-label" for="mot_de_passe">Nouveau mot de passe</label>
             <input id="mot_de_passe" type="password" name="mot_de_passe" class="form-control" minlength="8" autocomplete="new-password" required>

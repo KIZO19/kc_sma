@@ -78,8 +78,8 @@
       </div>
 
       <?php if (!$hasPendingRequest): ?>
-        <div class="card card-outline card-primary">
-          <div class="card-header"><h2 class="card-title">Demander le renouvellement de l’abonnement</h2></div>
+        <div class="card card-outline card-primary" id="demander-tarif">
+          <div class="card-header"><h2 class="card-title">Renouveler ou changer de tarif</h2></div>
           <?php if (empty($plans)): ?>
             <div class="card-body">
               <div class="alert alert-warning mb-0">Aucun tarif n’est actuellement disponible. Contactez <a href="<?= BASE_URL ?>/contact">KC_SMA</a>.</div>
@@ -88,7 +88,7 @@
             <form method="post" action="<?= BASE_URL ?>/ecoles/submitSubscriptionRequest">
               <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) ($csrfToken ?? ''), ENT_QUOTES, 'UTF-8') ?>">
               <div class="card-body">
-                <p class="text-muted">Choisissez le tarif souhaité et envoyez votre demande à KC_SMA. Votre abonnement ne sera renouvelé qu’après approbation.</p>
+                <p class="text-muted">Choisissez le tarif souhaité et envoyez votre demande à KC_SMA. Le renouvellement ou le changement de tarif sera appliqué après approbation.</p>
                 <div class="mb-3">
                   <label class="form-label" for="renewal-plan">Tarif souhaité</label>
                   <select class="form-select" id="renewal-plan" name="plan_id" required>
@@ -109,7 +109,7 @@
               </div>
               <div class="card-footer text-end">
                 <button type="submit" class="btn btn-primary">
-                  <i class="bi bi-send me-1" aria-hidden="true"></i>Envoyer la demande de renouvellement
+                  <i class="bi bi-send me-1" aria-hidden="true"></i>Envoyer la demande à KC_SMA
                 </button>
               </div>
             </form>
@@ -129,7 +129,7 @@
                   $requestBadge = $requestStatus === 'Approuvee' ? 'success' : ($requestStatus === 'Refusee' ? 'danger' : 'warning');
                 ?>
                 <tr>
-                  <td><?= $request['type_demande'] === 'renouvellement' ? 'Renouvellement' : 'Nouvel abonnement' ?>
+                  <td><?= $request['type_demande'] === 'renouvellement' ? 'Renouvellement / changement de tarif' : 'Nouvel abonnement' ?>
                     <?php if (!empty($request['message'])): ?><div class="small text-muted"><?= nl2br(htmlspecialchars((string) $request['message'], ENT_QUOTES, 'UTF-8')) ?></div><?php endif; ?>
                   </td>
                   <td><?= htmlspecialchars((string) ($request['nom_plan'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>

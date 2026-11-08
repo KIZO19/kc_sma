@@ -321,6 +321,27 @@ class ParentModel
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public static function findByTelephoneAndSchool(string $telephone, int $ecoleId): ?array
+    {
+        $normalizedTelephone = preg_replace('/\D+/', '', $telephone);
+        if ($ecoleId <= 0 || $normalizedTelephone === '') {
+            return null;
+        }
+
+        $stmt = Database::getConnection()->prepare(
+            'SELECT id, nom_responsable, telephone FROM parents WHERE ecole_id = :ecole_id'
+        );
+        $stmt->execute([':ecole_id' => $ecoleId]);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $parent) {
+            $storedTelephone = preg_replace('/\D+/', '', (string) ($parent['telephone'] ?? ''));
+            if ($storedTelephone === $normalizedTelephone) {
+                return $parent;
+            }
+        }
+
+        return null;
+    }
+
     public static function findById(int $id): ?array
     {
         $db = Database::getConnection();
@@ -531,10 +552,13 @@ class ParentModel
             throw new \RuntimeException('Parent ' . $parent['id'] . ' has no ecole_id');
         }
 
-        $identifiant = $parent['email'] ?: $parent['telephone'] ?: 'parent' . $parent['id'] . '@local';
+        $identifiant = trim((string) ($parent['telephone'] ?? ''));
+        if ($identifiant === '') {
+            throw new \RuntimeException('Le parent ne possède aucun numéro de téléphone pour son identifiant.');
+        }
         $password = bin2hex(random_bytes(4));
 
-        return \App\Models\User::findOrCreateForReference([
+        \App\Models\User::findOrCreateForReference([
             'role' => 'parent_ecole',
             'reference_id' => $parent['id'],
             'ecole_id' => $ecoleId,
@@ -542,6 +566,13 @@ class ParentModel
             'mot_de_passe' => $password,
             'nom_complet' => $parent['nom_responsable'] ?? $identifiant,
         ]);
+
+        return \App\Models\User::syncReferenceIdentifier(
+            'parent_ecole',
+            (int) $parent['id'],
+            (int) $ecoleId,
+            $identifiant
+        );
     }
 
     private static function syncInfobipContact(array $parent, string $operation): void

@@ -679,7 +679,7 @@ class Eleve
         $identifiant = $eleve['matricule'] ?: 'eleve' . $eleve['id'] . '@school.local';
         $password = bin2hex(random_bytes(4));
 
-        return \App\Models\User::findOrCreateForReference([
+        \App\Models\User::findOrCreateForReference([
             'role' => 'eleve_ecole',
             'reference_id' => $eleve['id'],
             'ecole_id' => $ecoleId,
@@ -687,5 +687,12 @@ class Eleve
             'mot_de_passe' => $password,
             'nom_complet' => trim(($eleve['prenom'] ?? '') . ' ' . ($eleve['nom'] ?? '')),
         ]);
+
+        return \App\Models\User::syncReferenceIdentifier(
+            'eleve_ecole',
+            (int) $eleve['id'],
+            (int) $ecoleId,
+            $identifiant
+        );
     }
 }

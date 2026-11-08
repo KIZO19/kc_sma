@@ -14,12 +14,21 @@ class AuthController extends Controller
     public function login(): void
     {
         Auth::requireGuest();
+        $identifiant = trim((string) ($_GET['identifiant'] ?? ''));
+        $portal = trim((string) ($_GET['portal'] ?? 'parent'));
+        if (!in_array($portal, ['parent', 'eleve', 'personnel'], true)) {
+            $portal = 'parent';
+        }
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $identifiant = trim($_POST['identifiant'] ?? '');
             $motDePasse = $_POST['mot_de_passe'] ?? '';
+            $portal = trim((string) ($_POST['portal'] ?? ''));
+            if (!in_array($portal, ['parent', 'eleve', 'personnel'], true)) {
+                $portal = 'parent';
+            }
 
-            $user = User::authenticate($identifiant, $motDePasse);
+            $user = User::authenticate($identifiant, $motDePasse, $portal);
             $isPendingUnassignedAgent = $user && ($user['role'] ?? '') === 'agent_ecole' && (($user['statut'] ?? 'Actif') === 'Inactif') && (empty($user['ecole_id']) || (int) $user['ecole_id'] === 0);
 
             if ($user && ($user['statut'] === 'Actif' || $isPendingUnassignedAgent)) {
@@ -47,12 +56,17 @@ class AuthController extends Controller
             $this->view('auth/login', [
                 'error' => $error,
                 'identifiant' => $identifiant,
+                'portal' => $portal,
                 'title' => APP_NAME,
             ]);
             return;
         }
 
-        $this->view('auth/login', ['title' => APP_NAME]);
+        $this->view('auth/login', [
+            'title' => APP_NAME,
+            'identifiant' => $identifiant,
+            'portal' => $portal,
+        ]);
     }
 
     public function register(): void
@@ -233,8 +247,13 @@ class AuthController extends Controller
         header('Referrer-Policy: no-referrer');
         $csrfToken = $this->getPasswordResetCsrfToken();
         $token = trim((string) ($_POST['token'] ?? $_GET['token'] ?? ''));
+        $tokenAccount = $token !== '' ? PasswordReset::findAccountForToken($token) : null;
         $errors = [];
         $message = null;
+        $loginUrl = null;
+        $studentMatricule = '';
+        $isStudentAccount = $tokenAccount !== null
+            && in_array($tokenAccount['role'], ['eleve_ecole', 'eleve_école'], true);
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $postedToken = (string) ($_POST['csrf_token'] ?? '');
@@ -250,16 +269,38 @@ class AuthController extends Controller
                 if ($password !== $passwordConfirm) {
                     $errors[] = 'Les mots de passe ne correspondent pas.';
                 }
-                if (!$errors && !PasswordReset::resetPassword($token, password_hash($password, PASSWORD_DEFAULT))) {
+                if ($isStudentAccount) {
+                    $studentMatricule = trim((string) ($_POST['matricule'] ?? ''));
+                    if ($studentMatricule === '') {
+                        $errors[] = 'Le matricule de l’élève est requis.';
+                    } elseif (!hash_equals((string) ($tokenAccount['matricule'] ?? ''), $studentMatricule)) {
+                        $errors[] = 'Le matricule ne correspond pas à ce compte.';
+                    }
+                }
+                if (
+                    !$errors
+                    && !PasswordReset::resetPassword(
+                        $token,
+                        password_hash($password, PASSWORD_DEFAULT),
+                        $isStudentAccount ? $studentMatricule : null
+                    )
+                ) {
                     $errors[] = 'Ce lien est invalide ou a expiré. Demandez un nouveau lien de réinitialisation.';
                     $token = '';
                 }
                 if (!$errors) {
                     $message = 'Votre mot de passe a été modifié. Vous pouvez maintenant vous connecter.';
+                    $loginPortal = $isStudentAccount
+                        ? 'eleve'
+                        : (in_array($tokenAccount['role'] ?? '', ['parent_ecole', 'parent_école'], true)
+                            ? 'parent'
+                            : 'personnel');
+                    $loginUrl = BASE_URL . '/login?portal=' . $loginPortal
+                        . '&identifiant=' . rawurlencode((string) $tokenAccount['identifiant']);
                     $token = '';
                 }
             }
-        } elseif (!PasswordReset::isTokenValid($token)) {
+        } elseif ($tokenAccount === null) {
             $errors[] = 'Ce lien est invalide ou a expiré. Demandez un nouveau lien de réinitialisation.';
             $token = '';
         }
@@ -270,6 +311,9 @@ class AuthController extends Controller
             'token' => $token,
             'errors' => $errors,
             'message' => $message,
+            'isStudentAccount' => $isStudentAccount,
+            'studentMatricule' => $studentMatricule,
+            'loginUrl' => $loginUrl,
         ]);
     }
 

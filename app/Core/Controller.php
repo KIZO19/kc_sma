@@ -249,7 +249,7 @@ class Controller
                 ['name' => 'Exonérations', 'path' => '/exonerations', 'icon' => 'bi-shield-minus'],
                 ['name' => 'Notes', 'path' => '/notes', 'icon' => 'bi-pencil-square'],
                 ['name' => 'Présences', 'path' => '/presences', 'icon' => 'bi-calendar-check'],
-                ['name' => 'Générer mot de passe', 'path' => '/ecoles/generatePassword', 'icon' => 'bi-key'],
+                ['name' => 'Gérer les mots de passe', 'path' => '/inscriptions/managePasswords', 'icon' => 'bi-key'],
                 ['name' => 'Rapports', 'path' => '/rapports', 'icon' => 'bi-file-earmark-bar-graph'],
             ],
             'agent_ecole' => [

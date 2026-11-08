@@ -8,17 +8,33 @@ use App\Entities\RoleFactory;
 
 class User
 {
-    public static function authenticate(string $identifiant, string $motDePasse): ?array
+    public static function authenticate(string $identifiant, string $motDePasse, string $portal = 'general'): ?array
     {
         self::cleanupExpiredPendingAccounts();
 
-        $user = self::findByIdentifiant($identifiant);
+        $user = match ($portal) {
+            'parent' => self::findByParentTelephone($identifiant)
+                ?? self::findSuperAdminByIdentifiant($identifiant),
+            'eleve' => self::findByEleveMatricule($identifiant)
+                ?? self::findSuperAdminByIdentifiant($identifiant),
+            'personnel' => self::findByIdentifiant($identifiant),
+            default => null,
+        };
 
-        if (!$user) {
-            $user = self::findByEleveMatricule($identifiant);
+        if ($portal === 'general') {
+            $user = self::findByIdentifiant($identifiant)
+                ?? self::findByEleveMatricule($identifiant)
+                ?? self::findByParentTelephone($identifiant);
         }
 
         if (!$user) {
+            return null;
+        }
+
+        if (
+            $portal === 'personnel'
+            && in_array($user['role'] ?? '', ['parent_ecole', 'parent_école', 'eleve_ecole', 'eleve_école'], true)
+        ) {
             return null;
         }
 
@@ -27,6 +43,13 @@ class User
         }
 
         return $user;
+    }
+
+    private static function findSuperAdminByIdentifiant(string $identifiant): ?array
+    {
+        $user = self::findByIdentifiant($identifiant);
+
+        return ($user['role'] ?? '') === 'super_admin' ? $user : null;
     }
 
     public static function existsByIdentifiant(string $identifiant): bool
@@ -40,12 +63,38 @@ class User
         $stmt = $db->prepare(
             'SELECT u.* FROM utilisateurs u '
             . 'INNER JOIN eleves e ON u.reference_id = e.id '
-            . 'WHERE u.role = :role AND e.matricule = :matricule LIMIT 1'
+            . 'WHERE u.role IN (:role, :role_alias) AND e.matricule = :matricule LIMIT 1'
         );
-        $stmt->execute([':role' => 'eleve_ecole', ':matricule' => $matricule]);
+        $stmt->execute([
+            ':role' => 'eleve_ecole',
+            ':role_alias' => 'eleve_école',
+            ':matricule' => trim($matricule),
+        ]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         return $user ?: null;
+    }
+
+    public static function findByParentTelephone(string $telephone): ?array
+    {
+        $telephone = trim($telephone);
+        if ($telephone === '') {
+            return null;
+        }
+
+        $stmt = Database::getConnection()->prepare(
+            'SELECT u.* FROM utilisateurs u '
+            . 'INNER JOIN parents p ON u.reference_id = p.id AND u.ecole_id = p.ecole_id '
+            . 'WHERE u.role IN (:role, :role_alias) AND p.telephone = :telephone LIMIT 2'
+        );
+        $stmt->execute([
+            ':role' => 'parent_ecole',
+            ':role_alias' => 'parent_école',
+            ':telephone' => $telephone,
+        ]);
+        $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        return count($users) === 1 ? $users[0] : null;
     }
 
     public static function findByIdentifiant(string $identifiant): ?array
@@ -196,8 +245,15 @@ class User
     public static function findByReference(string $role, int $referenceId, ?int $ecoleId = null): ?array
     {
         $db = Database::getConnection();
-        $sql = 'SELECT * FROM utilisateurs WHERE role = :role AND reference_id = :reference_id';
-        $params = [':role' => $role, ':reference_id' => $referenceId];
+        $roles = self::getReferenceRoleAliases($role);
+        $rolePlaceholders = [];
+        $params = [':reference_id' => $referenceId];
+        foreach ($roles as $index => $roleValue) {
+            $placeholder = ':role_' . $index;
+            $rolePlaceholders[] = $placeholder;
+            $params[$placeholder] = $roleValue;
+        }
+        $sql = 'SELECT * FROM utilisateurs WHERE role IN (' . implode(', ', $rolePlaceholders) . ') AND reference_id = :reference_id';
 
         if ($ecoleId !== null) {
             $sql .= ' AND ecole_id = :ecole_id';
@@ -210,6 +266,15 @@ class User
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         return $user ?: null;
+    }
+
+    private static function getReferenceRoleAliases(string $role): array
+    {
+        return match ($role) {
+            'eleve_ecole', 'eleve_école' => ['eleve_ecole', 'eleve_école'],
+            'parent_ecole', 'parent_école' => ['parent_ecole', 'parent_école'],
+            default => [$role],
+        };
     }
 
     public static function createForReference(array $data): array
@@ -295,7 +360,7 @@ class User
 
         $existing = self::findByReference($role, $referenceId, $ecoleId);
         if ($existing) {
-            if ($ecoleId !== null && !empty($existing['ecole_id']) && (int) $existing['ecole_id'] !== $ecoleId) {
+            if ($ecoleId !== null && (int) ($existing['ecole_id'] ?? 0) !== $ecoleId) {
                 self::assertAccountCapacity($role, $ecoleId, $referenceId);
                 $db = Database::getConnection();
                 $stmt = $db->prepare('UPDATE utilisateurs SET ecole_id = :ecole_id WHERE id = :id');
@@ -317,7 +382,74 @@ class User
             throw new \InvalidArgumentException('ecole_id obligatoire pour créer un compte utilisateur lié à une école.');
         }
 
+        $identifier = trim((string) ($data['identifiant'] ?? ''));
+        if ($identifier !== '' && self::findByIdentifiant($identifier) !== null) {
+            $identifierLabel = in_array($role, ['eleve_ecole', 'eleve_école'], true)
+                ? 'Ce matricule'
+                : (in_array($role, ['parent_ecole', 'parent_école'], true)
+                    ? 'Ce numéro de téléphone'
+                    : 'Cet identifiant');
+            throw new \DomainException(
+                $identifierLabel
+                . ' est déjà attribué à un autre compte. Aucun mot de passe n’a été modifié. '
+                . 'Faites vérifier ce conflit d’identifiant par l’administrateur avant de renvoyer le lien.'
+            );
+        }
+
         return self::createForReference($data);
+    }
+
+    public static function syncReferenceIdentifier(
+        string $role,
+        int $referenceId,
+        int $schoolId,
+        string $identifier
+    ): array {
+        $identifier = trim($identifier);
+        if ($referenceId <= 0 || $schoolId <= 0 || $identifier === '') {
+            throw new \InvalidArgumentException('Les informations du compte lié sont incomplètes.');
+        }
+
+        $account = self::findByReference($role, $referenceId, $schoolId);
+        if (!$account) {
+            throw new \RuntimeException('Le compte utilisateur lié est introuvable.');
+        }
+
+        $db = Database::getConnection();
+        $conflict = $db->prepare(
+            'SELECT id FROM utilisateurs WHERE identifiant = :identifiant AND id <> :user_id LIMIT 1'
+        );
+        $conflict->execute([
+            ':identifiant' => $identifier,
+            ':user_id' => (int) $account['id'],
+        ]);
+        if ($conflict->fetchColumn() !== false) {
+            throw new \DomainException('Cet identifiant est déjà attribué à un autre compte.');
+        }
+
+        if ((string) $account['identifiant'] !== $identifier) {
+            $roles = self::getReferenceRoleAliases($role);
+            $rolePlaceholders = [];
+            $params = [
+                ':identifiant' => $identifier,
+                ':user_id' => (int) $account['id'],
+                ':reference_id' => $referenceId,
+                ':ecole_id' => $schoolId,
+            ];
+            foreach ($roles as $index => $roleValue) {
+                $placeholder = ':role_' . $index;
+                $rolePlaceholders[] = $placeholder;
+                $params[$placeholder] = $roleValue;
+            }
+            $update = $db->prepare(
+                'UPDATE utilisateurs SET identifiant = :identifiant '
+                . 'WHERE id = :user_id AND role IN (' . implode(', ', $rolePlaceholders) . ') '
+                . 'AND reference_id = :reference_id AND ecole_id = :ecole_id'
+            );
+            $update->execute($params);
+        }
+
+        return self::findById((int) $account['id']) ?: $account;
     }
 
     public static function updateProfile(int $id, array $data): bool

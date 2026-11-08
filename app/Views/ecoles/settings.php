@@ -1,8 +1,18 @@
 <?php require __DIR__ . '/../partials/app_header.php'; ?>
+<?php
+  $schoolProfile = array_merge(
+      $school,
+      is_array($schoolFormValues ?? null) ? $schoolFormValues : []
+  );
+  $schoolLogo = (string) ($school['logo_url'] ?? '');
+  if ($schoolLogo !== '' && strpos($schoolLogo, 'http') !== 0) {
+      $schoolLogo = BASE_URL . '/' . ltrim($schoolLogo, '/');
+  }
+?>
 <section class="content-header">
   <div class="container-fluid">
     <h1>Paramètres de l’école</h1>
-    <p class="text-muted mb-0">Gérez les accès, consultez l’abonnement et réglez les fonctionnalités de votre école.</p>
+    <p class="text-muted mb-0">Modifiez les informations de l’école, gérez les accès et consultez l’abonnement.</p>
   </div>
 </section>
 
@@ -21,7 +31,7 @@
           <div class="card-header"><h2 class="card-title">École</h2></div>
           <div class="card-body">
             <div class="text-muted small">Nom de l’établissement</div>
-            <div class="fw-semibold"><?= htmlspecialchars((string) ($school['nom_etablissement'] ?? ''), ENT_QUOTES, 'UTF-8') ?></div>
+            <div class="fw-semibold"><?= htmlspecialchars((string) ($schoolProfile['nom_etablissement'] ?? ''), ENT_QUOTES, 'UTF-8') ?></div>
             <a class="btn btn-outline-primary btn-sm mt-3" href="<?= BASE_URL ?>/ecoles">
               <i class="bi bi-building me-1" aria-hidden="true"></i>Voir la fiche de l’école
             </a>
@@ -60,10 +70,67 @@
             <?php else: ?>
               <p class="text-muted">Aucun abonnement enregistré.</p>
             <?php endif; ?>
-            <a class="btn btn-outline-primary btn-sm mt-2" href="<?= BASE_URL ?>/ecoles/subscriptions">
-              <i class="bi bi-card-list me-1" aria-hidden="true"></i>Consulter l’historique
+            <a class="btn btn-outline-primary btn-sm mt-2" href="<?= BASE_URL ?>/ecoles/subscriptions#demander-tarif">
+              <i class="bi bi-arrow-left-right me-1" aria-hidden="true"></i>Consulter / changer de tarif
             </a>
           </div>
+        </div>
+      </div>
+
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header"><h2 class="card-title">Informations de l’école</h2></div>
+          <form method="post" enctype="multipart/form-data" action="<?= BASE_URL ?>/ecoles/updateSchoolProfile">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) ($csrfToken ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+            <div class="card-body">
+              <div class="row g-3">
+                <div class="col-md-8">
+                  <div class="mb-3">
+                    <label class="form-label" for="school-name">Nom de l’établissement</label>
+                    <input class="form-control" id="school-name" name="nom_etablissement" type="text"
+                           maxlength="150" required
+                           value="<?= htmlspecialchars((string) ($schoolProfile['nom_etablissement'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                  </div>
+                  <div class="row g-3">
+                    <div class="col-md-6">
+                      <label class="form-label" for="school-email">E-mail officiel</label>
+                      <input class="form-control" id="school-email" name="email_officiel" type="email"
+                             maxlength="100"
+                             value="<?= htmlspecialchars((string) ($schoolProfile['email_officiel'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label" for="school-phone">Téléphone</label>
+                      <input class="form-control" id="school-phone" name="telephone_contact" type="tel"
+                             maxlength="20"
+                             value="<?= htmlspecialchars((string) ($schoolProfile['telephone_contact'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                    </div>
+                  </div>
+                  <div class="mt-3">
+                    <label class="form-label" for="school-address">Adresse</label>
+                    <textarea class="form-control" id="school-address" name="adresse" rows="3"><?= htmlspecialchars((string) ($schoolProfile['adresse'] ?? ''), ENT_QUOTES, 'UTF-8') ?></textarea>
+                  </div>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label" for="school-logo">Logo de l’école (PNG ou JPEG, 250 KB maximum)</label>
+                  <?php if ($schoolLogo !== ''): ?>
+                    <div class="mb-3">
+                      <img src="<?= htmlspecialchars($schoolLogo, ENT_QUOTES, 'UTF-8') ?>"
+                           alt="Logo actuel de l’école" class="img-thumbnail"
+                           style="width: 120px; height: 120px; object-fit: contain;">
+                    </div>
+                  <?php endif; ?>
+                  <input class="form-control" id="school-logo" name="logo" type="file"
+                         accept="image/png,image/jpeg">
+                  <div class="form-text">Laissez ce champ vide pour conserver le logo actuel.</div>
+                </div>
+              </div>
+            </div>
+            <div class="card-footer text-end">
+              <button type="submit" class="btn btn-primary">
+                <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Enregistrer les informations
+              </button>
+            </div>
+          </form>
         </div>
       </div>
 

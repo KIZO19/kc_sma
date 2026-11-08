@@ -178,6 +178,12 @@ class ProfileController extends Controller
             $mime = mime_content_type($tmp);
             if (isset($allowed[$mime])) {
                 $ext = $allowed[$mime];
+                $avatarVersion = hash_file('sha256', $tmp);
+                if ($avatarVersion === false) {
+                    $_SESSION['profile_errors'] = ['La photo n’a pas pu être vérifiée avant son enregistrement.'];
+                    $this->redirect('/profile');
+                }
+
                 $projectRoot = dirname(__DIR__, 2);
                 $targetDir = $projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'avatars';
                 if (!is_dir($targetDir) && !mkdir($targetDir, 0755, true) && !is_dir($targetDir)) {
@@ -190,7 +196,7 @@ class ProfileController extends Controller
                     $this->redirect('/profile');
                 }
 
-                $updateData['avatar'] = '/uploads/avatars/' . $id . '.' . $ext;
+                $updateData['avatar'] = '/uploads/avatars/' . $id . '.' . $ext . '?v=' . $avatarVersion;
             }
         }
 
@@ -200,9 +206,8 @@ class ProfileController extends Controller
         }
 
         if (isset($updateData['avatar'])) {
-            $avatarExtension = pathinfo($updateData['avatar'], PATHINFO_EXTENSION);
             foreach (['jpg', 'png'] as $otherExtension) {
-                if ($otherExtension === $avatarExtension) {
+                if ($otherExtension === $ext) {
                     continue;
                 }
                 $otherPath = $targetDir . DIRECTORY_SEPARATOR . $id . '.' . $otherExtension;
