@@ -22,6 +22,7 @@ $csrfToken = $csrfToken ?? '';
     <div class="row mb-2">
       <div class="col-sm-6">
         <h1>Comptes des agents de l’école</h1>
+        <p class="text-muted mb-0">Les enseignants et les fonctions administratives liés à une fiche agent sont inclus.</p>
       </div>
       <div class="col-sm-6">
         <ol class="breadcrumb float-sm-end">
@@ -36,7 +37,7 @@ $csrfToken = $csrfToken ?? '';
 <section class="content">
   <div class="container-fluid">
     <?php if (empty($agents)): ?>
-      <div class="alert alert-info">Aucun agent trouvé pour cette école.</div>
+      <div class="alert alert-info">Aucun enseignant, membre du personnel administratif ou agent trouvé pour cette école.</div>
     <?php else: ?>
       <div class="card">
         <div class="card-header">
@@ -48,6 +49,7 @@ $csrfToken = $csrfToken ?? '';
               <tr>
                 <th>#</th>
                 <th>Nom</th>
+                <th>Fonction</th>
                 <th>Téléphone</th>
                 <th>Email</th>
                 <th>Compte de connexion</th>
@@ -59,6 +61,7 @@ $csrfToken = $csrfToken ?? '';
                 <tr>
                   <td><?= (int) $agent['id'] ?></td>
                   <td><?= htmlspecialchars(\App\Core\PersonName::format($agent)) ?></td>
+                  <td><?= htmlspecialchars((string) ($agent['fonction'] ?? 'Agent'), ENT_QUOTES, 'UTF-8') ?></td>
                   <td><?= htmlspecialchars($agent['telephone'] ?? '') ?></td>
                   <td><?= htmlspecialchars($agent['email'] ?? '') ?></td>
                   <td>

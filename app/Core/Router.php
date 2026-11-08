@@ -132,6 +132,7 @@ class Router
         if ((Auth::user()['role'] ?? '') === 'enseignant_école') {
             $teacherRoutes = [
                 'App\\Controllers\\DashboardController' => ['index', 'presence'],
+                'App\\Controllers\\AssistantController' => ['reply'],
                 'App\\Controllers\\PresencesController' => ['index'],
                 'App\\Controllers\\NotesController' => ['index'],
                 'App\\Controllers\\ElevesController' => ['index', 'show'],

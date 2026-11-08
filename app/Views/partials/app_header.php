@@ -24,6 +24,9 @@
   if (!empty($user['id']) && empty($_SESSION['push_notifications_csrf'])) {
       $_SESSION['push_notifications_csrf'] = bin2hex(random_bytes(32));
   }
+  if (AI_CHAT_ENABLED && !empty($user['id']) && empty($_SESSION['ai_chat_csrf'])) {
+      $_SESSION['ai_chat_csrf'] = bin2hex(random_bytes(32));
+  }
   $faviconUrl = BASE_URL . '/assets/kc-logo.svg';
   $faviconMime = 'image/svg+xml';
   $schoolForHeader = null;
@@ -55,6 +58,9 @@
   <link rel="stylesheet" href="<?= BASE_URL ?>/assets/adminlte.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css" crossorigin="anonymous">
   <link rel="stylesheet" href="<?= BASE_URL ?>/assets/app-datagrid.css">
+  <?php if (AI_CHAT_ENABLED && !empty($user['id'])): ?>
+  <link rel="stylesheet" href="<?= BASE_URL ?>/assets/ai-chat.css">
+  <?php endif; ?>
   <?= $pageStyles ?? '' ?>
   <link rel="stylesheet" href="<?= BASE_URL ?>/assets/responsive.css">
   <style>

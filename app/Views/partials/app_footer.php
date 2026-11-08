@@ -24,6 +24,41 @@
       </button>
     </div>
   </footer>
+  <?php if (AI_CHAT_ENABLED && !empty($user['id'])): ?>
+  <div class="ai-chat" data-endpoint="<?= htmlspecialchars(BASE_URL . '/assistant/reply', ENT_QUOTES, 'UTF-8') ?>" data-csrf-token="<?= htmlspecialchars((string) ($_SESSION['ai_chat_csrf'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+    <section class="ai-chat-panel" id="aiChatPanel" aria-labelledby="aiChatTitle" hidden>
+      <header class="ai-chat-header">
+        <div>
+          <h2 id="aiChatTitle">Assistant KC_SMA</h2>
+          <p>Posez vos questions</p>
+        </div>
+        <div class="ai-chat-header-actions">
+          <button type="button" class="ai-chat-icon-button" id="aiChatReset" aria-label="Nouvelle conversation" title="Nouvelle conversation">
+            <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="ai-chat-icon-button" id="aiChatClose" aria-label="Fermer le chat">
+            <i class="bi bi-x-lg" aria-hidden="true"></i>
+          </button>
+        </div>
+      </header>
+      <div class="ai-chat-messages" id="aiChatMessages" role="log" aria-live="polite" aria-relevant="additions">
+        <div class="ai-chat-message ai-chat-message-assistant">Bonjour ! Je peux vous aider avec des questions générales sur KC_SMA et son utilisation. Que souhaitez-vous savoir ?</div>
+      </div>
+      <p class="ai-chat-disclaimer">Vos messages sont transmis au fournisseur IA. N’envoyez pas d’informations personnelles ou confidentielles.</p>
+      <form class="ai-chat-form" id="aiChatForm">
+        <label class="visually-hidden" for="aiChatInput">Votre question</label>
+        <textarea id="aiChatInput" name="message" rows="1" maxlength="2000" placeholder="Écrivez votre question…" required></textarea>
+        <button type="submit" id="aiChatSend" aria-label="Envoyer la question">
+          <i class="bi bi-send-fill" aria-hidden="true"></i>
+        </button>
+      </form>
+    </section>
+    <button type="button" class="ai-chat-launcher" id="aiChatToggle" aria-expanded="false" aria-controls="aiChatPanel" aria-label="Ouvrir l’assistant KC_SMA">
+      <i class="bi bi-chat-dots-fill" aria-hidden="true"></i>
+      <span>Assistant IA</span>
+    </button>
+  </div>
+  <?php endif; ?>
   <?php if (!empty($user['id']) && !empty($user['ecole_id']) && !empty($_SESSION['location_consent_nonce'])): ?>
   <div class="modal fade" id="locationConsentModal" tabindex="-1" aria-labelledby="locationConsentTitle" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
@@ -97,6 +132,10 @@
   <script src="<?= BASE_URL ?>/assets/adminlte.min.js"></script>
   <script src="<?= BASE_URL ?>/assets/app-datagrid.js"></script>
   <script src="<?= BASE_URL ?>/assets/live-notifications.js" defer></script>
+  <script src="<?= BASE_URL ?>/assets/floating-buttons.js" defer></script>
+  <?php if (AI_CHAT_ENABLED && !empty($user['id'])): ?>
+  <script src="<?= BASE_URL ?>/assets/ai-chat.js" defer></script>
+  <?php endif; ?>
   <script>
     const themeCookieName = 'adminkc_theme_mode';
 

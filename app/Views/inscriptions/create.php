@@ -17,12 +17,92 @@ $pageStyles = <<<STYLE
   .registration-card .card-header { padding: 1.25rem 1.5rem; }
   .registration-card .card-body { padding: 1.5rem; }
   .registration-intro { color: #64748b; max-width: 58rem; }
+  .registration-wizard {
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid #e2e8f0;
+    border-radius: .875rem;
+    background: linear-gradient(135deg, #f8fafc, #fff);
+  }
+  .registration-wizard-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  .registration-wizard-top strong { color: #1f2937; }
+  .registration-wizard-top span { color: #64748b; font-size: .875rem; }
+  .registration-progress {
+    height: .4rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #e8edf2;
+  }
+  .registration-progress-bar {
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #198754, #20a36a);
+    transition: width .25s ease;
+  }
+  .registration-stepper {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: .5rem;
+    margin-top: 1rem;
+  }
+  .registration-step-button {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    min-width: 0;
+    padding: .5rem .35rem;
+    border: 0;
+    border-radius: .65rem;
+    color: #64748b;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+  }
+  .registration-step-button:hover { background: #edf4f1; }
+  .registration-step-number {
+    display: inline-flex;
+    flex: 0 0 1.8rem;
+    align-items: center;
+    justify-content: center;
+    width: 1.8rem;
+    height: 1.8rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 50%;
+    background: #fff;
+    font-size: .78rem;
+    font-weight: 700;
+  }
+  .registration-step-label {
+    overflow: hidden;
+    font-size: .75rem;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .registration-step-button[aria-current="step"] { color: #146c43; background: #eaf5ef; }
+  .registration-step-button[aria-current="step"] .registration-step-number,
+  .registration-step-button.is-complete .registration-step-number {
+    border-color: #198754;
+    color: #fff;
+    background: #198754;
+  }
+  .registration-section[hidden],
+  .registration-wizard-controls[hidden],
+  .registration-card .form-actions[hidden] { display: none !important; }
   .registration-section {
     padding: 1.25rem;
     margin-bottom: 1.25rem;
     border: 1px solid #e2e8f0;
     border-radius: .875rem;
     background: #fff;
+    scroll-margin-top: 6rem;
   }
   .registration-section-heading {
     display: flex;
@@ -57,6 +137,26 @@ $pageStyles = <<<STYLE
     border-top: 1px solid #e2e8f0;
     background: #fff;
   }
+  .registration-wizard-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding-top: 1rem;
+    margin-top: .5rem;
+    border-top: 1px solid #e2e8f0;
+  }
+  .registration-wizard-controls .btn { min-width: 8rem; }
+  [data-theme="dark"] .registration-wizard { border-color: rgba(255,255,255,.12); background: #1e293b; }
+  [data-theme="dark"] .registration-wizard-top strong { color: #e2e8f0; }
+  [data-theme="dark"] .registration-wizard-top span { color: #94a3b8; }
+  [data-theme="dark"] .registration-progress { background: #334155; }
+  [data-theme="dark"] .registration-step-button { color: #94a3b8; }
+  [data-theme="dark"] .registration-step-button:hover,
+  [data-theme="dark"] .registration-step-button[aria-current="step"] { background: rgba(25,135,84,.18); }
+  [data-theme="dark"] .registration-step-button[aria-current="step"] { color: #86efac; }
+  [data-theme="dark"] .registration-step-number { border-color: #475569; color: #cbd5e1; background: #1e293b; }
+  [data-theme="dark"] .registration-wizard-controls { border-color: rgba(255,255,255,.12); }
   [data-theme="dark"] .registration-section { background: rgba(255,255,255,.03); border-color: rgba(255,255,255,.12); }
   [data-theme="dark"] .registration-section-heading { border-color: rgba(255,255,255,.1); }
   [data-theme="dark"] .registration-section-heading p { color: #adb5bd; }
@@ -66,9 +166,14 @@ $pageStyles = <<<STYLE
     .content-header .breadcrumb { float: none !important; flex-wrap: wrap; margin-top: .75rem; }
     .registration-card .card-header { padding: 1rem; }
     .registration-card .card-body { padding: .75rem; }
+    .registration-wizard { padding: 1rem .75rem; }
+    .registration-stepper { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .25rem; }
+    .registration-step-button { justify-content: center; padding: .4rem .2rem; }
+    .registration-step-label { display: none; }
     .registration-section { padding: 1rem .75rem; }
     .registration-card .form-actions { flex-direction: column-reverse; }
     .registration-card .form-actions .btn { width: 100%; }
+    .registration-wizard-controls .btn { min-width: 0; }
     .registration-card .input-group { flex-wrap: nowrap; }
     .registration-card .input-group .btn { white-space: nowrap; }
   }
@@ -127,7 +232,31 @@ STYLE;
                 </div>
                 <div class="card-body">
                   <form id="registration-form" method="post" action="<?= BASE_URL ?>/inscriptions/submit" autocomplete="off" novalidate enctype="multipart/form-data">
-                    <section class="registration-section" aria-labelledby="registration-identity-heading">
+                    <div class="registration-wizard" id="registration-wizard" hidden>
+                      <div class="registration-wizard-top">
+                        <strong>Progression du dossier</strong>
+                        <span id="registration-step-status" aria-live="polite">Étape 1 sur 6</span>
+                      </div>
+                      <div class="registration-progress" role="progressbar" aria-label="Progression du formulaire" aria-valuemin="1" aria-valuemax="6" aria-valuenow="1">
+                        <div class="registration-progress-bar" id="registration-progress-bar"></div>
+                      </div>
+                      <nav class="registration-stepper" aria-label="Étapes de l’inscription">
+                        <?php foreach ([
+                            'Identité',
+                            'Affectation',
+                            'Objets',
+                            'Parent',
+                            'Famille',
+                            'Coordonnées',
+                        ] as $stepIndex => $stepLabel): ?>
+                          <button type="button" class="registration-step-button" data-registration-go-to="<?= $stepIndex ?>" aria-label="Étape <?= $stepIndex + 1 ?> : <?= htmlspecialchars($stepLabel, ENT_QUOTES, 'UTF-8') ?>">
+                            <span class="registration-step-number"><?= $stepIndex + 1 ?></span>
+                            <span class="registration-step-label"><?= htmlspecialchars($stepLabel, ENT_QUOTES, 'UTF-8') ?></span>
+                          </button>
+                        <?php endforeach; ?>
+                      </nav>
+                    </div>
+                    <section class="registration-section" data-registration-step="0" aria-labelledby="registration-identity-heading">
                       <div class="registration-section-heading">
                         <span class="registration-section-step">1</span>
                         <div>
@@ -177,7 +306,7 @@ STYLE;
                     </div>
                     </section>
 
-                    <section class="registration-section" aria-labelledby="registration-school-heading">
+                    <section class="registration-section" data-registration-step="1" aria-labelledby="registration-school-heading">
                       <div class="registration-section-heading">
                         <span class="registration-section-step">2</span>
                         <div>
@@ -208,28 +337,32 @@ STYLE;
                           </select>
                         </div>
                       </div>
-                      <label class="form-label">Classe</label>
-                      <select id="registration-classe-select" name="classe_id" class="form-select" required disabled>
-                        <option value="">Sélectionnez une classe</option>
-                        <?php if (!empty($classes)): ?>
-                          <?php foreach ($classes as $classe): ?>
-                            <option value="<?= (int) $classe['id'] ?>" data-section-id="<?= (int) ($classe['section_id'] ?? 0) ?>" data-option-id="<?= (int) ($classe['option_id'] ?? 0) ?>" <?= ((int) ($oldInput['classe_id'] ?? 0) === (int) $classe['id']) ? 'selected' : '' ?>>
-                              <?= htmlspecialchars($classe['nom_classe']) ?>
-                              <?php if (!empty($classe['nom_section'])): ?>
-                                - <?= htmlspecialchars($classe['nom_section']) ?>
-                              <?php endif; ?>
-                              <?php if (!empty($classe['nom_option'])): ?>
-                                <?= htmlspecialchars($classe['nom_option']) ? ' (' . htmlspecialchars($classe['nom_option']) . ')' : '' ?>
-                              <?php endif; ?>
-                            </option>
-                          <?php endforeach; ?>
-                        <?php endif; ?>
-                      </select>
-                      <small id="registration-class-help" class="form-text text-muted">Sélectionnez d’abord une section et une option.</small>
+                      <div class="row">
+                        <div class="col-md-6 mb-3">
+                          <label class="form-label" for="registration-classe-select">Classe <span class="text-danger">*</span></label>
+                          <select id="registration-classe-select" name="classe_id" class="form-select" required disabled>
+                            <option value="">Sélectionnez une classe</option>
+                            <?php if (!empty($classes)): ?>
+                              <?php foreach ($classes as $classe): ?>
+                                <option value="<?= (int) $classe['id'] ?>" data-section-id="<?= (int) ($classe['section_id'] ?? 0) ?>" data-option-id="<?= (int) ($classe['option_id'] ?? 0) ?>" <?= ((int) ($oldInput['classe_id'] ?? 0) === (int) $classe['id']) ? 'selected' : '' ?>>
+                                  <?= htmlspecialchars($classe['nom_classe']) ?>
+                                  <?php if (!empty($classe['nom_section'])): ?>
+                                    - <?= htmlspecialchars($classe['nom_section']) ?>
+                                  <?php endif; ?>
+                                  <?php if (!empty($classe['nom_option'])): ?>
+                                    <?= htmlspecialchars($classe['nom_option']) ? ' (' . htmlspecialchars($classe['nom_option']) . ')' : '' ?>
+                                  <?php endif; ?>
+                                </option>
+                              <?php endforeach; ?>
+                            <?php endif; ?>
+                          </select>
+                          <small id="registration-class-help" class="form-text text-muted" role="status" aria-live="polite">Sélectionnez d’abord une section et une option.</small>
+                        </div>
+                      </div>
                     </div>
                     </section>
 
-                    <section class="registration-section" aria-labelledby="registration-items-heading">
+                    <section class="registration-section" data-registration-step="2" aria-labelledby="registration-items-heading">
                       <div class="registration-section-heading">
                         <span class="registration-section-step">3</span>
                         <div>
@@ -254,7 +387,7 @@ STYLE;
                       <?php endif; ?>
                     </section>
 
-                    <section class="registration-section" aria-labelledby="registration-parent-heading">
+                    <section class="registration-section" data-registration-step="3" aria-labelledby="registration-parent-heading">
                       <div class="registration-section-heading">
                         <span class="registration-section-step">4</span>
                         <div>
@@ -314,7 +447,7 @@ STYLE;
                     </div>
                     </section>
 
-                    <section class="registration-section" aria-labelledby="registration-family-heading">
+                    <section class="registration-section" data-registration-step="4" aria-labelledby="registration-family-heading">
                       <div class="registration-section-heading">
                         <span class="registration-section-step">5</span>
                         <div>
@@ -355,7 +488,7 @@ STYLE;
                     <div id="origin-location-error" class="alert alert-danger d-none" role="alert"></div>
                     </section>
 
-                    <section class="registration-section" aria-labelledby="registration-contact-heading">
+                    <section class="registration-section" data-registration-step="5" aria-labelledby="registration-contact-heading">
                       <div class="registration-section-heading">
                         <span class="registration-section-step">6</span>
                         <div>
@@ -363,20 +496,34 @@ STYLE;
                           <p>Lieu de naissance, adresse et photo facultative.</p>
                         </div>
                       </div>
-                    <div class="mb-3">
-                      <label class="form-label" for="birthplace-input">Lieu de naissance</label>
-                      <input id="birthplace-input" type="text" name="lieu_naissance" class="form-control" value="<?= htmlspecialchars($oldInput['lieu_naissance'] ?? '') ?>">
-                    </div>
-                    <div class="mb-3">
-                      <label class="form-label" for="student-address">Adresse</label>
-                      <textarea id="student-address" name="adresse" class="form-control" rows="3"><?= htmlspecialchars($oldInput['adresse'] ?? '') ?></textarea>
-                    </div>
-                    <div class="mb-3">
-                      <label class="form-label" for="student-photo">Photo de l’élève <span class="text-muted fw-normal">(facultative, PNG/JPEG, 250 Ko maximum)</span></label>
-                      <input id="student-photo" type="file" name="photo" accept="image/png,image/jpeg" class="form-control">
+                    <div class="row">
+                      <div class="col-md-6 mb-3">
+                        <label class="form-label" for="birthplace-input">Lieu de naissance</label>
+                        <input id="birthplace-input" type="text" name="lieu_naissance" class="form-control" value="<?= htmlspecialchars($oldInput['lieu_naissance'] ?? '') ?>">
+                      </div>
+                      <div class="col-md-6 mb-3">
+                        <label class="form-label" for="student-photo">Photo de l’élève <span class="text-muted fw-normal">(facultative, PNG/JPEG, 250 Ko maximum)</span></label>
+                        <input id="student-photo" type="file" name="photo" accept="image/png,image/jpeg" class="form-control">
+                      </div>
+                      <div class="col-12 mb-3">
+                        <label class="form-label" for="student-address">Adresse</label>
+                        <textarea id="student-address" name="adresse" class="form-control" rows="3"><?= htmlspecialchars($oldInput['adresse'] ?? '') ?></textarea>
+                      </div>
                     </div>
                     </section>
-                    <div class="d-flex justify-content-between form-actions">
+                    <div class="registration-wizard-controls" id="registration-wizard-controls" hidden>
+                      <a href="<?= BASE_URL ?>/inscriptions" class="btn btn-link text-secondary px-0" id="registration-wizard-exit">
+                        Retour aux dossiers
+                      </a>
+                      <button type="button" class="btn btn-outline-secondary" id="registration-step-back" disabled>
+                        <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Précédent
+                      </button>
+                      <span class="small text-muted d-none d-sm-inline">Vos réponses sont conservées pendant ce parcours.</span>
+                      <button type="button" class="btn btn-success" id="registration-step-next">
+                        Continuer<i class="bi bi-arrow-right ms-1" aria-hidden="true"></i>
+                      </button>
+                    </div>
+                    <div class="d-flex justify-content-between form-actions" id="registration-form-actions">
                       <a href="<?= BASE_URL ?>/inscriptions" class="btn btn-secondary">Retour aux dossiers</a>
                       <button id="registration-submit" type="submit" class="btn btn-success" <?= empty($schoolItems) && (int) ($user['ecole_id'] ?? 0) > 0 ? 'disabled' : '' ?>>Enregistrer</button>
                     </div>
@@ -387,6 +534,133 @@ STYLE;
           </div>
         </div>
       </section>
+      <script>
+        document.addEventListener('DOMContentLoaded', function () {
+          const form = document.getElementById('registration-form');
+          const wizard = document.getElementById('registration-wizard');
+          if (!form || !wizard) {
+            return;
+          }
+          const sections = Array.from(form.querySelectorAll('[data-registration-step]'));
+          const progress = wizard.querySelector('.registration-progress');
+          const progressBar = document.getElementById('registration-progress-bar');
+          const status = document.getElementById('registration-step-status');
+          const controls = document.getElementById('registration-wizard-controls');
+          const backButton = document.getElementById('registration-step-back');
+          const exitLink = document.getElementById('registration-wizard-exit');
+          const nextButton = document.getElementById('registration-step-next');
+          const formActions = document.getElementById('registration-form-actions');
+          const sectionSelect = document.getElementById('registration-section-select');
+          const optionSelect = document.getElementById('registration-option-select');
+          const classSelect = document.getElementById('registration-classe-select');
+          const classHelp = document.getElementById('registration-class-help');
+          const totalSteps = sections.length;
+          let currentStep = 0;
+
+          if (sections.length === 0) {
+            return;
+          }
+
+          wizard.hidden = false;
+          controls.hidden = false;
+          const steps = Array.from(wizard.querySelectorAll('.registration-step-button'));
+
+          function getInvalidField(stepIndex) {
+            const fields = Array.from(sections[stepIndex].querySelectorAll('input, select, textarea'));
+            return fields.find(function (field) {
+              return !field.disabled && !field.checkValidity();
+            }) || null;
+          }
+
+          function renderStep(stepIndex, focusHeading) {
+            currentStep = stepIndex;
+            sections.forEach(function (section, index) {
+              section.hidden = index !== currentStep;
+            });
+            steps.forEach(function (button, index) {
+              if (index === currentStep) {
+                button.setAttribute('aria-current', 'step');
+              } else {
+                button.removeAttribute('aria-current');
+              }
+              button.classList.toggle('is-complete', index < currentStep);
+            });
+
+            const currentNumber = currentStep + 1;
+            const percent = Math.round((currentNumber / totalSteps) * 100);
+            status.textContent = 'Étape ' + currentNumber + ' sur ' + totalSteps;
+            progress.setAttribute('aria-valuenow', String(currentNumber));
+            progress.setAttribute('aria-valuetext', percent + ' % terminé');
+            progressBar.style.width = percent + '%';
+            backButton.disabled = currentStep === 0;
+            backButton.hidden = currentStep === 0;
+            exitLink.hidden = currentStep !== 0;
+            nextButton.hidden = currentStep === totalSteps - 1;
+            formActions.hidden = currentStep !== totalSteps - 1;
+
+            if (focusHeading) {
+              const heading = sections[currentStep].querySelector('.registration-section-heading h4');
+              if (heading) {
+                heading.setAttribute('tabindex', '-1');
+                heading.focus({ preventScroll: true });
+              }
+              sections[currentStep].scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          }
+
+          function advanceTo(stepIndex) {
+            if (stepIndex > currentStep) {
+              for (let index = currentStep; index < stepIndex; index++) {
+                if (
+                  index === 1
+                  && sectionSelect.value !== ''
+                  && classSelect.disabled
+                  && (
+                    sectionSelect.selectedOptions[0]?.dataset.sectionName !== 'secondaire'
+                    || optionSelect.value !== ''
+                  )
+                ) {
+                  if (!classHelp.textContent.includes('Contactez le responsable scolaire')) {
+                    classHelp.textContent += ' Contactez le responsable scolaire avant de poursuivre.';
+                  }
+                  classHelp.classList.add('text-danger');
+                  sectionSelect.focus();
+                  return;
+                }
+
+                const invalidField = getInvalidField(index);
+                if (invalidField) {
+                  form.classList.add('was-validated');
+                  renderStep(index, false);
+                  invalidField.focus();
+                  invalidField.reportValidity();
+                  return;
+                }
+              }
+            }
+            renderStep(stepIndex, true);
+          }
+
+          backButton.addEventListener('click', function () {
+            if (currentStep > 0) {
+              renderStep(currentStep - 1, true);
+            }
+          });
+          nextButton.addEventListener('click', function () {
+            advanceTo(Math.min(currentStep + 1, totalSteps - 1));
+          });
+          steps.forEach(function (button, index) {
+            button.addEventListener('click', function () {
+              if (index <= currentStep) {
+                renderStep(index, true);
+              } else {
+                advanceTo(index);
+              }
+            });
+          });
+          renderStep(0, false);
+        });
+      </script>
       <script>
         document.addEventListener('DOMContentLoaded', function () {
           const sectionSelect = document.getElementById('registration-section-select');

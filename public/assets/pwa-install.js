@@ -74,6 +74,10 @@
     console.warn('Unable to restore the app install button position:', error);
   }
 
+  if (typeof window.kcSmaResolveFloatingButtonOverlap === 'function') {
+    window.kcSmaResolveFloatingButtonOverlap(installButton);
+  }
+
   installButton.addEventListener('pointerdown', function (event) {
     if (event.button !== undefined && event.button !== 0) {
       return;
@@ -106,6 +110,9 @@
     installButton.classList.add('pwa-install-dragging');
     event.preventDefault();
     setButtonPosition(dragState.left + deltaX, dragState.top + deltaY);
+    if (typeof window.kcSmaResolveFloatingButtonOverlap === 'function') {
+      window.kcSmaResolveFloatingButtonOverlap(installButton);
+    }
   });
 
   function finishButtonDrag(event, suppressClick) {
@@ -115,6 +122,9 @@
 
     if (dragState.moved) {
       ignoreNextClick = suppressClick;
+      if (typeof window.kcSmaResolveFloatingButtonOverlap === 'function') {
+        window.kcSmaResolveFloatingButtonOverlap(installButton);
+      }
       const rect = installButton.getBoundingClientRect();
       saveButtonPosition({ left: rect.left, top: rect.top });
     }

@@ -9,6 +9,18 @@ use App\Models\User;
 
 class AgentsController extends Controller
 {
+    private const SCHOOL_AGENT_ACCOUNT_ROLES = [
+        'enseignant_école',
+        'préfet_école',
+        'DE_école',
+        'DD_école',
+        'DP_école',
+        'DA_école',
+        'comptable_école',
+        'sec_école',
+        'agent_ecole',
+    ];
+
     public function index(): void
     {
         Auth::requireAuth();
@@ -28,6 +40,12 @@ class AgentsController extends Controller
                 $agentIds = array_map(static fn (array $agent): int => (int) $agent['id'], $agents);
                 $placeholders = [];
                 $params = [':ecole_id' => $ecoleId];
+                $rolePlaceholders = [];
+                foreach (self::SCHOOL_AGENT_ACCOUNT_ROLES as $index => $accountRole) {
+                    $placeholder = ':role_' . $index;
+                    $rolePlaceholders[] = $placeholder;
+                    $params[$placeholder] = $accountRole;
+                }
                 foreach ($agentIds as $index => $agentId) {
                     $placeholder = ':agent_' . $index;
                     $placeholders[] = $placeholder;
@@ -36,9 +54,9 @@ class AgentsController extends Controller
                 $stmt = $db->prepare(
                     'SELECT * FROM utilisateurs
                      WHERE ecole_id = :ecole_id
-                       AND role IN (\'agent_ecole\', \'enseignant_école\')
+                       AND role IN (' . implode(',', $rolePlaceholders) . ')
                        AND reference_id IN (' . implode(',', $placeholders) . ')
-                     ORDER BY CASE WHEN role = \'enseignant_école\' THEN 0 ELSE 1 END, id ASC'
+                     ORDER BY CASE WHEN role = \'enseignant_école\' THEN 0 WHEN role = \'agent_ecole\' THEN 2 ELSE 1 END, id ASC'
                 );
                 $stmt->execute($params);
                 foreach ($stmt->fetchAll(\PDO::FETCH_ASSOC) as $account) {
@@ -88,8 +106,7 @@ class AgentsController extends Controller
             $this->redirect('/agents');
         }
 
-        $existingAccount = User::findByReference('enseignant_école', $agentId, $schoolId)
-            ?? User::findByReference('agent_ecole', $agentId, $schoolId);
+        $existingAccount = $this->findSchoolAgentAccount($agentId, $schoolId);
         if ($existingAccount) {
             $_SESSION['agents_errors'] = ['Cet agent possède déjà un compte utilisateur.'];
             $this->redirect('/agents');
@@ -125,8 +142,7 @@ class AgentsController extends Controller
         $agentId = (int) ($_POST['agent_id'] ?? 0);
         $status = (string) ($_POST['statut'] ?? '');
         $agent = $agentId > 0 ? Agent::findById($agentId) : null;
-        $account = User::findByReference('enseignant_école', $agentId, $schoolId)
-            ?? User::findByReference('agent_ecole', $agentId, $schoolId);
+        $account = $this->findSchoolAgentAccount($agentId, $schoolId);
         if (!$agent || (int) ($agent['ecole_id'] ?? 0) !== $schoolId || !$account) {
             $_SESSION['agents_errors'] = ['Compte introuvable dans votre école.'];
         } elseif (!in_array($status, ['Actif', 'Inactif'], true)) {
@@ -138,5 +154,32 @@ class AgentsController extends Controller
         }
 
         $this->redirect('/agents');
+    }
+
+    private function findSchoolAgentAccount(int $agentId, int $schoolId): ?array
+    {
+        $rolePlaceholders = [];
+        $params = [
+            ':ecole_id' => $schoolId,
+            ':reference_id' => $agentId,
+        ];
+        foreach (self::SCHOOL_AGENT_ACCOUNT_ROLES as $index => $accountRole) {
+            $placeholder = ':role_' . $index;
+            $rolePlaceholders[] = $placeholder;
+            $params[$placeholder] = $accountRole;
+        }
+
+        $stmt = \App\Core\Database::getConnection()->prepare(
+            'SELECT * FROM utilisateurs
+             WHERE ecole_id = :ecole_id
+               AND reference_id = :reference_id
+               AND role IN (' . implode(',', $rolePlaceholders) . ')
+             ORDER BY CASE WHEN role = \'enseignant_école\' THEN 0 WHEN role = \'agent_ecole\' THEN 2 ELSE 1 END, id ASC
+             LIMIT 1'
+        );
+        $stmt->execute($params);
+        $account = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        return $account ?: null;
     }
 }

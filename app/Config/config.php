@@ -78,3 +78,10 @@ define(
         'mailto:' . (MAIL_FROM_ADDRESS !== '' ? MAIL_FROM_ADDRESS : 'admin@localhost')
     )
 );
+
+// OpenAI-compatible AI chat provider
+// Enable the chat explicitly with AI_CHAT_ENABLED=true in .env.local.
+define('AI_CHAT_ENABLED', filter_var($paymentConfig('AI_CHAT_ENABLED', 'false'), FILTER_VALIDATE_BOOLEAN));
+define('AI_CHAT_ENDPOINT', $paymentConfig('AI_CHAT_ENDPOINT', 'https://api.openai.com/v1/chat/completions'));
+define('AI_CHAT_API_KEY', $paymentConfig('AI_CHAT_API_KEY'));
+define('AI_CHAT_MODEL', $paymentConfig('AI_CHAT_MODEL', 'gpt-4o-mini'));

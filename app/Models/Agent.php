@@ -11,10 +11,21 @@ class Agent
     {
         $db = Database::getConnection();
         if ($ecoleId) {
-            $stmt = $db->prepare('SELECT * FROM agents WHERE ecole_id = :ecole_id');
+            $stmt = $db->prepare(
+                'SELECT a.*, r.titre_role AS fonction
+                 FROM agents a
+                 LEFT JOIN roles_administration r ON r.id = a.role_id
+                 WHERE a.ecole_id = :ecole_id
+                 ORDER BY a.nom, a.postnom, a.prenom'
+            );
             $stmt->execute([':ecole_id' => $ecoleId]);
         } else {
-            $stmt = $db->prepare('SELECT * FROM agents');
+            $stmt = $db->prepare(
+                'SELECT a.*, r.titre_role AS fonction
+                 FROM agents a
+                 LEFT JOIN roles_administration r ON r.id = a.role_id
+                 ORDER BY a.ecole_id, a.nom, a.postnom, a.prenom'
+            );
             $stmt->execute();
         }
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
