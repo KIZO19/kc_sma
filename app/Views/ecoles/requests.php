@@ -34,6 +34,53 @@
     <?php endif; ?>
 
     <div class="card">
+      <div class="card-header">
+        <h2 class="card-title h5 mb-0">Demandes de changement d’année scolaire</h2>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>École</th>
+              <th>Demandeur</th>
+              <th>Année actuelle</th>
+              <th>Année demandée</th>
+              <th>Traitement</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php foreach (($pendingSchoolYearRequests ?? []) as $request): ?>
+              <?php $reviewYearFormId = 'reviewSchoolYear' . (int) $request['id']; ?>
+              <tr>
+                <td class="fw-semibold"><?= htmlspecialchars((string) ($request['nom_etablissement'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                <td>
+                  <?= htmlspecialchars((string) ($request['requester_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                  <div class="small text-muted"><?= htmlspecialchars(formatDate($request['created_at'] ?? null), ENT_QUOTES, 'UTF-8') ?></div>
+                </td>
+                <td><?= htmlspecialchars((string) ($request['annee_actuelle'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                <td class="fw-semibold"><?= htmlspecialchars((string) ($request['annee_demandee'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                <td style="min-width: 230px">
+                  <form id="<?= $reviewYearFormId ?>" method="post" action="<?= BASE_URL ?>/ecoles/reviewSchoolYearChange">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) ($csrfToken ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="request_id" value="<?= (int) $request['id'] ?>">
+                    <textarea name="reponse" class="form-control form-control-sm mb-2" rows="2" maxlength="1000" placeholder="Réponse facultative à l’école"></textarea>
+                  </form>
+                  <div class="d-flex gap-1">
+                    <button form="<?= $reviewYearFormId ?>" name="statut" value="Approuvee" class="btn btn-sm btn-success">Approuver</button>
+                    <button form="<?= $reviewYearFormId ?>" name="statut" value="Refusee" class="btn btn-sm btn-outline-danger">Refuser</button>
+                  </div>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+            <?php if (empty($pendingSchoolYearRequests)): ?>
+              <tr><td colspan="5" class="text-center text-muted py-4">Aucune demande de changement d’année scolaire en attente.</td></tr>
+            <?php endif; ?>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
         <h2 class="card-title h5 mb-0">Demandes d’abonnement</h2>
         <a href="<?= BASE_URL ?>/ecoles/subscriptions" class="btn btn-sm btn-outline-primary">Gérer les abonnements</a>

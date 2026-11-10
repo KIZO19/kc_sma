@@ -199,7 +199,7 @@ class User
     public static function getDefaultSectionIdForRole(string $role): ?int
     {
         return match ($role) {
-            'préfet_école', 'DE_école', 'DD_école' => Section::findIdByName('Secondaire'),
+            'préfet_école', 'prefet_école', 'DE_école', 'DD_école' => Section::findIdByName('Secondaire'),
             'DP_école', 'DA_école' => Section::findIdByName('Primaire'),
             default => null,
         };
@@ -271,6 +271,7 @@ class User
     private static function getReferenceRoleAliases(string $role): array
     {
         return match ($role) {
+            'agent_ecole', 'agent_école' => ['agent_ecole', 'agent_école'],
             'eleve_ecole', 'eleve_école' => ['eleve_ecole', 'eleve_école'],
             'parent_ecole', 'parent_école' => ['parent_ecole', 'parent_école'],
             default => [$role],
@@ -334,18 +335,193 @@ class User
         return [
             'ecole_admin',
             'agent_ecole',
+            'agent_école',
             'enseignant_école',
             'eleve_ecole',
             'parent_ecole',
             'comptable_école',
             'sec_école',
             'préfet_école',
+            'prefet_école',
             'DE_école',
             'DD_école',
             'DP_école',
             'DA_école',
             'promoteur_école',
         ];
+    }
+
+    public static function getAgentAccountRoles(): array
+    {
+        return [
+            'agent_école',
+            'enseignant_école',
+            'comptable_école',
+            'sec_école',
+            'prefet_école',
+            'DE_école',
+            'DD_école',
+            'DP_école',
+            'DA_école',
+        ];
+    }
+
+    public static function getAgentAccountRoleAliases(): array
+    {
+        return array_merge(self::getAgentAccountRoles(), ['agent_ecole', 'préfet_école']);
+    }
+
+    public static function getAgentAccountRoleLabels(): array
+    {
+        return [
+            'agent_école' => 'Agent de l’école',
+            'enseignant_école' => 'Enseignant',
+            'comptable_école' => 'Comptable',
+            'sec_école' => 'Secrétaire',
+            'prefet_école' => 'Préfet des études',
+            'DE_école' => 'Directeur des études',
+            'DD_école' => 'Directeur Département',
+            'DP_école' => 'Directeur Principal',
+            'DA_école' => 'Directeur Adjoint',
+        ];
+    }
+
+    public static function configureAgentAccount(
+        int $agentId,
+        int $schoolId,
+        string $role,
+        string $identifier,
+        string $password,
+        ?int $existingAccountId = null
+    ): array {
+        if (!in_array($role, self::getAgentAccountRoles(), true)) {
+            throw new \InvalidArgumentException('Le rôle sélectionné ne peut pas être attribué à un agent.');
+        }
+
+        $identifier = trim($identifier);
+        if ($identifier === '' || mb_strlen($identifier, 'UTF-8') > 100) {
+            throw new \InvalidArgumentException('L’identifiant est obligatoire et ne peut pas dépasser 100 caractères.');
+        }
+        if ($password !== '' && (strlen($password) < 8 || strlen($password) > 72)) {
+            throw new \InvalidArgumentException('Le mot de passe doit contenir entre 8 et 72 caractères.');
+        }
+
+        $db = Database::getConnection();
+        $agentQuery = $db->prepare(
+            'SELECT id, ecole_id, nom, postnom, prenom FROM agents WHERE id = :id AND ecole_id = :ecole_id LIMIT 1'
+        );
+        $agentQuery->execute([':id' => $agentId, ':ecole_id' => $schoolId]);
+        $agent = $agentQuery->fetch(PDO::FETCH_ASSOC);
+        if (!$agent) {
+            throw new \RuntimeException('Cet agent n’appartient pas à votre école.');
+        }
+
+        $rolePlaceholders = [];
+        $params = [':ecole_id' => $schoolId, ':reference_id' => $agentId];
+        foreach (self::getAgentAccountRoleAliases() as $index => $accountRole) {
+            $placeholder = ':role_' . $index;
+            $rolePlaceholders[] = $placeholder;
+            $params[$placeholder] = $accountRole;
+        }
+        $accountQuery = $db->prepare(
+            'SELECT id FROM utilisateurs
+             WHERE ecole_id = :ecole_id AND reference_id = :reference_id
+               AND role IN (' . implode(',', $rolePlaceholders) . ')
+             ORDER BY id ASC'
+        );
+        $accountQuery->execute($params);
+        $accountIds = $accountQuery->fetchAll(PDO::FETCH_COLUMN);
+        if (count($accountIds) > 1) {
+            throw new \RuntimeException('Plusieurs comptes sont déjà liés à cet agent. Faites vérifier ces doublons avant de continuer.');
+        }
+        $accountId = $accountIds ? (int) $accountIds[0] : null;
+
+        $existingAccount = null;
+        if ($existingAccountId !== null && $existingAccountId > 0) {
+            $existingParams = [
+                ':id' => $existingAccountId,
+                ':ecole_id' => $schoolId,
+            ];
+            $existingRolePlaceholders = [];
+            foreach (self::getAgentAccountRoleAliases() as $index => $accountRole) {
+                $placeholder = ':existing_role_' . $index;
+                $existingRolePlaceholders[] = $placeholder;
+                $existingParams[$placeholder] = $accountRole;
+            }
+            $existingQuery = $db->prepare(
+                'SELECT id, reference_id, mot_de_passe FROM utilisateurs
+                 WHERE id = :id AND ecole_id = :ecole_id
+                   AND role IN (' . implode(',', $existingRolePlaceholders) . ')
+                 LIMIT 1'
+            );
+            $existingQuery->execute($existingParams);
+            $existingAccount = $existingQuery->fetch(PDO::FETCH_ASSOC);
+            if (
+                !$existingAccount
+                || (
+                    !empty($existingAccount['reference_id'])
+                    && (int) $existingAccount['reference_id'] !== $agentId
+                )
+            ) {
+                throw new \RuntimeException('Le compte sélectionné n’est pas disponible pour être rattaché à cet agent.');
+            }
+            if ($accountId !== null && $accountId !== $existingAccountId) {
+                throw new \RuntimeException('Cet agent possède déjà un autre compte utilisateur.');
+            }
+            $accountId = $existingAccountId;
+        }
+        if ($password === '' && ($accountId === null || !$existingAccount)) {
+            throw new \InvalidArgumentException('Un mot de passe initial est obligatoire pour créer un compte.');
+        }
+
+        $identifierQuery = $db->prepare(
+            'SELECT id FROM utilisateurs WHERE identifiant = :identifiant AND id <> :account_id LIMIT 1'
+        );
+        $identifierQuery->execute([
+            ':identifiant' => $identifier,
+            ':account_id' => $accountId ?? 0,
+        ]);
+        if ($identifierQuery->fetchColumn() !== false) {
+            throw new \DomainException('Cet identifiant est déjà attribué à un autre compte.');
+        }
+
+        if ($accountId === null) {
+            self::assertAccountCapacity($role, $schoolId, $agentId);
+        }
+
+        $data = [
+            ':nom_complet' => \App\Core\PersonName::format($agent),
+            ':identifiant' => $identifier,
+            ':mot_de_passe' => $password === ''
+                ? (string) $existingAccount['mot_de_passe']
+                : password_hash($password, PASSWORD_DEFAULT),
+            ':role' => $role,
+            ':ecole_id' => $schoolId,
+            ':reference_id' => $agentId,
+            ':section_id' => self::getDefaultSectionIdForRole($role),
+        ];
+
+        if ($accountId !== null) {
+            $stmt = $db->prepare(
+                'UPDATE utilisateurs
+                 SET nom_complet = :nom_complet, identifiant = :identifiant, mot_de_passe = :mot_de_passe,
+                     role = :role, statut = \'Actif\', section_id = :section_id, reference_id = :reference_id
+                 WHERE id = :id AND ecole_id = :ecole_id
+                   AND (reference_id = :reference_id OR reference_id IS NULL OR reference_id = 0)'
+            );
+            $data[':id'] = $accountId;
+        } else {
+            $stmt = $db->prepare(
+                'INSERT INTO utilisateurs
+                    (nom_complet, identifiant, mot_de_passe, role, statut, ecole_id, reference_id, section_id, created_at)
+                 VALUES
+                    (:nom_complet, :identifiant, :mot_de_passe, :role, \'Actif\', :ecole_id, :reference_id, :section_id, NOW())'
+            );
+        }
+
+        $stmt->execute($data);
+        return self::findById($accountId ?? (int) $db->lastInsertId())
+            ?? throw new \RuntimeException('Le compte a été enregistré mais ne peut pas être relu.');
     }
 
     public static function findOrCreateForReference(array $data): array
@@ -619,7 +795,7 @@ class User
         return match ($role) {
             'super_admin' => 'Super Administrateur',
             'ecole_admin' => 'Administrateur École',
-            'préfet_école' => 'Préfet des études',
+            'préfet_école', 'prefet_école' => 'Préfet des études',
             'DE_école' => 'Directeur des études',
             'DD_école' => 'Directeur Département',
             'DP_école' => 'Directeur Principal',
@@ -630,7 +806,7 @@ class User
             'enseignant_école' => 'Enseignant',
             'eleve_ecole' => 'Élève',
             'parent_ecole' => 'Parent',
-            'agent_ecole' => 'Agent',
+            'agent_ecole', 'agent_école' => 'Agent',
             default => ucfirst(str_replace('_', ' ', $role)),
         };
     }

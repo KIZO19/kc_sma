@@ -79,6 +79,76 @@
 
       <div class="col-12">
         <div class="card">
+          <div class="card-header"><h2 class="card-title">Année scolaire d’exercice</h2></div>
+          <div class="card-body">
+            <?php if (!empty($activeSchoolYear)): ?>
+              <p class="mb-2">
+                Année actuellement active :
+                <strong><?= htmlspecialchars((string) $activeSchoolYear['annee'], ENT_QUOTES, 'UTF-8') ?></strong>
+              </p>
+              <?php if (($latestSchoolYearRequest['statut'] ?? '') === 'En_attente'): ?>
+                <div class="alert alert-info mb-0" role="status">
+                  Votre demande de passage à l’année
+                  <strong><?= htmlspecialchars((string) ($latestSchoolYearRequest['annee_demandee'] ?? ''), ENT_QUOTES, 'UTF-8') ?></strong>
+                  est en attente de vérification par KC_SMA.
+                </div>
+              <?php else: ?>
+                <?php if (($latestSchoolYearRequest['statut'] ?? '') === 'Refusee'): ?>
+                  <div class="alert alert-warning" role="status">
+                    La dernière demande de changement vers
+                    <strong><?= htmlspecialchars((string) ($latestSchoolYearRequest['annee_demandee'] ?? ''), ENT_QUOTES, 'UTF-8') ?></strong>
+                    a été refusée.
+                    <?php if (!empty($latestSchoolYearRequest['reponse'])): ?>
+                      <div class="mt-1"><?= nl2br(htmlspecialchars((string) $latestSchoolYearRequest['reponse'], ENT_QUOTES, 'UTF-8')) ?></div>
+                    <?php endif; ?>
+                  </div>
+                <?php endif; ?>
+                <p class="text-muted">
+                  Une modification ne prend effet qu’après vérification et approbation par KC_SMA.
+                </p>
+                <form method="post" action="<?= BASE_URL ?>/ecoles/requestSchoolYearChange" class="row g-2 align-items-end">
+                  <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) ($csrfToken ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                  <div class="col-md-5">
+                    <label class="form-label" for="school-year-change">Nouvelle année scolaire</label>
+                    <input class="form-control" id="school-year-change" name="annee_scolaire" type="text"
+                           inputmode="numeric" pattern="[0-9]{4}-[0-9]{4}" maxlength="9"
+                           placeholder="2026-2027" required>
+                    <div class="form-text">Format AAAA-AAAA, avec deux années consécutives.</div>
+                  </div>
+                  <div class="col-md-auto">
+                    <button type="submit" class="btn btn-outline-primary">
+                      <i class="bi bi-send me-1" aria-hidden="true"></i>Soumettre une demande
+                    </button>
+                  </div>
+                </form>
+              <?php endif; ?>
+            <?php else: ?>
+              <p class="text-muted">
+                Définissez l’année d’exercice de votre école. Cette opération ne peut être effectuée qu’une seule fois;
+                toute modification ultérieure devra être approuvée par KC_SMA.
+              </p>
+              <form method="post" action="<?= BASE_URL ?>/ecoles/setInitialSchoolYear" class="row g-2 align-items-end">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) ($csrfToken ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                <div class="col-md-5">
+                  <label class="form-label" for="school-year-initial">Année scolaire d’exercice</label>
+                  <input class="form-control" id="school-year-initial" name="annee_scolaire" type="text"
+                         inputmode="numeric" pattern="[0-9]{4}-[0-9]{4}" maxlength="9"
+                         placeholder="2026-2027" required>
+                  <div class="form-text">Format AAAA-AAAA, avec deux années consécutives.</div>
+                </div>
+                <div class="col-md-auto">
+                  <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Enregistrer l’année
+                  </button>
+                </div>
+              </form>
+            <?php endif; ?>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12">
+        <div class="card">
           <div class="card-header"><h2 class="card-title">Informations de l’école</h2></div>
           <form method="post" enctype="multipart/form-data" action="<?= BASE_URL ?>/ecoles/updateSchoolProfile">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) ($csrfToken ?? ''), ENT_QUOTES, 'UTF-8') ?>">
@@ -226,10 +296,10 @@
           <form method="post" action="<?= BASE_URL ?>/ecoles/updateSchoolNotificationAccess">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) ($csrfToken ?? ''), ENT_QUOTES, 'UTF-8') ?>">
             <div class="card-body">
-              <p class="text-muted">Le super-administrateur contrôle la messagerie interne entre les comptes de l’école. Vous pouvez gérer les préférences SMS et WhatsApp autorisées ci-dessous.</p>
+              <p class="text-muted">KC_SMA contrôle la messagerie interne entre les comptes de l’école. Vous pouvez gérer les préférences SMS et WhatsApp autorisées ci-dessous.</p>
               <div class="alert <?= !empty($notificationSettings['direct_messages_allowed']) ? 'alert-success' : 'alert-warning' ?>" role="status">
                 Messagerie entre comptes :
-                <strong><?= !empty($notificationSettings['direct_messages_allowed']) ? 'autorisée' : 'bloquée par le super-administrateur' ?></strong>.
+                <strong><?= !empty($notificationSettings['direct_messages_allowed']) ? 'autorisée' : 'bloquée par KC_SMA' ?></strong>.
               </div>
               <div class="row g-3">
                 <?php foreach ([
@@ -252,7 +322,7 @@
                       </div>
                       <div class="small text-muted mt-2">
                         <?php if (!$isAllowed): ?>
-                          Canal bloqué par le super-administrateur.
+                          Canal bloqué par KC_SMA.
                         <?php else: ?>
                           <?= $isEnabled ? 'Les notifications sont activées pour votre école.' : 'Les notifications sont désactivées pour votre école.' ?>
                         <?php endif; ?>

@@ -6,7 +6,7 @@ class DDEcole extends RoleEntity
 {
     public function __construct()
     {
-        parent::__construct('DD_école', 'Directeur Département');
+        parent::__construct('DD_école', 'Directeur de Discipline de l’école');
     }
 
     public function can(string $permission): bool

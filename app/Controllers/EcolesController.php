@@ -8,6 +8,8 @@ use App\Models\Ecole;
 use App\Models\ActivityLog;
 use App\Models\Derogation;
 use App\Models\NotificationAccess;
+use App\Models\AnneeScolaire;
+use App\Models\SchoolYearChangeRequest;
 use App\Models\SchoolMessage;
 use App\Models\SubscriptionRequest;
 use App\Models\User;
@@ -85,6 +87,8 @@ class EcolesController extends Controller
             'roleLabel' => User::getRoleLabel((string) ($user['role'] ?? 'ecole_admin')),
             'modules' => $this->getModulesForRole((string) ($user['role'] ?? 'ecole_admin')),
             'school' => $school,
+            'activeSchoolYear' => AnneeScolaire::getActiveBySchool($schoolId),
+            'latestSchoolYearRequest' => SchoolYearChangeRequest::getLatestForSchool($schoolId),
             'schoolFormValues' => $_SESSION['school_settings_old'] ?? [],
             'subscription' => Ecole::getLatestSubscription($schoolId),
             'notificationSettings' => NotificationAccess::getSchoolPreferences($schoolId),
@@ -101,6 +105,94 @@ class EcolesController extends Controller
             $_SESSION['school_settings_error'],
             $_SESSION['school_settings_old']
         );
+    }
+
+    public function setInitialSchoolYear(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['ecole_admin']);
+
+        $user = Auth::refresh() ?: Auth::user();
+        $schoolId = (int) ($user['ecole_id'] ?? 0);
+        $token = (string) ($_POST['csrf_token'] ?? '');
+        if (
+            $_SERVER['REQUEST_METHOD'] !== 'POST'
+            || $schoolId <= 0
+            || $token === ''
+            || !hash_equals((string) ($_SESSION['school_settings_csrf'] ?? ''), $token)
+        ) {
+            $_SESSION['school_settings_error'] = 'Le formulaire a expiré. Rechargez la page et réessayez.';
+            $this->redirect('/ecoles/settings');
+            return;
+        }
+
+        try {
+            $year = AnneeScolaire::validateYear(\is_string($_POST['annee_scolaire'] ?? null)
+                ? $_POST['annee_scolaire']
+                : '');
+            AnneeScolaire::setInitialForSchool($schoolId, $year);
+            ActivityLog::record(
+                (int) ($user['id'] ?? 0),
+                'school_year_initialized',
+                'school',
+                $schoolId,
+                (string) $year,
+                'Année scolaire d’exercice initiale enregistrée.'
+            );
+            $_SESSION['school_settings_success'] = 'L’année scolaire d’exercice a été enregistrée.';
+        } catch (\InvalidArgumentException|\DomainException $e) {
+            $_SESSION['school_settings_error'] = $e->getMessage();
+        } catch (\Throwable $e) {
+            error_log('EcolesController::setInitialSchoolYear failed: ' . $e->getMessage());
+            $_SESSION['school_settings_error'] = 'Impossible d’enregistrer l’année scolaire. Réessayez.';
+        }
+
+        $_SESSION['school_settings_csrf'] = bin2hex(random_bytes(32));
+        $this->redirect('/ecoles/settings');
+    }
+
+    public function requestSchoolYearChange(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['ecole_admin']);
+
+        $user = Auth::refresh() ?: Auth::user();
+        $schoolId = (int) ($user['ecole_id'] ?? 0);
+        $token = (string) ($_POST['csrf_token'] ?? '');
+        if (
+            $_SERVER['REQUEST_METHOD'] !== 'POST'
+            || $schoolId <= 0
+            || $token === ''
+            || !hash_equals((string) ($_SESSION['school_settings_csrf'] ?? ''), $token)
+        ) {
+            $_SESSION['school_settings_error'] = 'Le formulaire a expiré. Rechargez la page et réessayez.';
+            $this->redirect('/ecoles/settings');
+            return;
+        }
+
+        try {
+            $year = AnneeScolaire::validateYear(\is_string($_POST['annee_scolaire'] ?? null)
+                ? $_POST['annee_scolaire']
+                : '');
+            SchoolYearChangeRequest::create($schoolId, (int) ($user['id'] ?? 0), $year);
+            ActivityLog::record(
+                (int) ($user['id'] ?? 0),
+                'school_year_change_requested',
+                'school',
+                $schoolId,
+                $year,
+                'Demande de changement d’année scolaire transmise au super-administrateur.'
+            );
+            $_SESSION['school_settings_success'] = 'Votre demande de changement d’année scolaire a été transmise au super-administrateur.';
+        } catch (\InvalidArgumentException|\DomainException $e) {
+            $_SESSION['school_settings_error'] = $e->getMessage();
+        } catch (\Throwable $e) {
+            error_log('EcolesController::requestSchoolYearChange failed: ' . $e->getMessage());
+            $_SESSION['school_settings_error'] = 'Impossible de transmettre la demande de changement. Réessayez.';
+        }
+
+        $_SESSION['school_settings_csrf'] = bin2hex(random_bytes(32));
+        $this->redirect('/ecoles/settings');
     }
 
     public function updateSchoolProfile(): void
@@ -689,6 +781,7 @@ class EcolesController extends Controller
             SubscriptionRequest::getAll(),
             static fn (array $request): bool => ($request['statut'] ?? '') === 'En_attente'
         ));
+        $pendingSchoolYearRequests = SchoolYearChangeRequest::getPending();
 
         $this->view('ecoles/requests', [
             'title' => APP_NAME . ' - Demandes écoles',
@@ -698,6 +791,7 @@ class EcolesController extends Controller
             'modules' => $modules,
             'pending' => $pending,
             'pendingSubscriptionRequests' => $pendingSubscriptionRequests,
+            'pendingSchoolYearRequests' => $pendingSchoolYearRequests,
             'csrfToken' => $_SESSION['subscription_request_csrf'],
             'pagination' => [
                 'page' => $page,
@@ -1354,6 +1448,67 @@ class EcolesController extends Controller
                 : 'Demande refusée.';
         } else {
             $_SESSION['ecoles_subscription_errors'] = ['Impossible de traiter cette demande. Vérifiez le tarif et réessayez.'];
+        }
+
+        $this->redirect('/ecoles/requests');
+    }
+
+    public function reviewSchoolYearChange(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin']);
+        $token = (string) ($_POST['csrf_token'] ?? '');
+        if (
+            $_SERVER['REQUEST_METHOD'] !== 'POST'
+            || $token === ''
+            || !hash_equals((string) ($_SESSION['subscription_request_csrf'] ?? ''), $token)
+        ) {
+            $_SESSION['ecoles_subscription_errors'] = ['Le formulaire a expiré. Rechargez la page puis réessayez.'];
+            $this->redirect('/ecoles/requests');
+            return;
+        }
+
+        $requestId = filter_var($_POST['request_id'] ?? null, FILTER_VALIDATE_INT);
+        $status = (string) ($_POST['statut'] ?? '');
+        $note = is_string($_POST['reponse'] ?? null) ? trim($_POST['reponse']) : '';
+        if (
+            $requestId === false
+            || $requestId <= 0
+            || !in_array($status, ['Approuvee', 'Refusee'], true)
+            || mb_strlen($note, 'UTF-8') > 1000
+        ) {
+            $_SESSION['ecoles_subscription_errors'] = ['Les données de traitement de la demande d’année scolaire sont invalides.'];
+            $this->redirect('/ecoles/requests');
+            return;
+        }
+
+        try {
+            $reviewed = SchoolYearChangeRequest::review(
+                (int) $requestId,
+                (int) (Auth::user()['id'] ?? 0),
+                $status,
+                $note
+            );
+            if (!$reviewed) {
+                $_SESSION['ecoles_subscription_errors'] = ['Cette demande est introuvable ou a déjà été traitée.'];
+            } else {
+                ActivityLog::record(
+                    (int) (Auth::user()['id'] ?? 0),
+                    $status === 'Approuvee' ? 'school_year_change_approved' : 'school_year_change_rejected',
+                    'school_year_request',
+                    (int) $requestId,
+                    'Demande de changement d’année scolaire',
+                    $status === 'Approuvee'
+                        ? 'La demande de changement d’année scolaire a été approuvée.'
+                        : 'La demande de changement d’année scolaire a été refusée.'
+                );
+                $_SESSION['ecoles_subscription_success'] = $status === 'Approuvee'
+                    ? 'La demande a été approuvée et la nouvelle année scolaire est maintenant active.'
+                    : 'La demande de changement d’année scolaire a été refusée.';
+            }
+        } catch (\Throwable $e) {
+            error_log('EcolesController::reviewSchoolYearChange failed: ' . $e->getMessage());
+            $_SESSION['ecoles_subscription_errors'] = ['Impossible de traiter cette demande. Réessayez.'];
         }
 
         $this->redirect('/ecoles/requests');

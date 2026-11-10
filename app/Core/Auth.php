@@ -80,6 +80,7 @@ class Auth
 
         return match ($normalized) {
             'prefet_ecole', 'prefet_des_etudes' => 'préfet_école',
+            'agent_ecole' => 'agent_ecole',
             default => $role,
         };
     }
