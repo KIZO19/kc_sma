@@ -56,7 +56,10 @@
                     </div>
                     <div class="mb-3">
                       <label class="form-label">Identifiant</label>
-                      <input type="text" name="identifiant" class="form-control" maxlength="100" value="<?= htmlspecialchars($user['identifiant'] ?? '') ?>" required>
+                      <input type="text" name="identifiant" class="form-control" maxlength="100" value="<?= htmlspecialchars(($role ?? '') === 'eleve_ecole' || ($role ?? '') === 'eleve_école' ? ($student['matricule'] ?? $user['identifiant'] ?? '') : ($user['identifiant'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" <?= in_array($role ?? '', ['eleve_ecole', 'eleve_école'], true) ? 'readonly' : 'required' ?>>
+                      <?php if (in_array($role ?? '', ['eleve_ecole', 'eleve_école'], true)): ?>
+                        <div class="form-text">Votre matricule sert d’identifiant de connexion et ne peut pas être modifié.</div>
+                      <?php endif; ?>
                     </div>
                     <div class="mb-3">
                       <label class="form-label">Rôle</label>
@@ -76,6 +79,62 @@
               </div>
             </div>
           </div>
+
+          <?php if (!empty($student)): ?>
+            <?php
+              $studentDetails = [
+                  'Matricule' => $student['matricule'] ?? null,
+                  'Nom' => $student['nom'] ?? null,
+                  'Postnom' => $student['postnom'] ?? null,
+                  'Prénom' => $student['prenom'] ?? null,
+                  'Genre' => ($student['genre'] ?? '') === 'M'
+                      ? 'Masculin'
+                      : ((($student['genre'] ?? '') === 'F') ? 'Féminin' : null),
+                  'Date de naissance' => !empty($student['date_naissance'])
+                      ? formatDate($student['date_naissance'])
+                      : null,
+                  'Lieu de naissance' => $student['lieu_naissance'] ?? null,
+                  'Nationalité' => $student['nationalite'] ?? null,
+                  'Adresse' => $student['adresse'] ?? null,
+                  'Nom du père' => $student['nom_pere'] ?? null,
+                  'Nom de la mère' => $student['nom_mere'] ?? null,
+                  'Province d’origine' => $student['province_origine'] ?? null,
+                  'Territoire' => $student['territoire'] ?? null,
+                  'Secteur' => $student['secteur'] ?? null,
+                  'Groupement' => $student['groupement'] ?? null,
+                  'Village' => $student['village'] ?? null,
+                  'Numéro permanent' => $student['num_permanent'] ?? null,
+                  'Statut scolaire' => $student['statut_eleve'] ?? null,
+                  'Année scolaire active' => $studentClass['annee'] ?? null,
+                  'Section' => $studentClass['nom_section'] ?? null,
+                  'Option' => $studentClass['nom_option'] ?? null,
+                  'Classe' => $studentClass['nom_classe'] ?? null,
+                  'Date d’inscription' => !empty($studentClass['date_inscription'])
+                      ? formatDate($studentClass['date_inscription'])
+                      : null,
+              ];
+            ?>
+            <div class="row mt-4">
+              <div class="col-lg-8">
+                <div class="card">
+                  <div class="card-header">
+                    <h3 class="card-title">Détails de l’élève et inscription actuelle</h3>
+                  </div>
+                  <div class="card-body">
+                    <dl class="row mb-0">
+                      <?php foreach ($studentDetails as $label => $value): ?>
+                        <dt class="col-sm-4"><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></dt>
+                        <dd class="col-sm-8"><?= nl2br(htmlspecialchars(trim((string) ($value ?? '')) !== '' ? (string) $value : 'Non renseigné', ENT_QUOTES, 'UTF-8')) ?></dd>
+                      <?php endforeach; ?>
+                    </dl>
+                    <?php if (empty($studentClass)): ?>
+                      <p class="text-muted mb-0">Aucune inscription n’est enregistrée pour l’année scolaire active.</p>
+                    <?php endif; ?>
+                  </div>
+                </div>
+              </div>
+            </div>
+          <?php endif; ?>
 
           <?php if (($role ?? '') === 'super_admin'): ?>
             <div class="row mt-4">

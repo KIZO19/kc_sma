@@ -11,10 +11,14 @@ class MesPresencesController extends Controller
     public function index(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['eleve_ecole', 'enseignant_école']);
+        Auth::requireRoles(['eleve_ecole', 'eleve_école', 'enseignant_école']);
 
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
+        if (in_array($role, ['eleve_ecole', 'eleve_école'], true)) {
+            $this->redirect('/espace-eleve/presences');
+        }
+
         $modules = $this->getModulesForRole($role);
 
         $this->view('pages/page', [

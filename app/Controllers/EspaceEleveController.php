@@ -8,6 +8,7 @@ use App\Core\Database;
 use App\Models\Communique;
 use App\Models\Derogation;
 use App\Models\Eleve;
+use App\Models\PresenceEleve;
 use App\Models\SchoolTimetable;
 use App\Models\User;
 
@@ -18,6 +19,19 @@ class EspaceEleveController extends Controller
         [$user, $student, $class] = $this->studentContext();
 
         $this->renderRecords($user, $student, $class, 'discipline', Eleve::getDiscipline((int) $student['id']));
+    }
+
+    public function presences(): void
+    {
+        [$user, $student, $class] = $this->studentContext();
+
+        $this->renderRecords(
+            $user,
+            $student,
+            $class,
+            'presences',
+            PresenceEleve::getForStudent((int) $student['id'], (int) $user['ecole_id'])
+        );
     }
 
     public function derogations(): void
@@ -129,6 +143,7 @@ class EspaceEleveController extends Controller
     {
         $role = (string) ($user['role'] ?? 'eleve_ecole');
         $titles = [
+            'presences' => 'Mes présences',
             'discipline' => 'Mon dossier disciplinaire',
             'derogations' => 'Mes dérogations',
             'cours' => 'Mes cours',
@@ -137,7 +152,7 @@ class EspaceEleveController extends Controller
         ];
 
         $this->view('espace_eleve/records', [
-            'title' => APP_NAME . ' - ' . $titles[$kind],
+            'title' => APP_NAME . ' - ' . ($titles[$kind] ?? 'Mon espace scolaire'),
             'user' => $user,
             'role' => $role,
             'roleLabel' => User::getRoleLabel($role),

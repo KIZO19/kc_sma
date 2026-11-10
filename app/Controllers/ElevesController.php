@@ -134,7 +134,9 @@ class ElevesController extends Controller
         $totalPaid = 0.0;
         foreach ($ecritures as $ec) {
             $amount = (float) ($ec['montant'] ?? 0);
-            if (strtoupper((string) ($ec['type_mouvement'] ?? '')) === 'CREDIT') {
+            if (strtoupper((string) ($ec['type_mouvement'] ?? '')) === 'CREDIT'
+                && empty($ec['annulee_at'])
+                && strpos((string) ($ec['reference_recu'] ?? ''), 'REG-FRAIS-') !== 0) {
                 $totalPaid += $amount;
             }
         }
@@ -175,11 +177,8 @@ class ElevesController extends Controller
              INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
              LEFT JOIN frais_scolaires fs ON fs.id = ece.frais_id
              WHERE ce.eleve_id = :eleve AND ece.type_mouvement = \'CREDIT\' AND ece.annulee_at IS NULL
-             GROUP BY COALESCE(fs.devise, \'USD\')',
-            'SELECT COALESCE(fs.devise, \'USD\') AS devise, SUM(pe.montant_paye) AS total
-             FROM paiements_eleves pe
-             LEFT JOIN frais_scolaires fs ON fs.id = pe.frais_id
-             WHERE pe.eleve_id = :eleve
+               AND NULLIF(TRIM(ece.reference_recu), \'\') IS NOT NULL
+               AND ece.reference_recu NOT LIKE \'REG-FRAIS-%\'
              GROUP BY COALESCE(fs.devise, \'USD\')',
         ];
 
@@ -208,11 +207,9 @@ class ElevesController extends Controller
              FROM ecritures_comptables_eleves ece
              INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
              LEFT JOIN frais_scolaires fs ON fs.id = ece.frais_id
-             WHERE ce.eleve_id = :eleve AND ece.annulee_at IS NULL GROUP BY ece.type_mouvement, COALESCE(fs.devise, \'USD\')',
-            'SELECT \'CREDIT\' AS type_mouvement, COALESCE(fs.devise, \'USD\') AS devise, SUM(pe.montant_paye) AS total
-             FROM paiements_eleves pe
-             LEFT JOIN frais_scolaires fs ON fs.id = pe.frais_id
-             WHERE pe.eleve_id = :eleve GROUP BY COALESCE(fs.devise, \'USD\')',
+             WHERE ce.eleve_id = :eleve AND ece.annulee_at IS NULL
+               AND (ece.type_mouvement <> \'CREDIT\' OR NULLIF(TRIM(ece.reference_recu), \'\') IS NOT NULL)
+             GROUP BY ece.type_mouvement, COALESCE(fs.devise, \'USD\')',
         ];
 
         foreach ($queries as $query) {

@@ -2,6 +2,7 @@
 <?php
 $escape = static fn ($value): string => htmlspecialchars((string) ($value ?? ''), ENT_QUOTES, 'UTF-8');
 $titles = [
+    'presences' => 'Mes présences',
     'discipline' => 'Mon dossier disciplinaire',
     'derogations' => 'Mes dérogations',
     'cours' => 'Mes cours',
@@ -25,7 +26,9 @@ $titles = [
       <div class="card-body p-0">
         <?php if ($records === []): ?>
           <p class="text-muted text-center py-5 mb-0">
-            <?php if ($recordType === 'discipline'): ?>
+            <?php if ($recordType === 'presences'): ?>
+              Aucun relevé de présence n’est disponible pour votre compte.
+            <?php elseif ($recordType === 'discipline'): ?>
               Aucun incident disciplinaire n’est enregistré pour votre compte.
             <?php elseif ($recordType === 'derogations'): ?>
               Aucune dérogation ne vous concerne.
@@ -41,7 +44,9 @@ $titles = [
           <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
               <thead>
-                <?php if ($recordType === 'discipline'): ?>
+                <?php if ($recordType === 'presences'): ?>
+                  <tr><th>Date</th><th>Statut</th></tr>
+                <?php elseif ($recordType === 'discipline'): ?>
                   <tr><th>Date</th><th>Fait consigné</th><th>Sanction</th><th class="text-end">Points retirés</th></tr>
                 <?php elseif ($recordType === 'derogations'): ?>
                   <tr><th>Date de fin</th><th>Motif</th><th>Statut</th><th>Commentaire</th></tr>
@@ -55,7 +60,12 @@ $titles = [
               </thead>
               <tbody>
                 <?php foreach ($records as $record): ?>
-                  <?php if ($recordType === 'discipline'): ?>
+                  <?php if ($recordType === 'presences'): ?>
+                    <tr>
+                      <td class="text-nowrap"><?= $escape(formatDate($record['date_jour'] ?? null)) ?></td>
+                      <td><?= $escape($record['statut'] ?? '—') ?></td>
+                    </tr>
+                  <?php elseif ($recordType === 'discipline'): ?>
                     <tr>
                       <td class="text-nowrap"><?= $escape(formatDate($record['date_evenement'] ?? null)) ?></td>
                       <td><?= $escape($record['faute'] ?? '—') ?></td>

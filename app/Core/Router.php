@@ -161,6 +161,7 @@ class Router
                 'App\\Controllers\\MesPresencesController' => ['index'],
                 'App\\Controllers\\MonEmploiController' => ['index'],
                 'App\\Controllers\\EspaceEleveController' => [
+                    'presences',
                     'discipline',
                     'derogations',
                     'cours',

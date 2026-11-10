@@ -13,7 +13,7 @@ class MonEmploiController extends Controller
     public function index(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['eleve_ecole', 'enseignant_école']);
+        Auth::requireRoles(['eleve_ecole', 'eleve_école', 'enseignant_école']);
 
         $user = Auth::refresh() ?: Auth::user();
         $role = (string) ($user['role'] ?? 'default');
@@ -37,7 +37,7 @@ class MonEmploiController extends Controller
                 $sectionId = (int) $slot['section_id'];
                 $hourDurations[$sectionId] = SchoolTimetable::getHourDuration($schoolId, $sectionId);
             }
-        } elseif ($year && $role === 'eleve_ecole') {
+        } elseif ($year && in_array($role, ['eleve_ecole', 'eleve_école'], true)) {
             $class = SchoolTimetable::getStudentClass(
                 $schoolId,
                 (int) ($user['reference_id'] ?? 0)
@@ -66,7 +66,7 @@ class MonEmploiController extends Controller
             'weeklyDayOff' => $weeklyDayOff,
             'hourDurations' => $hourDurations,
             'classSectionId' => $classSectionId,
-            'isStudent' => $role === 'eleve_ecole',
+            'isStudent' => in_array($role, ['eleve_ecole', 'eleve_école'], true),
             'days' => [1 => 'Lundi', 2 => 'Mardi', 3 => 'Mercredi', 4 => 'Jeudi', 5 => 'Vendredi', 6 => 'Samedi'],
         ]);
     }

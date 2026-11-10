@@ -238,17 +238,18 @@ class DetteEleve
             $devise = strtoupper(trim($f['devise'] ?? 'USD')) ?: 'USD';
 
             $paidAccounting = 0.0;
-            $paidLegacy = 0.0;
             try {
-                $pstmt = $db->prepare('SELECT SUM(ece.montant) AS paid FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id WHERE ce.eleve_id = :eleve AND ece.frais_id = :frais AND ece.type_mouvement = :type AND ece.annulee_at IS NULL');
+                $pstmt = $db->prepare(
+                    'SELECT SUM(ece.montant) AS paid
+                     FROM ecritures_comptables_eleves ece
+                     INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id
+                     WHERE ce.eleve_id = :eleve AND ece.frais_id = :frais
+                       AND ece.type_mouvement = :type AND ece.annulee_at IS NULL
+                       AND NULLIF(TRIM(ece.reference_recu), \'\') IS NOT NULL
+                       AND ece.reference_recu NOT LIKE \'REG-FRAIS-%\''
+                );
                 $pstmt->execute([':eleve' => $eleveId, ':frais' => $feeId, ':type' => 'CREDIT']);
                 $paidAccounting = (float) ($pstmt->fetchColumn() ?: 0);
-            } catch (\Throwable $e) {
-            }
-            try {
-                $pstmt2 = $db->prepare('SELECT SUM(pe.montant_paye) AS paid FROM paiements_eleves pe WHERE pe.eleve_id = :eleve AND pe.frais_id = :frais');
-                $pstmt2->execute([':eleve' => $eleveId, ':frais' => $feeId]);
-                $paidLegacy = (float) ($pstmt2->fetchColumn() ?: 0);
             } catch (\Throwable $e) {
             }
 
@@ -269,7 +270,7 @@ class DetteEleve
             } catch (\Throwable $e) {
             }
 
-            $remaining = max(0.0, $feeAmount - max($paidAccounting, $paidLegacy) - $approvedExoneration);
+            $remaining = max(0.0, $feeAmount - $paidAccounting - $approvedExoneration);
             if ($remaining <= 0) {
                 continue;
             }

@@ -211,7 +211,9 @@ class PaiementsController extends Controller
         $sql = 'SELECT SUM(ece.montant) AS total_paid FROM ecritures_comptables_eleves ece '
             . 'INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id '
             . 'INNER JOIN eleves el ON ce.eleve_id = el.id '
-            . 'WHERE ece.type_mouvement = :type AND ece.annulee_at IS NULL AND ce.eleve_id = :eleveId ';
+            . 'WHERE ece.type_mouvement = :type AND ece.annulee_at IS NULL '
+            . 'AND NULLIF(TRIM(ece.reference_recu), \'\') IS NOT NULL '
+            . 'AND ece.reference_recu NOT LIKE \'REG-FRAIS-%\' AND ce.eleve_id = :eleveId ';
         $params = [':type' => 'CREDIT', ':eleveId' => $eleveId];
 
         if (($user['role'] ?? '') !== 'super_admin') {
@@ -234,40 +236,7 @@ class PaiementsController extends Controller
             $stmt->bindValue($key, $value, is_int($value) ? \PDO::PARAM_INT : \PDO::PARAM_STR);
         }
         $stmt->execute();
-        $paid1 = (float) ($stmt->fetchColumn() ?: 0);
-
-        try {
-            $legacySql = 'SELECT SUM(pe.montant_paye) AS total_paid FROM paiements_eleves pe '
-                . 'INNER JOIN eleves el ON pe.eleve_id = el.id '
-                . 'WHERE pe.eleve_id = :eleveId ';
-            $legacyParams = [':eleveId' => $eleveId];
-            if (($user['role'] ?? '') !== 'super_admin') {
-                $legacySql .= 'AND (
-                    el.ecole_id = :ecole
-                    OR EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON i.classe_id = c.id WHERE i.eleve_id = el.id AND c.ecole_id = :ecole)
-                    OR EXISTS (SELECT 1 FROM frais_scolaires fs2 INNER JOIN classes c2 ON c2.id = fs2.classe_id WHERE fs2.id = pe.frais_id AND c2.ecole_id = :ecole)
-                ) ';
-                $legacyParams[':ecole'] = (int) ($user['ecole_id'] ?? 0);
-            }
-            if ($sectionScopeId !== null) {
-                $legacySql .= 'AND EXISTS (SELECT 1 FROM inscriptions si INNER JOIN classes sc ON si.classe_id = sc.id '
-                    . 'WHERE si.eleve_id = el.id AND sc.ecole_id = :section_school AND sc.section_id = :section_id) ';
-                $legacyParams[':section_school'] = (int) ($user['ecole_id'] ?? 0);
-                $legacyParams[':section_id'] = $sectionScopeId;
-            }
-            $lstmt = $db->prepare($legacySql);
-            foreach ($legacyParams as $key => $value) {
-                $lstmt->bindValue($key, $value, is_int($value) ? \PDO::PARAM_INT : \PDO::PARAM_STR);
-            }
-            $lstmt->execute();
-            $paid2 = (float) ($lstmt->fetchColumn() ?: 0);
-        } catch (\Throwable $e) {
-            $paid2 = 0.0;
-        }
-
-        // The application historically used two payment tables. Prefer the larger
-        // total so a payment mirrored in both tables is not counted twice.
-        return max($paid1, $paid2);
+        return (float) ($stmt->fetchColumn() ?: 0);
     }
 
     private function fetchTotalPaidByCurrency(array $user, int $eleveId): array
@@ -299,7 +268,7 @@ class PaiementsController extends Controller
     {
         $db = \App\Core\Database::getConnection();
         $sectionScopeId = $this->getSectionScopeForUser($user);
-        $sql = 'SELECT ece.id, ece.frais_id, ece.reference_recu, ece.date_operation, ece.montant, ece.libelle, ece.annulee_at, ece.motif_annulation, ce.eleve_id, el.nom, el.postnom, el.prenom, COALESCE(NULLIF(us.nom_complet, \'\'), NULLIF(CONCAT_WS(\' \', a.nom, a.postnom, a.prenom), \'\'), u.nom_complet, \'Agent non identifié\') AS agent_nom, COALESCE(ra.titre_role, us.role, u.role, \'Agent\') AS agent_fonction, fs.devise AS frais_devise, COALESCE(fs.devise, ecole.devise_principale, \'USD\') AS transaction_devise '
+        $sql = 'SELECT ece.id, ece.frais_id, ece.reference_recu, ece.date_operation, ece.montant, COALESCE(NULLIF(fs.type_frais, \'\'), ece.libelle) AS libelle, ece.annulee_at, ece.motif_annulation, ce.eleve_id, el.nom, el.postnom, el.prenom, COALESCE(NULLIF(us.nom_complet, \'\'), NULLIF(CONCAT_WS(\' \', a.nom, a.postnom, a.prenom), \'\'), u.nom_complet, \'Agent non identifié\') AS agent_nom, COALESCE(ra.titre_role, us.role, u.role, \'Agent\') AS agent_fonction, fs.devise AS frais_devise, COALESCE(fs.devise, ecole.devise_principale, \'USD\') AS transaction_devise '
             . 'FROM ecritures_comptables_eleves ece '
             . 'INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id '
             . 'INNER JOIN eleves el ON ce.eleve_id = el.id '
@@ -309,7 +278,9 @@ class PaiementsController extends Controller
             . 'LEFT JOIN roles_administration ra ON a.role_id = ra.id '
             . 'LEFT JOIN utilisateurs us ON ece.utilisateur_saisie_id = us.id '
             . 'LEFT JOIN (SELECT reference_id, MAX(nom_complet) AS nom_complet, MAX(role) AS role FROM utilisateurs WHERE role NOT IN (\'eleve_ecole\', \'parent_ecole\') GROUP BY reference_id) u ON ece.agent_saisie_id = u.reference_id '
-            . 'WHERE ece.type_mouvement = :type ';
+            . 'WHERE ece.type_mouvement = :type '
+            . 'AND NULLIF(TRIM(ece.reference_recu), \'\') IS NOT NULL '
+            . 'AND ece.reference_recu NOT LIKE \'REG-FRAIS-%\' ';
 
         $params = [':type' => 'CREDIT'];
         if (($user['role'] ?? '') !== 'super_admin') {
@@ -352,12 +323,15 @@ class PaiementsController extends Controller
 
         // Also include legacy paiements_eleves table if present
         try {
-            $legacySql = 'SELECT pe.id AS legacy_id, pe.eleve_id, pe.frais_id, pe.montant_paye AS montant, pe.date_paiement AS date_operation, fs.type_frais AS libelle_frais, fs.devise AS frais_devise, COALESCE(fs.devise, ecole.devise_principale, \'USD\') AS transaction_devise, el.nom, el.postnom, el.prenom '
+            $legacySql = 'SELECT pe.id AS legacy_id, pe.ecriture_comptable_id, pe.eleve_id, pe.frais_id, pe.montant_paye AS montant, pe.date_paiement AS date_operation, fs.type_frais AS libelle_frais, fs.devise AS frais_devise, COALESCE(fs.devise, ecole.devise_principale, \'USD\') AS transaction_devise, el.nom, el.postnom, el.prenom '
                 . 'FROM paiements_eleves pe '
+                . 'INNER JOIN ecritures_comptables_eleves ece ON ece.id = pe.ecriture_comptable_id '
                 . 'INNER JOIN eleves el ON pe.eleve_id = el.id '
                 . 'LEFT JOIN ecoles ecole ON el.ecole_id = ecole.id '
                 . 'LEFT JOIN frais_scolaires fs ON pe.frais_id = fs.id '
-                . 'WHERE 1=1 ';
+                . 'WHERE ece.type_mouvement = \'CREDIT\' AND ece.annulee_at IS NULL '
+                . 'AND NULLIF(TRIM(ece.reference_recu), \'\') IS NOT NULL '
+                . 'AND ece.reference_recu NOT LIKE \'REG-FRAIS-%\' ';
 
             $legacyParams = [];
             if (($user['role'] ?? '') !== 'super_admin') {
@@ -396,6 +370,10 @@ class PaiementsController extends Controller
             foreach ($legacy as $l) {
                 $duplicate = false;
                 foreach ($records as $record) {
+                    if ((int) ($record['id'] ?? 0) === (int) ($l['ecriture_comptable_id'] ?? 0)) {
+                        $duplicate = true;
+                        break;
+                    }
                     if ((int) ($record['eleve_id'] ?? 0) !== (int) ($l['eleve_id'] ?? 0)
                         || (int) ($record['frais_id'] ?? 0) !== (int) ($l['frais_id'] ?? 0)
                         || abs((float) ($record['montant'] ?? 0) - (float) ($l['montant'] ?? 0)) > 0.001) {
@@ -899,7 +877,7 @@ class PaiementsController extends Controller
                 if ($montant <= 0) {
                     $montant = $remaining > 0 ? $remaining : $feeTotal;
                 }
-                $libelle = $fee['type_frais'] . ' - ' . number_format($feeTotal, 2) . ' ' . ($fee['devise'] ?? '');
+                $libelle = (string) $fee['type_frais'];
                 if ($remaining <= 0) {
                     $errors[] = 'Ce frais est déjà soldé pour cet élève.';
                 } elseif ($montant > $remaining) {
@@ -916,7 +894,7 @@ class PaiementsController extends Controller
                 } elseif ($montant > 0 && $montant > $feeTotal) {
                     $errors[] = 'Le montant saisi ne peut pas être supérieur au montant total du frais scolaire sélectionné.';
                 } else {
-                    $libelle = $fee['type_frais'] . ' - ' . number_format($feeTotal, 2) . ' ' . ($fee['devise'] ?? '');
+                    $libelle = (string) $fee['type_frais'];
                     if ($montant <= 0) {
                         $montant = $feeTotal;
                     }

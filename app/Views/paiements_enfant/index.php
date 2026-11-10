@@ -80,7 +80,7 @@ $displayDate = static function ($value): string {
                         <?php foreach ($childPayments as $payment): ?>
                           <tr>
                             <td class="ps-3 text-nowrap"><?= $escape($displayDate($payment['date_operation'] ?? null)) ?></td>
-                            <td><?= $escape($payment['libelle'] ?: 'Paiement') ?></td>
+                            <td><?= $escape(($payment['frais_type_frais'] ?? $payment['libelle'] ?? '') ?: 'Paiement') ?></td>
                             <td class="font-monospace"><?= $escape($payment['reference_recu'] ?: '—') ?></td>
                             <td class="text-end pe-3 text-nowrap fw-semibold">
                               <?= number_format((float) ($payment['montant'] ?? 0), 2, ',', ' ') ?>

@@ -5,6 +5,8 @@ namespace App\Controllers;
 use App\Core\Auth;
 use App\Core\Controller;
 use App\Models\Ecole;
+use App\Models\Eleve;
+use App\Models\SchoolTimetable;
 use App\Models\User;
 
 class ProfileController extends Controller
@@ -16,6 +18,19 @@ class ProfileController extends Controller
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
+        $student = null;
+        $studentClass = null;
+        if (in_array($role, ['eleve_ecole', 'eleve_école'], true)) {
+            $studentId = (int) ($user['reference_id'] ?? 0);
+            $schoolId = (int) ($user['ecole_id'] ?? 0);
+            $student = $studentId > 0 && $schoolId > 0
+                ? Eleve::findByIdAndSchool($studentId, $schoolId)
+                : null;
+            if (!$student) {
+                $this->redirect('/error/accessDenied');
+            }
+            $studentClass = SchoolTimetable::getStudentClass($schoolId, $studentId);
+        }
         $schools = [];
         $agents = [];
         if ($role === 'super_admin') {
@@ -41,6 +56,8 @@ class ProfileController extends Controller
             'role' => $role,
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $modules,
+            'student' => $student,
+            'studentClass' => $studentClass,
             'schools' => $schools,
             'agents' => $agents,
             'success' => $_GET['success'] ?? null,
@@ -92,9 +109,12 @@ class ProfileController extends Controller
 
         $user = Auth::refresh() ?: Auth::user();
         $id = (int) ($user['id'] ?? 0);
+        $isStudent = in_array($user['role'] ?? '', ['eleve_ecole', 'eleve_école'], true);
 
         $nomComplet = trim($_POST['nom_complet'] ?? '');
-        $identifiant = trim($_POST['identifiant'] ?? '');
+        $identifiant = $isStudent
+            ? (string) ($user['identifiant'] ?? '')
+            : trim($_POST['identifiant'] ?? '');
         $motDePasse = $_POST['mot_de_passe'] ?? '';
         $motDePasseConfirm = $_POST['mot_de_passe_confirm'] ?? '';
 
@@ -104,23 +124,25 @@ class ProfileController extends Controller
             $errors[] = 'Le nom complet est requis.';
         }
 
-        if ($identifiant === '') {
-            $errors[] = 'L’identifiant est requis.';
-        }
-
         $nameLength = function_exists('mb_strlen') ? mb_strlen($nomComplet) : strlen($nomComplet);
-        $identifierLength = function_exists('mb_strlen') ? mb_strlen($identifiant) : strlen($identifiant);
 
         if ($nameLength > 150) {
             $errors[] = 'Le nom complet ne peut pas dépasser 150 caractères.';
         }
 
-        if ($identifierLength > 100) {
-            $errors[] = 'L’identifiant ne peut pas dépasser 100 caractères.';
-        }
+        if (!$isStudent) {
+            if ($identifiant === '') {
+                $errors[] = 'L’identifiant est requis.';
+            }
 
-        if ($identifiant !== ($user['identifiant'] ?? '') && User::existsByIdentifiant($identifiant)) {
-            $errors[] = 'Cet identifiant est déjà utilisé.';
+            $identifierLength = function_exists('mb_strlen') ? mb_strlen($identifiant) : strlen($identifiant);
+            if ($identifierLength > 100) {
+                $errors[] = 'L’identifiant ne peut pas dépasser 100 caractères.';
+            }
+
+            if ($identifiant !== ($user['identifiant'] ?? '') && User::existsByIdentifiant($identifiant)) {
+                $errors[] = 'Cet identifiant est déjà utilisé.';
+            }
         }
 
         if ($motDePasse !== '' && $motDePasse !== $motDePasseConfirm) {
@@ -165,8 +187,10 @@ class ProfileController extends Controller
 
         $updateData = [
             'nom_complet' => $nomComplet,
-            'identifiant' => $identifiant,
         ];
+        if (!$isStudent) {
+            $updateData['identifiant'] = $identifiant;
+        }
 
         if ($motDePasse !== '') {
             $updateData['mot_de_passe'] = password_hash($motDePasse, PASSWORD_DEFAULT);

@@ -1346,13 +1346,17 @@ class SchoolTimetable
         }
 
         $stmt = Database::getConnection()->prepare(
-            'SELECT c.id AS classe_id, c.nom_classe, c.section_id, an.id AS annee_scolaire_id, an.annee
+            'SELECT c.id AS classe_id, c.nom_classe, c.section_id, c.option_id,
+                    sec.nom_section, o.nom_option, i.date_inscription,
+                    an.id AS annee_scolaire_id, an.annee
              FROM inscriptions i
              INNER JOIN annees_scolaires an ON an.id = i.annee_scolaire_id
                AND an.ecole_id = :ecole_id AND an.est_active = 1
              INNER JOIN classes c ON c.id = i.classe_id AND c.ecole_id = an.ecole_id
+             LEFT JOIN sections sec ON sec.id = c.section_id
+             LEFT JOIN options o ON o.id = c.option_id AND o.ecole_id = c.ecole_id
              WHERE i.eleve_id = :eleve_id
-             ORDER BY i.id DESC LIMIT 1'
+             ORDER BY i.date_inscription DESC, i.id DESC LIMIT 1'
         );
         $stmt->execute([':ecole_id' => $schoolId, ':eleve_id' => $studentId]);
         $class = $stmt->fetch(PDO::FETCH_ASSOC);

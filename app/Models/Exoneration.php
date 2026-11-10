@@ -74,14 +74,12 @@ class Exoneration
              FROM (
                  SELECT d.eleve_id, d.frais_id, UPPER(COALESCE(d.devise, \'USD\')) AS devise,
                         MAX(d.montant_initial) AS montant_initial,
-                        GREATEST(
-                            COALESCE((SELECT SUM(ece.montant) FROM ecritures_comptables_eleves ece
-                                      INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
-                                      WHERE ce.eleve_id = d.eleve_id AND ece.frais_id = d.frais_id
-                                        AND ece.type_mouvement = \'CREDIT\' AND ece.annulee_at IS NULL), 0),
-                            COALESCE((SELECT SUM(pe.montant_paye) FROM paiements_eleves pe
-                                      WHERE pe.eleve_id = d.eleve_id AND pe.frais_id = d.frais_id), 0)
-                        ) AS montant_paye,
+                        COALESCE((SELECT SUM(ece.montant) FROM ecritures_comptables_eleves ece
+                                  INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
+                                  WHERE ce.eleve_id = d.eleve_id AND ece.frais_id = d.frais_id
+                                    AND ece.type_mouvement = \'CREDIT\' AND ece.annulee_at IS NULL
+                                    AND NULLIF(TRIM(ece.reference_recu), \'\') IS NOT NULL
+                                    AND ece.reference_recu NOT LIKE \'REG-FRAIS-%\'), 0) AS montant_paye,
                         COALESCE((SELECT SUM(x.montant) FROM exonerations x
                                   WHERE x.eleve_id = d.eleve_id AND x.frais_id = d.frais_id
                                     AND x.statut = \'Approuvee\'
@@ -162,14 +160,12 @@ class Exoneration
             'SELECT GREATEST(0,
                 COALESCE((SELECT MAX(d.montant_initial) FROM dettes_eleves d
                           WHERE d.eleve_id = :debt_student AND d.frais_id = :debt_fee), :fee_total)
-                - GREATEST(
-                    COALESCE((SELECT SUM(ece.montant) FROM ecritures_comptables_eleves ece
-                              INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
-                              WHERE ce.eleve_id = :ledger_student AND ece.frais_id = :ledger_fee
-                                AND ece.type_mouvement = \'CREDIT\' AND ece.annulee_at IS NULL), 0),
-                    COALESCE((SELECT SUM(pe.montant_paye) FROM paiements_eleves pe
-                              WHERE pe.eleve_id = :legacy_student AND pe.frais_id = :legacy_fee), 0)
-                )
+                - COALESCE((SELECT SUM(ece.montant) FROM ecritures_comptables_eleves ece
+                            INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
+                            WHERE ce.eleve_id = :ledger_student AND ece.frais_id = :ledger_fee
+                              AND ece.type_mouvement = \'CREDIT\' AND ece.annulee_at IS NULL
+                              AND NULLIF(TRIM(ece.reference_recu), \'\') IS NOT NULL
+                              AND ece.reference_recu NOT LIKE \'REG-FRAIS-%\'), 0)
                 - COALESCE((SELECT SUM(x.montant) FROM exonerations x
                             WHERE x.eleve_id = :exemption_student AND x.frais_id = :exemption_fee
                               AND x.statut = \'Approuvee\' AND UPPER(x.devise) = :currency), 0)
@@ -181,8 +177,6 @@ class Exoneration
             ':fee_total' => $feeTotal,
             ':ledger_student' => $eleveId,
             ':ledger_fee' => $fraisId,
-            ':legacy_student' => $eleveId,
-            ':legacy_fee' => $fraisId,
             ':exemption_student' => $eleveId,
             ':exemption_fee' => $fraisId,
             ':currency' => strtoupper(trim($devise)),

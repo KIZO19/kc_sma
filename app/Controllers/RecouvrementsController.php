@@ -398,9 +398,13 @@ class RecouvrementsController extends Controller
                                              COALESCE((SELECT SUM(x.montant) FROM exonerations x
                                                                  WHERE x.eleve_id = d.eleve_id AND x.frais_id = d.frais_id
                                                                      AND x.statut = \'Approuvee\' AND UPPER(x.devise) = UPPER(d.devise)), 0) AS montant_exonere,
-                       GREATEST(0, MAX(d.montant_initial) - GREATEST(
-                         COALESCE((SELECT SUM(ece.montant) FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id WHERE ce.eleve_id = d.eleve_id AND ece.frais_id = d.frais_id AND ece.type_mouvement = \'CREDIT\' AND ece.annulee_at IS NULL), 0),
-                         COALESCE((SELECT SUM(pe.montant_paye) FROM paiements_eleves pe WHERE pe.eleve_id = d.eleve_id AND pe.frais_id = d.frais_id), 0)
+                       GREATEST(0, MAX(d.montant_initial) - COALESCE(
+                         (SELECT SUM(ece.montant) FROM ecritures_comptables_eleves ece
+                          INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
+                          WHERE ce.eleve_id = d.eleve_id AND ece.frais_id = d.frais_id
+                            AND ece.type_mouvement = \'CREDIT\' AND ece.annulee_at IS NULL
+                            AND NULLIF(TRIM(ece.reference_recu), \'\') IS NOT NULL
+                            AND ece.reference_recu NOT LIKE \'REG-FRAIS-%\'), 0
                                              ) - COALESCE((SELECT SUM(x.montant) FROM exonerations x
                                                                          WHERE x.eleve_id = d.eleve_id AND x.frais_id = d.frais_id
                                                                              AND x.statut = \'Approuvee\' AND UPPER(x.devise) = UPPER(d.devise)), 0)) AS montant_restant,
@@ -476,13 +480,13 @@ class RecouvrementsController extends Controller
                               COALESCE((SELECT SUM(x.montant) FROM exonerations x
                                   WHERE x.eleve_id = i.eleve_id AND x.frais_id = fs.id
                                     AND x.statut = \'Approuvee\' AND UPPER(x.devise) = UPPER(fs.devise)), 0) AS montant_exonere,
-                           GREATEST(0, fs.montant_total - GREATEST(
-                             COALESCE((SELECT SUM(ece.montant) FROM ecritures_comptables_eleves ece
-                                       INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
-                                       WHERE ce.eleve_id = i.eleve_id AND ece.frais_id = fs.id
-                                         AND ece.type_mouvement = \'CREDIT\' AND ece.annulee_at IS NULL), 0),
-                             COALESCE((SELECT SUM(pe.montant_paye) FROM paiements_eleves pe
-                                       WHERE pe.eleve_id = i.eleve_id AND pe.frais_id = fs.id), 0)
+                           GREATEST(0, fs.montant_total - COALESCE(
+                             (SELECT SUM(ece.montant) FROM ecritures_comptables_eleves ece
+                              INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
+                              WHERE ce.eleve_id = i.eleve_id AND ece.frais_id = fs.id
+                                AND ece.type_mouvement = \'CREDIT\' AND ece.annulee_at IS NULL
+                                AND NULLIF(TRIM(ece.reference_recu), \'\') IS NOT NULL
+                                AND ece.reference_recu NOT LIKE \'REG-FRAIS-%\'), 0
                                                      ) - COALESCE((SELECT SUM(x.montant) FROM exonerations x
                                                                                  WHERE x.eleve_id = i.eleve_id AND x.frais_id = fs.id
                                                                                      AND x.statut = \'Approuvee\' AND UPPER(x.devise) = UPPER(fs.devise)), 0)) AS montant_restant,

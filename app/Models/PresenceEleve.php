@@ -7,6 +7,30 @@ use PDO;
 
 class PresenceEleve
 {
+    public static function getForStudent(int $studentId, int $schoolId): array
+    {
+        if ($studentId <= 0 || $schoolId <= 0) {
+            return [];
+        }
+
+        $stmt = Database::getConnection()->prepare(
+            'SELECT p.date_jour, p.statut
+             FROM presences_eleves p
+             WHERE p.eleve_id = :eleve_id
+               AND EXISTS (
+                   SELECT 1
+                   FROM inscriptions i
+                   INNER JOIN classes c ON c.id = i.classe_id
+                   WHERE i.eleve_id = p.eleve_id AND c.ecole_id = :ecole_id
+               )
+             ORDER BY p.date_jour DESC
+             LIMIT 200'
+        );
+        $stmt->execute([':eleve_id' => $studentId, ':ecole_id' => $schoolId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public static function getAvailableClasses(?int $schoolId, ?int $teacherAgentId = null, ?int $sectionId = null): array
     {
         if ($teacherAgentId !== null && $teacherAgentId <= 0) {

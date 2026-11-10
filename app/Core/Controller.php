@@ -270,7 +270,7 @@ class Controller
                 ['name' => 'Mes cours', 'path' => '/espace-eleve/cours', 'icon' => 'bi-book'],
                 ['name' => 'Mes évaluations', 'path' => '/espace-eleve/evaluations', 'icon' => 'bi-journal-check'],
                 ['name' => 'Mes communiqués', 'path' => '/espace-eleve/communiques', 'icon' => 'bi-megaphone'],
-                ['name' => 'Mes présences', 'path' => '/mes-presences', 'icon' => 'bi-check2-square'],
+                ['name' => 'Mes présences', 'path' => '/espace-eleve/presences', 'icon' => 'bi-check2-square'],
             ],
             'parent_ecole', 'parent_école' => [
                 ['name' => 'Enfants', 'path' => '/mes-enfants', 'icon' => 'bi-people'],

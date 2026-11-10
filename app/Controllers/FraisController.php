@@ -548,8 +548,11 @@ class FraisController extends Controller
         $stmt = $db->prepare(
             'SELECT ce.eleve_id, ce.id AS compte_id, ce.annee_scolaire_id,
                     SUM(CASE WHEN ece.type_mouvement = \'DEBIT\' THEN ece.montant ELSE 0 END) AS total_debit,
-                    SUM(CASE WHEN ece.type_mouvement = \'CREDIT\' THEN ece.montant ELSE 0 END) AS total_credit,
                     SUM(CASE WHEN ece.type_mouvement = \'CREDIT\'
+                                  AND NULLIF(TRIM(ece.reference_recu), \'\') IS NOT NULL
+                             THEN ece.montant ELSE 0 END) AS total_credit,
+                    SUM(CASE WHEN ece.type_mouvement = \'CREDIT\'
+                                  AND NULLIF(TRIM(ece.reference_recu), \'\') IS NOT NULL
                                   AND COALESCE(ece.reference_recu, \'\') NOT LIKE \'REG-FRAIS-%\'
                              THEN ece.montant ELSE 0 END) AS total_paiements
              FROM ecritures_comptables_eleves ece
@@ -570,16 +573,6 @@ class FraisController extends Controller
             ];
             $ledgerByStudent[$studentId]['credits'] =
                 ($ledgerByStudent[$studentId]['credits'] ?? 0.0) + (float) $entry['total_paiements'];
-        }
-
-        $legacyPaidByStudent = [];
-        $stmt = $db->prepare(
-            'SELECT eleve_id, COALESCE(SUM(montant_paye), 0) AS total_paye
-             FROM paiements_eleves WHERE frais_id = :fee_id GROUP BY eleve_id'
-        );
-        $stmt->execute([':fee_id' => $feeId]);
-        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $payment) {
-            $legacyPaidByStudent[(int) $payment['eleve_id']] = (float) $payment['total_paye'];
         }
 
         $exoneratedByStudent = [];
@@ -608,10 +601,7 @@ class FraisController extends Controller
             $studentId = (int) $studentId;
             $isTargeted = isset($targetSet[$studentId]);
             $ledger = $ledgerByStudent[$studentId] ?? ['accounts' => [], 'credits' => 0.0];
-            $paid = max(
-                (float) $ledger['credits'],
-                (float) ($legacyPaidByStudent[$studentId] ?? 0.0)
-            );
+            $paid = (float) $ledger['credits'];
             $exonerated = (float) ($exoneratedByStudent[$studentId] ?? 0.0);
             $targetDue = $isTargeted ? max(0.0, $amount - $paid - $exonerated) : 0.0;
             $targetAccounts = [];

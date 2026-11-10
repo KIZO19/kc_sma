@@ -50,13 +50,9 @@ class SchoolItemDelivery
                           AND ece.frais_id = d.frais_id
                           AND ece.type_mouvement = \'CREDIT\'
                           AND ece.annulee_at IS NULL
+                          AND NULLIF(TRIM(ece.reference_recu), \'\') IS NOT NULL
                           AND COALESCE(ece.reference_recu, \'\') NOT LIKE \'REG-FRAIS-%\'
                     ), 0) AS total_ledger_paye,
-                    COALESCE((
-                        SELECT SUM(pe.montant_paye)
-                        FROM paiements_eleves pe
-                        WHERE pe.eleve_id = d.eleve_id AND pe.frais_id = d.frais_id
-                    ), 0) AS total_legacy_paye,
                     e.matricule, e.nom, e.postnom, e.prenom,
                     c.nom_classe, o.nom_option, sec.nom_section,
                     f.type_frais, f.devise,
@@ -87,7 +83,7 @@ class SchoolItemDelivery
                       e.matricule, e.nom, e.postnom, e.prenom,
                       c.nom_classe, o.nom_option, sec.nom_section, f.type_frais, f.devise,
                       l.date_livraison, l.livre_par_user_id, u.nom_complet
-             HAVING GREATEST(total_ledger_paye, total_legacy_paye) >= MAX(d.montant_initial) - 0.005
+             HAVING total_ledger_paye >= MAX(d.montant_initial) - 0.005
              ORDER BY l.date_livraison IS NULL DESC, c.nom_classe ASC,
                       e.nom ASC, e.postnom ASC, e.prenom ASC, f.type_frais ASC'
         );

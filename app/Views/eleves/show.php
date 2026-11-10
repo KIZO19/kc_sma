@@ -215,7 +215,7 @@ $entryTotalsByCurrency = $entryTotalsByCurrency ?? [];
                               <td><?= htmlspecialchars(number_format((float) ($ec['montant'] ?? 0), 2, ',', ' ')) ?></td>
                               <td><?= htmlspecialchars($ec['frais_devise'] ?? 'USD') ?></td>
                               <td><?= htmlspecialchars($ec['reference_recu'] ?? '-') ?></td>
-                              <td><?= htmlspecialchars($ec['libelle'] ?? '') ?></td>
+                              <td><?= htmlspecialchars($ec['frais_type_frais'] ?? $ec['libelle'] ?? '') ?></td>
                             </tr>
                           <?php endforeach; ?>
                         </tbody>

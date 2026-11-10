@@ -496,10 +496,9 @@ class ParentModel
                 . 'INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id '
                 . 'LEFT JOIN frais_scolaires fs ON fs.id = ece.frais_id '
                 . 'WHERE ce.eleve_id = :eleve AND ece.type_mouvement = "CREDIT" AND ece.annulee_at IS NULL '
+                . 'AND NULLIF(TRIM(ece.reference_recu), \'\') IS NOT NULL '
+                . 'AND ece.reference_recu NOT LIKE "REG-FRAIS-%" '
                 . 'GROUP BY COALESCE(fs.devise, "USD")',
-                'SELECT COALESCE(fs.devise, "USD") AS devise, SUM(pe.montant_paye) AS total '
-                . 'FROM paiements_eleves pe LEFT JOIN frais_scolaires fs ON fs.id = pe.frais_id '
-                . 'WHERE pe.eleve_id = :eleve GROUP BY COALESCE(fs.devise, "USD")',
             ];
 
             foreach ($queries as $query) {

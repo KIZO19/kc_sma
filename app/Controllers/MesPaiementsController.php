@@ -33,7 +33,18 @@ class MesPaiementsController extends Controller
                 Eleve::getAccountingEntries($studentId),
                 static fn (array $entry): bool => strtoupper((string) ($entry['type_mouvement'] ?? '')) === 'CREDIT'
                     && empty($entry['annulee_at'])
+                    && strpos((string) ($entry['reference_recu'] ?? ''), 'REG-FRAIS-') !== 0
             ));
+            $totalPaidByCurrency = [];
+            foreach ($payments as $payment) {
+                $currency = strtoupper(trim((string) ($payment['frais_devise'] ?? 'USD'))) ?: 'USD';
+                $totalPaidByCurrency[$currency] = ($totalPaidByCurrency[$currency] ?? 0.0)
+                    + (float) ($payment['montant'] ?? 0);
+            }
+            foreach ($totalPaidByCurrency as $currency => $amount) {
+                $totalPaidByCurrency[$currency] = round($amount, 2);
+            }
+            ksort($totalPaidByCurrency);
 
             $this->view('espace_eleve/paiements', [
                 'title' => APP_NAME . ' - Mes paiements',
@@ -43,7 +54,8 @@ class MesPaiementsController extends Controller
                 'modules' => $modules,
                 'student' => $student,
                 'payments' => $payments,
-                'outstandingByCurrency' => DetteEleve::getTotalOutstandingGroupedByDevise($studentId),
+                'totalPaidByCurrency' => $totalPaidByCurrency,
+                'outstandingByCurrency' => DetteEleve::computeOutstandingFromApplicableFees($studentId),
             ]);
             return;
         }

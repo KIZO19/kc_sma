@@ -50,6 +50,8 @@ class Eleve
             $payments = array_values(array_filter(
                 self::getAccountingEntries($childId),
                 static fn (array $entry): bool => strtoupper((string) ($entry['type_mouvement'] ?? '')) === 'CREDIT'
+                    && empty($entry['annulee_at'])
+                    && strpos((string) ($entry['reference_recu'] ?? ''), 'REG-FRAIS-') !== 0
             ));
             $totalByCurrency = [];
             foreach ($payments as $payment) {
@@ -373,70 +375,19 @@ class Eleve
     {
         $db = Database::getConnection();
         $stmt = $db->prepare(
-            'SELECT ece.*, fs.devise AS frais_devise FROM ecritures_comptables_eleves ece '
+            'SELECT ece.*, fs.devise AS frais_devise, fs.type_frais AS frais_type_frais FROM ecritures_comptables_eleves ece '
             . 'INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id '
             . 'LEFT JOIN frais_scolaires fs ON fs.id = ece.frais_id '
-            . 'WHERE ce.eleve_id = :eleve'
+            . 'WHERE ce.eleve_id = :eleve '
+            . 'AND (UPPER(ece.type_mouvement) <> \'CREDIT\' '
+            . 'OR NULLIF(TRIM(ece.reference_recu), \'\') IS NOT NULL)'
         );
         $stmt->execute([':eleve' => $eleveId]);
         $records = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        try {
-            $legacyStmt = $db->prepare(
-                'SELECT pe.id AS legacy_id, pe.eleve_id, pe.frais_id, pe.montant_paye AS montant, pe.date_paiement AS date_operation, '
-                . 'COALESCE(fs.type_frais, "Paiement") AS libelle, fs.devise AS frais_devise '
-                . 'FROM paiements_eleves pe '
-                . 'LEFT JOIN frais_scolaires fs ON pe.frais_id = fs.id '
-                . 'WHERE pe.eleve_id = :eleve'
-            );
-            $legacyStmt->execute([':eleve' => $eleveId]);
-            $legacyRecords = $legacyStmt->fetchAll(PDO::FETCH_ASSOC);
-
-            foreach ($legacyRecords as $legacy) {
-                $records[] = [
-                    'id' => 'legacy-' . ($legacy['legacy_id'] ?? ''),
-                    'compte_eleve_id' => null,
-                    'frais_id' => $legacy['frais_id'] ?? null,
-                    'caisse_banque_id' => null,
-                    'type_mouvement' => 'CREDIT',
-                    'montant' => $legacy['montant'] ?? 0,
-                    'reference_recu' => null,
-                    'date_operation' => $legacy['date_operation'] ?? null,
-                    'libelle' => $legacy['libelle'] ?? 'Paiement',
-                    'agent_saisie_id' => null,
-                    'frais_devise' => $legacy['frais_devise'] ?? 'USD',
-                ];
-            }
-        } catch (\Throwable $e) {
-            // Ignore legacy payment table issues and fall back to modern entries only.
-        }
-
-        $dedupedRecords = [];
         $seenKeys = [];
+        $dedupedRecords = [];
         foreach ($records as $record) {
-            // A payment mirrored in the legacy table has no receipt reference.
-            // Ignore that copy when the accounting entry already exists.
-            if (strtoupper((string) ($record['type_mouvement'] ?? '')) === 'CREDIT'
-                && strpos((string) ($record['id'] ?? ''), 'legacy-') === 0) {
-                $recordTime = strtotime((string) ($record['date_operation'] ?? ''));
-                $isMirror = false;
-                foreach ($dedupedRecords as $existing) {
-                    if (strtoupper((string) ($existing['type_mouvement'] ?? '')) !== 'CREDIT'
-                        || strpos((string) ($existing['id'] ?? ''), 'legacy-') === 0
-                        || (int) ($existing['frais_id'] ?? 0) !== (int) ($record['frais_id'] ?? 0)
-                        || abs((float) ($existing['montant'] ?? 0) - (float) ($record['montant'] ?? 0)) > 0.001) {
-                        continue;
-                    }
-                    $existingTime = strtotime((string) ($existing['date_operation'] ?? ''));
-                    if ($recordTime !== false && $existingTime !== false && abs($recordTime - $existingTime) <= 2) {
-                        $isMirror = true;
-                        break;
-                    }
-                }
-                if ($isMirror) {
-                    continue;
-                }
-            }
             $key = implode('|', [
                 trim((string) ($record['date_operation'] ?? '')),
                 trim((string) ($record['frais_id'] ?? '')),

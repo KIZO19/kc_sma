@@ -626,6 +626,7 @@ require __DIR__ . '/../partials/app_header.php';
                     '/espace-eleve/evaluations',
                     '/mon-emploi',
                     '/espace-eleve/communiques',
+                    '/espace-eleve/presences',
                 ],
                 'eleve_école' => [
                     '/mes-notes',
@@ -636,6 +637,7 @@ require __DIR__ . '/../partials/app_header.php';
                     '/espace-eleve/evaluations',
                     '/mon-emploi',
                     '/espace-eleve/communiques',
+                    '/espace-eleve/presences',
                 ],
                 'parent_ecole' => ['/mes-enfants', '/bulletins-enfant', '/paiements-enfant', '/messages'],
                 'agent_ecole' => ['/inscriptions'],
@@ -655,7 +657,7 @@ require __DIR__ . '/../partials/app_header.php';
               $workspaceActions['/presences']['name'] = 'Présence des enseignants';
               $workspaceActions = ['/presences' => $workspaceActions['/presences']] + $workspaceActions;
             }
-            $workspaceActions = array_slice(array_values($workspaceActions), 0, 8);
+            $workspaceActions = array_slice(array_values($workspaceActions), 0, 9);
             $primaryAction = count($workspaceActions) > 1 ? $workspaceActions[0] : null;
             $secondaryActions = $primaryAction ? array_slice($workspaceActions, 1) : $workspaceActions;
           ?>

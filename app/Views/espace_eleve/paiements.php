@@ -1,12 +1,6 @@
 <?php require __DIR__ . '/../partials/app_header.php'; ?>
 <?php
 $escape = static fn ($value): string => htmlspecialchars((string) ($value ?? ''), ENT_QUOTES, 'UTF-8');
-$totalByCurrency = [];
-foreach ($payments as $payment) {
-    $currency = strtoupper(trim((string) ($payment['frais_devise'] ?? 'USD'))) ?: 'USD';
-    $totalByCurrency[$currency] = ($totalByCurrency[$currency] ?? 0.0) + (float) ($payment['montant'] ?? 0);
-}
-ksort($totalByCurrency);
 ?>
 <section class="content-header">
   <div class="container-fluid">
@@ -20,8 +14,8 @@ ksort($totalByCurrency);
       <div class="col-md-6">
         <div class="card h-100"><div class="card-body">
           <h2 class="h6">Total payé</h2>
-          <?php if ($totalByCurrency === []): ?><p class="text-muted mb-0">Aucun paiement enregistré.</p><?php endif; ?>
-          <?php foreach ($totalByCurrency as $currency => $amount): ?>
+          <?php if ($totalPaidByCurrency === []): ?><p class="text-muted mb-0">Aucun paiement enregistré.</p><?php endif; ?>
+          <?php foreach ($totalPaidByCurrency as $currency => $amount): ?>
             <div class="fw-semibold"><?= $escape(number_format($amount, 2, ',', ' ') . ' ' . $currency) ?></div>
           <?php endforeach; ?>
         </div></div>
@@ -52,7 +46,7 @@ ksort($totalByCurrency);
                 <?php foreach ($payments as $payment): ?>
                   <tr>
                     <td class="text-nowrap"><?= $escape(formatDate($payment['date_operation'] ?? null)) ?></td>
-                    <td><?= $escape($payment['libelle'] ?? 'Paiement') ?></td>
+                    <td><?= $escape($payment['frais_type_frais'] ?? $payment['libelle'] ?? 'Paiement') ?></td>
                     <td><?= $escape($payment['reference_recu'] ?? '—') ?></td>
                     <td class="text-end text-nowrap fw-semibold">
                       <?= $escape(number_format((float) ($payment['montant'] ?? 0), 2, ',', ' ')) ?>
