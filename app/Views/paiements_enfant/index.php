@@ -74,7 +74,7 @@ $displayDate = static function ($value): string {
                   <div class="table-responsive">
                     <table class="table table-striped table-hover align-middle mb-0">
                       <thead>
-                        <tr><th class="ps-3">Date</th><th>Frais / libellé</th><th>Référence</th><th class="text-end pe-3">Montant payé</th></tr>
+                        <tr><th class="ps-3">Date</th><th>Frais / libellé</th><th>Référence</th><th class="text-end">Montant payé</th><th class="text-end pe-3">Reçu</th></tr>
                       </thead>
                       <tbody>
                         <?php foreach ($childPayments as $payment): ?>
@@ -85,6 +85,9 @@ $displayDate = static function ($value): string {
                             <td class="text-end pe-3 text-nowrap fw-semibold">
                               <?= number_format((float) ($payment['montant'] ?? 0), 2, ',', ' ') ?>
                               <?= $escape(strtoupper((string) ($payment['frais_devise'] ?? 'USD')) ?: 'USD') ?>
+                            </td>
+                            <td class="text-end pe-3 text-nowrap">
+                              <a class="btn btn-sm btn-outline-primary" href="<?= BASE_URL ?>/paiements/receipt?id=<?= rawurlencode((string) ($payment['id'] ?? '')) ?>">Voir le reçu</a>
                             </td>
                           </tr>
                         <?php endforeach; ?>

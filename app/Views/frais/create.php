@@ -62,13 +62,8 @@
 
                         <div class="mb-3">
                           <label class="form-label">Encodage (code unique)</label>
-                          <div class="input-group">
-                            <input id="encodageInput" type="text" name="encodage" class="form-control" required value="<?= htmlspecialchars($oldInput['encodage'] ?? ($suggestedEncodage ?? '')) ?>" placeholder="ex: FRAIS-2026-001">
-                            <button id="regenEncodage" type="button" class="btn btn-outline-secondary" title="Régénérer">Régénérer</button>
-                          </div>
-                          <?php if (empty($oldInput['encodage'] ?? '') && !empty($suggestedEncodage)): ?>
-                            <div class="form-text text-muted mt-1"><span id="encodageHint">(généré automatiquement)</span></div>
-                          <?php endif; ?>
+                          <input type="text" class="form-control" placeholder="Généré automatiquement à l’enregistrement" readonly>
+                          <div class="form-text">Ce code sera attribué automatiquement à l’enregistrement.</div>
                         </div>
 
                         <div class="mb-3">
@@ -232,24 +227,6 @@
             updateMeta();
             updateVisibility();
 
-            // Encodage: show generated hint and allow regen by reload
-            const encodageInput = document.getElementById('encodageInput');
-            const regenBtn = document.getElementById('regenEncodage');
-            const encodageHint = document.getElementById('encodageHint');
-            if (encodageInput && regenBtn) {
-              // hide hint when user types manually
-              encodageInput.addEventListener('input', function () {
-                if (encodageHint) encodageHint.style.display = encodageInput.value.trim() === '<?= htmlspecialchars($suggestedEncodage ?? '') ?>' ? '' : 'none';
-              });
-              regenBtn.addEventListener('click', function () {
-                // simple strategy: reload the page to get a new suggestedEncodage from server
-                const params = new URLSearchParams(window.location.search);
-                // add a cache-busting param
-                params.set('_regen', Date.now());
-                window.location.search = params.toString();
-              });
-            }
-
             // Ensure hidden scope id and trimmed values before submit with client validation
             const fraisForm = document.getElementById('fraisForm');
             if (fraisForm) {
@@ -258,14 +235,11 @@
                 const clientErrors = [];
                 const typeVal = (fraisForm.querySelector('input[name="type_frais"]') || { value: '' }).value.trim();
                 const montantVal = (fraisForm.querySelector('input[name="montant_total"]') || { value: '' }).value.trim();
-                const encVal = (document.getElementById('encodageInput') || { value: '' }).value.trim();
                 const anneeVal = (fraisForm.querySelector('select[name="annee_scolaire_id"]') || { value: '' }).value;
                 const deviseVal = (fraisForm.querySelector('select[name="devise"]') || { value: '' }).value;
 
                 if (typeVal === '') clientErrors.push('Le type de frais est requis.');
                 if (montantVal === '' || isNaN(montantVal) || Number(montantVal) < 0) clientErrors.push('Le montant total doit être un nombre positif.');
-                if (encVal === '') clientErrors.push("L'encodage est requis.");
-                if (/\s/.test(encVal)) clientErrors.push("L'encodage ne doit pas contenir d'espaces.");
                 if (!anneeVal || anneeVal === '') clientErrors.push('L\'année scolaire est requise.');
                 if (!deviseVal || deviseVal === '') clientErrors.push('La devise est requise.');
 
@@ -296,11 +270,9 @@
                   return false;
                 }
 
-                // trim encodage and type_frais inputs to avoid accidental spaces
+                // Trim the fee type to avoid accidental surrounding spaces.
                 const typeInput = fraisForm.querySelector('input[name="type_frais"]');
-                const encInput = document.getElementById('encodageInput');
                 if (typeInput) typeInput.value = typeInput.value.trim();
-                if (encInput) encInput.value = encInput.value.trim();
                 // allow normal submit to proceed
               });
             }

@@ -15,6 +15,7 @@ $loginUrl = $loginUrl ?? (BASE_URL . '/login');
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <title>Réinitialiser le mot de passe - <?= htmlspecialchars($title) ?></title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" crossorigin="anonymous">
   <link rel="stylesheet" href="<?= BASE_URL ?>/assets/adminlte.min.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>/assets/responsive.css">

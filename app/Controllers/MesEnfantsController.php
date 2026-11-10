@@ -6,6 +6,7 @@ use App\Core\Auth;
 use App\Core\Controller;
 use App\Models\Eleve;
 use App\Models\ParentModel;
+use App\Models\PresenceEleve;
 use App\Models\User;
 
 class MesEnfantsController extends Controller
@@ -86,5 +87,41 @@ class MesEnfantsController extends Controller
         }
 
         $this->redirect('/mes-enfants');
+    }
+
+    public function presences(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['parent_ecole', 'parent_école']);
+
+        $user = Auth::refresh() ?: Auth::user();
+        $role = (string) ($user['role'] ?? 'parent_ecole');
+        $parentId = (int) ($user['reference_id'] ?? 0);
+        $schoolId = (int) ($user['ecole_id'] ?? 0);
+        $studentId = (int) ($_GET['id'] ?? 0);
+
+        $student = null;
+        foreach (Eleve::getChildrenForParent($parentId, $schoolId) as $child) {
+            if ((int) ($child['id'] ?? 0) === $studentId) {
+                $student = $child;
+                break;
+            }
+        }
+
+        if ($student === null) {
+            $this->redirect('/error/accessDenied');
+        }
+
+        $this->view('espace_eleve/records', [
+            'title' => APP_NAME . ' - Présences de ' . \App\Core\PersonName::format($student),
+            'user' => $user,
+            'role' => $role,
+            'roleLabel' => User::getRoleLabel($role),
+            'modules' => $this->getModulesForRole($role),
+            'student' => $student,
+            'studentClass' => ['nom_classe' => $student['nom_classe'] ?? ''],
+            'recordType' => 'presences',
+            'records' => PresenceEleve::getForStudent($studentId, $schoolId),
+        ]);
     }
 }

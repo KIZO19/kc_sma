@@ -7,6 +7,12 @@ class Controller
     protected function view(string $view, array $data = []): void
     {
         $user = $data['user'] ?? null;
+        $layoutSchool = null;
+        if ((int) ($user['ecole_id'] ?? 0) > 0) {
+            $layoutSchool = \App\Models\Ecole::findById((int) $user['ecole_id']);
+        }
+        $data['layoutSchool'] = $layoutSchool;
+
         if ($user !== null && (int) ($user['id'] ?? 0) > 0) {
             \App\Models\EvenementNotification::deliverDueForUser($user);
             $data['eventNotifications'] = \App\Models\EvenementNotification::getForUser((int) $user['id']);
@@ -56,9 +62,9 @@ class Controller
         }
 
         if (isset($data['title']) && is_string($data['title'])) {
-            $data['title'] = $this->resolvePageTitle($data['title'], $user);
+            $data['title'] = $this->resolvePageTitle($data['title'], $layoutSchool);
         } elseif (!isset($data['title'])) {
-            $data['title'] = $this->resolvePageTitle(APP_NAME, $user);
+            $data['title'] = $this->resolvePageTitle(APP_NAME, $layoutSchool);
         }
 
         extract($data);
@@ -101,16 +107,11 @@ class Controller
         echo $prefixedHtml;
     }
 
-    protected function resolvePageTitle(string $title, ?array $user = null): string
+    protected function resolvePageTitle(string $title, ?array $school): string
     {
         $schoolName = APP_NAME;
-        $ecoleId = (int) ($user['ecole_id'] ?? 0);
-
-        if ($ecoleId > 0) {
-            $school = \App\Models\Ecole::findById($ecoleId);
-            if (!empty($school['nom_etablissement'])) {
-                $schoolName = $school['nom_etablissement'];
-            }
+        if (!empty($school['nom_etablissement'])) {
+            $schoolName = $school['nom_etablissement'];
         }
 
         if ($title === APP_NAME) {

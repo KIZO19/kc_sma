@@ -41,7 +41,7 @@ $escape = static fn ($value): string => htmlspecialchars((string) ($value ?? '')
         <?php else: ?>
           <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
-              <thead><tr><th>Date</th><th>Motif</th><th>Référence</th><th class="text-end">Montant</th></tr></thead>
+              <thead><tr><th>Date</th><th>Motif</th><th>Référence</th><th class="text-end">Montant</th><th class="text-end">Reçu</th></tr></thead>
               <tbody>
                 <?php foreach ($payments as $payment): ?>
                   <tr>
@@ -51,6 +51,9 @@ $escape = static fn ($value): string => htmlspecialchars((string) ($value ?? '')
                     <td class="text-end text-nowrap fw-semibold">
                       <?= $escape(number_format((float) ($payment['montant'] ?? 0), 2, ',', ' ')) ?>
                       <?= $escape(strtoupper(trim((string) ($payment['frais_devise'] ?? 'USD'))) ?: 'USD') ?>
+                    </td>
+                    <td class="text-end text-nowrap">
+                      <a class="btn btn-sm btn-outline-primary" href="<?= BASE_URL ?>/paiements/receipt?id=<?= rawurlencode((string) ($payment['id'] ?? '')) ?>">Voir le reçu</a>
                     </td>
                   </tr>
                 <?php endforeach; ?>

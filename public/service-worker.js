@@ -1,29 +1,5 @@
-var STATIC_CACHE = 'kc-sma-static-v8';
-var CDN_CACHE = 'kc-sma-cdn-v4';
-var CDN_URLS = [
-  'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css',
-  'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js',
-  'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css',
-  'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/fonts/bootstrap-icons.woff2',
-  'https://cdn.jsdelivr.net/npm/overlayscrollbars@2.11.0/styles/overlayscrollbars.min.css',
-  'https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/css/jsvectormap.min.css',
-  'https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/js/jsvectormap.min.js',
-  'https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/maps/world.js',
-  'https://cdn.jsdelivr.net/npm/apexcharts@3.37.1/dist/apexcharts.min.js',
-  'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js',
-  'https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js',
-  'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js',
-  'https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css',
-  'https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js',
-  'https://cdn.datatables.net/buttons/2.4.1/css/buttons.dataTables.min.css',
-  'https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js',
-  'https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js',
-  'https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js',
-  'https://code.jquery.com/jquery-3.7.1.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js'
-];
+var STATIC_CACHE = 'kc-sma-static-v9';
+var CDN_CACHE = 'kc-sma-cdn-v5';
 var CDN_HOSTS = [
   'cdn.jsdelivr.net',
   'cdn.datatables.net',
@@ -37,8 +13,7 @@ self.addEventListener('install', function (event) {
   event.waitUntil(
     Promise.all([
       self.skipWaiting(),
-      cacheApplicationShell(),
-      cacheCdnAssets()
+      cacheApplicationShell()
     ])
   );
 });
@@ -89,25 +64,6 @@ function cacheApplicationShell() {
           throw new Error('Unable to precache ' + url.pathname);
         }
         return cache.put(url, response);
-      });
-    }));
-  });
-}
-
-function cacheCdnAssets() {
-  return caches.open(CDN_CACHE).then(function (cache) {
-    return Promise.allSettled(CDN_URLS.map(function (url) {
-      var controller = new AbortController();
-      var timeout = setTimeout(function () {
-        controller.abort();
-      }, 8000);
-
-      return fetch(url, { mode: 'no-cors', signal: controller.signal }).then(function (response) {
-        if (response.ok || response.type === 'opaque') {
-          return cache.put(url, response);
-        }
-      }).finally(function () {
-        clearTimeout(timeout);
       });
     }));
   });

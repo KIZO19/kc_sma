@@ -158,6 +158,7 @@ class Router
                 'App\\Controllers\\DashboardController' => ['index', 'presence'],
                 'App\\Controllers\\MesNotesController' => ['index'],
                 'App\\Controllers\\MesPaiementsController' => ['index'],
+                'App\\Controllers\\PaiementsController' => ['receipt', 'qrsummary'],
                 'App\\Controllers\\MesPresencesController' => ['index'],
                 'App\\Controllers\\MonEmploiController' => ['index'],
                 'App\\Controllers\\EspaceEleveController' => [

@@ -1334,7 +1334,7 @@ class PaiementsController extends Controller
     public function receipt(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'parent_ecole']);
+        Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'parent_ecole', 'parent_école', 'eleve_ecole', 'eleve_école']);
 
         $user = Auth::refresh() ?: Auth::user();
         $idParam = $_GET['id'] ?? null;
@@ -1421,8 +1421,12 @@ class PaiementsController extends Controller
                     || !$student
                     || !Eleve::findByIdAndSchool($paymentEleveId, $userSchool, $this->getSectionScopeForUser($user))
                     || (
-                        $userRole === 'parent_ecole'
+                        in_array($userRole, ['parent_ecole', 'parent_école'], true)
                         && (int) ($student['parent_id'] ?? 0) !== (int) ($user['reference_id'] ?? 0)
+                    )
+                    || (
+                        in_array($userRole, ['eleve_ecole', 'eleve_école'], true)
+                        && $paymentEleveId !== (int) ($user['reference_id'] ?? 0)
                     )
                 ) {
                     header('Location: ' . BASE_URL . '/error/notFound');
@@ -1493,7 +1497,7 @@ class PaiementsController extends Controller
     public function qrSummary(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'parent_ecole']);
+        Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'parent_ecole', 'parent_école', 'eleve_ecole', 'eleve_école']);
 
         $user = Auth::refresh() ?: Auth::user();
         $idParam = $_GET['id'] ?? null;
@@ -1547,7 +1551,7 @@ class PaiementsController extends Controller
 
         $eleveId = (int) ($data['eleve_id'] ?? 0);
         $role = (string) ($user['role'] ?? '');
-        if ($role === 'parent_ecole') {
+        if (in_array($role, ['parent_ecole', 'parent_école'], true)) {
             if (
                 (int) ($data['parent_id'] ?? 0) <= 0
                 || (int) ($data['parent_id'] ?? 0) !== (int) ($user['reference_id'] ?? 0)
@@ -1557,7 +1561,14 @@ class PaiementsController extends Controller
             }
         } elseif ($role !== 'super_admin') {
             $schoolId = (int) ($user['ecole_id'] ?? 0);
-            if ($schoolId <= 0 || !Eleve::findByIdAndSchool($eleveId, $schoolId, $this->getSectionScopeForUser($user))) {
+            if (
+                $schoolId <= 0
+                || !Eleve::findByIdAndSchool($eleveId, $schoolId, $this->getSectionScopeForUser($user))
+                || (
+                    in_array($role, ['eleve_ecole', 'eleve_école'], true)
+                    && $eleveId !== (int) ($user['reference_id'] ?? 0)
+                )
+            ) {
                 header('Location: ' . BASE_URL . '/error/notFound');
                 exit;
             }

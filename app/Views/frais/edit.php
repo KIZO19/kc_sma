@@ -48,7 +48,8 @@
 
           <div class="mb-3">
             <label class="form-label">Encodage (code unique)</label>
-            <input class="form-control" name="encodage" value="<?= htmlspecialchars($old['encodage'] ?? $fee['encodage'] ?? '') ?>" required>
+            <input class="form-control" value="<?= htmlspecialchars($fee['encodage'] ?? '') ?>" placeholder="Généré automatiquement à l’enregistrement" readonly>
+            <div class="form-text">Ce code est attribué automatiquement et ne peut pas être modifié.</div>
           </div>
 
           <div class="mb-3">

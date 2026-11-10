@@ -1,8 +1,9 @@
 <?php require __DIR__ . '/../partials/app_header.php'; ?>
 <?php
 $escape = static fn ($value): string => htmlspecialchars((string) ($value ?? ''), ENT_QUOTES, 'UTF-8');
+$isParentView = in_array($role ?? '', ['parent_ecole', 'parent_école'], true);
 $titles = [
-    'presences' => 'Mes présences',
+    'presences' => $isParentView ? 'Présences de l’enfant' : 'Mes présences',
     'discipline' => 'Mon dossier disciplinaire',
     'derogations' => 'Mes dérogations',
     'cours' => 'Mes cours',
@@ -11,13 +12,20 @@ $titles = [
 ];
 ?>
 <section class="content-header">
-  <div class="container-fluid">
+  <div class="container-fluid d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div>
     <h1><?= $escape($titles[$recordType] ?? 'Mon espace scolaire') ?></h1>
     <p class="text-muted mb-0">
       <?= $escape(\App\Core\PersonName::format($student)) ?>
       <?php if (!empty($student['matricule'])): ?> · <?= $escape($student['matricule']) ?><?php endif; ?>
       <?php if (!empty($studentClass['nom_classe'])): ?> · Classe <?= $escape($studentClass['nom_classe']) ?><?php endif; ?>
     </p>
+    </div>
+    <?php if ($isParentView && $recordType === 'presences'): ?>
+      <a class="btn btn-outline-secondary btn-sm" href="<?= BASE_URL ?>/mes-enfants">
+        <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Retour à mes enfants
+      </a>
+    <?php endif; ?>
   </div>
 </section>
 <section class="content">
@@ -27,7 +35,7 @@ $titles = [
         <?php if ($records === []): ?>
           <p class="text-muted text-center py-5 mb-0">
             <?php if ($recordType === 'presences'): ?>
-              Aucun relevé de présence n’est disponible pour votre compte.
+              Aucun relevé de présence n’est disponible pour <?= $isParentView ? 'cet enfant' : 'votre compte' ?>.
             <?php elseif ($recordType === 'discipline'): ?>
               Aucun incident disciplinaire n’est enregistré pour votre compte.
             <?php elseif ($recordType === 'derogations'): ?>

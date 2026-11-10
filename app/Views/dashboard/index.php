@@ -1105,6 +1105,7 @@ require __DIR__ . '/../partials/app_header.php';
         </div>
       </section>
 <?php $pageScripts = <<<'SCRIPT'
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" crossorigin="anonymous" defer></script>
 <script>
   document.addEventListener('DOMContentLoaded', function () {
     const chartCtx = document.getElementById('dashboardChart');

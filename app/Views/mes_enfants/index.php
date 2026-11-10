@@ -9,7 +9,7 @@ $displayDate = static function ($value): string {
 <section class="content-header">
   <div class="container-fluid">
     <h1>Mes enfants</h1>
-    <p class="text-muted mb-0">Consultez les notes et le suivi disciplinaire de vos enfants inscrits dans cet établissement.</p>
+    <p class="text-muted mb-0">Consultez les notes, les présences et le suivi de vos enfants inscrits dans cet établissement.</p>
   </div>
 </section>
 <section class="content">
@@ -116,7 +116,12 @@ $displayDate = static function ($value): string {
                       </div>
                     <?php endif; ?>
                   </div>
-                  <a class="btn btn-sm btn-outline-primary" href="<?= BASE_URL ?>/paiements-enfant#enfant-<?= $childId ?>">Voir les paiements</a>
+                  <div class="d-flex flex-wrap gap-2">
+                    <a class="btn btn-sm btn-outline-primary" href="<?= BASE_URL ?>/paiements-enfant#enfant-<?= $childId ?>">Voir les paiements</a>
+                    <a class="btn btn-sm btn-outline-success" href="<?= BASE_URL ?>/mes-enfants/presences?id=<?= $childId ?>">
+                      <i class="bi bi-calendar-check me-1" aria-hidden="true"></i>Suivi des présences
+                    </a>
+                  </div>
                 </div>
                 <details class="mb-3">
                   <summary class="fw-semibold py-2">Notes scolaires <span class="text-muted fw-normal">(<?= count($notes) ?>)</span></summary>

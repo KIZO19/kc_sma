@@ -10,6 +10,7 @@ $errors = $errors ?? [];
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#3c8dbc">
   <title>Changer le mot de passe - <?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?></title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" crossorigin="anonymous">
   <link rel="stylesheet" href="<?= BASE_URL ?>/assets/adminlte.min.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>/assets/responsive.css">

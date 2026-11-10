@@ -3,13 +3,7 @@
   <?php
     $footerAppName = APP_NAME;
     if (!empty($user['role']) && $user['role'] !== 'super_admin') {
-      $schoolName = null;
-      if (!empty($user['ecole_id'])) {
-        $school = \App\Models\Ecole::findById((int) $user['ecole_id']);
-        if (!empty($school['nom_etablissement'])) {
-          $schoolName = $school['nom_etablissement'];
-        }
-      }
+      $schoolName = $layoutSchool['nom_etablissement'] ?? null;
       if (!empty($schoolName)) {
         $footerAppName = $schoolName;
       }
@@ -128,7 +122,6 @@
     </div>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" crossorigin="anonymous"></script>
   <script src="<?= BASE_URL ?>/assets/adminlte.min.js"></script>
   <script src="<?= BASE_URL ?>/assets/app-datagrid.js"></script>
   <script src="<?= BASE_URL ?>/assets/live-notifications.js" defer></script>

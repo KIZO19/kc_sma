@@ -29,10 +29,7 @@
   }
   $faviconUrl = BASE_URL . '/assets/kc-logo.svg';
   $faviconMime = 'image/svg+xml';
-  $schoolForHeader = null;
-  if (!empty($user['ecole_id'])) {
-      $schoolForHeader = \App\Models\Ecole::findById((int) $user['ecole_id']);
-  }
+  $schoolForHeader = $layoutSchool ?? null;
   if (!empty($schoolForHeader['logo_url'])) {
       $faviconUrl = $schoolForHeader['logo_url'];
       if (strpos($faviconUrl, 'http') !== 0) {
@@ -54,6 +51,7 @@
   <link rel="icon" href="<?= htmlspecialchars($faviconUrl) ?>" type="<?= htmlspecialchars($faviconMime) ?>">
   <link rel="shortcut icon" href="<?= htmlspecialchars($faviconUrl) ?>" type="<?= htmlspecialchars($faviconMime) ?>">
   <link rel="apple-touch-icon" href="<?= htmlspecialchars($faviconUrl) ?>">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" crossorigin="anonymous">
   <link rel="stylesheet" href="<?= BASE_URL ?>/assets/adminlte.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css" crossorigin="anonymous">
