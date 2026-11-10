@@ -198,7 +198,11 @@ class PasswordReset
             }
 
             $userId = (int) $account['user_id'];
-            $updateUser = $db->prepare('UPDATE utilisateurs SET mot_de_passe = :password_hash WHERE id = :user_id');
+            $updateUser = $db->prepare(
+                'UPDATE utilisateurs
+                 SET mot_de_passe = :password_hash, must_change_password = 0
+                 WHERE id = :user_id'
+            );
             $updateUser->execute([':password_hash' => $passwordHash, ':user_id' => $userId]);
             if ($updateUser->rowCount() !== 1) {
                 $db->rollBack();

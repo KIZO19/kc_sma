@@ -61,6 +61,7 @@ class Auth
             'section_id' => isset($user['section_id']) ? (int) $user['section_id'] : null,
             'reference_id' => isset($user['reference_id']) ? (int) $user['reference_id'] : null,
             'statut' => $user['statut'] ?? 'Actif',
+            'must_change_password' => (int) ($user['must_change_password'] ?? 0) === 1,
         ];
     }
 
@@ -237,6 +238,7 @@ class Auth
             self::currentRoutePath(),
             [
                 '/logout',
+                '/auth/changeInitialPassword',
                 '/ecoles/subscriptionRequired',
                 '/ecoles/subscriptions',
                 '/ecoles/submitSubscriptionRequest',

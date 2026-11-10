@@ -22,6 +22,14 @@
       <div class="alert alert-success"><?= htmlspecialchars($_SESSION['paiements_success']) ?></div>
       <?php unset($_SESSION['paiements_success']); ?>
     <?php endif; ?>
+    <?php if (!empty($_SESSION['paiements_errors'])): ?>
+      <div class="alert alert-danger">
+        <?php foreach ($_SESSION['paiements_errors'] as $error): ?>
+          <div><?= htmlspecialchars($error) ?></div>
+        <?php endforeach; ?>
+      </div>
+      <?php unset($_SESSION['paiements_errors']); ?>
+    <?php endif; ?>
     <div class="row mb-3">
       <div class="col-md-4">
         <div class="input-group">
@@ -93,7 +101,7 @@
                   <th data-sort-key="frais_devise" class="sortable">Devise</th>
                   <th data-sort-key="agent_nom" class="sortable">Perçu par</th>
                   <th data-sort-key="agent_fonction" class="sortable">Fonction</th>
-                  <th style="width: 110px;">Actions</th>
+                  <th style="width: 210px;">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -105,7 +113,7 @@
                       <td><?= $i + 1 ?></td>
                       <td data-key="reference_recu"><?= htmlspecialchars($p['reference_recu'] ?? '-') ?></td>
                       <td data-key="eleve"><?= htmlspecialchars(\App\Core\PersonName::format($p)) ?></td>
-                      <td data-key="libelle"><?= htmlspecialchars($p['libelle'] ?? '-') ?></td>
+                      <td data-key="libelle"><?= htmlspecialchars($p['libelle'] ?? '-') ?><?php if (!empty($p['annulee_at'])): ?> <span class="badge text-bg-danger">ANNULÉ</span><?php endif; ?></td>
                       <td data-key="date_operation"><?= htmlspecialchars(formatDate($p['date_operation'] ?? null)) ?></td>
                       <td data-key="montant"><?= htmlspecialchars($p['montant_affiche'] ?? number_format((float) ($p['montant'] ?? 0), 2)) ?></td>
                       <td data-key="frais_devise"><?= htmlspecialchars($p['frais_devise'] ?? ($p['transaction_devise'] ?? 'USD')) ?></td>
@@ -113,8 +121,15 @@
                       <td data-key="agent_fonction"><?= htmlspecialchars($p['agent_fonction'] ?? '') ?></td>
                       <td>
                         <a href="<?= BASE_URL ?>/paiements/receipt?id=<?= urlencode($p['id']) ?>" class="btn btn-sm btn-outline-primary">Reçu</a>
-                        <?php if (!empty($canManageAccounting) && strpos((string) ($p['id'] ?? ''), 'legacy-') !== 0): ?>
+                        <?php if (!empty($p['annulee_at'])): ?>
+                          <span class="small text-danger">Annulé</span>
+                        <?php elseif (!empty($canEditPayments) && strpos((string) ($p['id'] ?? ''), 'legacy-') !== 0): ?>
                           <a href="<?= BASE_URL ?>/paiements/edit?id=<?= urlencode($p['id']) ?>" class="btn btn-sm btn-outline-warning">Modifier</a>
+                          <form method="post" action="<?= BASE_URL ?>/paiements/cancel" class="d-inline" onsubmit="return confirm('Annuler ce paiement et rétablir les soldes de l’élève ?')">
+                            <input type="hidden" name="id" value="<?= (int) $p['id'] ?>">
+                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) ($paymentCancelCsrf ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Annuler</button>
+                          </form>
                         <?php endif; ?>
                       </td>
                     </tr>
@@ -145,7 +160,8 @@
       document.addEventListener('DOMContentLoaded', function () {
         const initialEleveId = <?= json_encode($eleveId ?? null) ?>;
         const initialFraisId = <?= json_encode($fraisId ?? null) ?>;
-        const canManageAccounting = <?= !empty($canManageAccounting) ? 'true' : 'false' ?>;
+        const canEditPayments = <?= !empty($canEditPayments) ? 'true' : 'false' ?>;
+        const paymentCancelCsrf = <?= json_encode((string) ($paymentCancelCsrf ?? ''), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
         const searchInput = document.getElementById('paymentSearch');
         const eleveFilterSelect = document.getElementById('eleveFilter');
         const fraisFilterSelect = document.getElementById('fraisFilter');
@@ -316,13 +332,13 @@
                 <td>${idx+1}</td>
                 <td data-key="reference_recu">${(p.reference_recu||'-')}</td>
                 <td data-key="eleve">${[p.nom, p.postnom, p.prenom].filter(Boolean).join(' ')}</td>
-                <td data-key="libelle">${p.libelle || '-'}</td>
+                <td data-key="libelle">${p.libelle || '-'}${p.annulee_at ? ' <span class="badge text-bg-danger">ANNULÉ</span>' : ''}</td>
                 <td data-key="date_operation">${p.date_operation || ''}</td>
                 <td data-key="montant">${p.montant_affiche || Number(p.montant||0).toFixed(2)}</td>
                 <td data-key="frais_devise">${p.frais_devise || (p.transaction_devise || 'USD')}</td>
                 <td data-key="agent_nom">${p.agent_nom || ''}</td>
                 <td data-key="agent_fonction">${p.agent_fonction || ''}</td>
-                <td><a href="<?= BASE_URL ?>/paiements/receipt?id=${encodeURIComponent(p.id)}" class="btn btn-sm btn-outline-primary">Reçu</a>${canManageAccounting && !String(p.id).startsWith('legacy-') ? ` <a href="<?= BASE_URL ?>/paiements/edit?id=${encodeURIComponent(p.id)}" class="btn btn-sm btn-outline-warning">Modifier</a>` : ''}</td>
+                <td><a href="<?= BASE_URL ?>/paiements/receipt?id=${encodeURIComponent(p.id)}" class="btn btn-sm btn-outline-primary">Reçu</a>${p.annulee_at ? ' <span class="small text-danger">Annulé</span>' : canEditPayments && !String(p.id).startsWith('legacy-') ? ` <a href="<?= BASE_URL ?>/paiements/edit?id=${encodeURIComponent(p.id)}" class="btn btn-sm btn-outline-warning">Modifier</a> <form method="post" action="<?= BASE_URL ?>/paiements/cancel" class="d-inline" onsubmit="return confirm('Annuler ce paiement et rétablir les soldes de l’élève ?')"><input type="hidden" name="id" value="${Number(p.id)}"><input type="hidden" name="csrf_token" value="${paymentCancelCsrf}"><button type="submit" class="btn btn-sm btn-outline-danger">Annuler</button></form>` : ''}</td>
               `;
               return tr;
             });

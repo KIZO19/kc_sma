@@ -240,7 +240,7 @@ class DetteEleve
             $paidAccounting = 0.0;
             $paidLegacy = 0.0;
             try {
-                $pstmt = $db->prepare('SELECT SUM(ece.montant) AS paid FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id WHERE ce.eleve_id = :eleve AND ece.frais_id = :frais AND ece.type_mouvement = :type');
+                $pstmt = $db->prepare('SELECT SUM(ece.montant) AS paid FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id WHERE ce.eleve_id = :eleve AND ece.frais_id = :frais AND ece.type_mouvement = :type AND ece.annulee_at IS NULL');
                 $pstmt->execute([':eleve' => $eleveId, ':frais' => $feeId, ':type' => 'CREDIT']);
                 $paidAccounting = (float) ($pstmt->fetchColumn() ?: 0);
             } catch (\Throwable $e) {

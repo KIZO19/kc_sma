@@ -534,7 +534,7 @@ class FraisController extends Controller
              UNION
              SELECT ce.eleve_id FROM ecritures_comptables_eleves ece
              INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
-             WHERE ece.frais_id = :ledger_fee_id'
+             WHERE ece.frais_id = :ledger_fee_id AND ece.annulee_at IS NULL'
         );
         $stmt->execute([':fee_id' => $feeId, ':ledger_fee_id' => $feeId]);
         $students = array_fill_keys(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN)), true);
@@ -554,7 +554,7 @@ class FraisController extends Controller
                              THEN ece.montant ELSE 0 END) AS total_paiements
              FROM ecritures_comptables_eleves ece
              INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
-             WHERE ece.frais_id = :fee_id
+             WHERE ece.frais_id = :fee_id AND ece.annulee_at IS NULL
              GROUP BY ce.eleve_id, ce.id, ce.annee_scolaire_id'
         );
         $stmt->execute([':fee_id' => $feeId]);

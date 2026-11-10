@@ -15,77 +15,6 @@ unset($_SESSION['payment_notification_status']);
   .pos-row > div:last-child { text-align:right; overflow-wrap:anywhere; }
   .pos-amount { font-weight: bold; font-size: 14px; }
   .qr { text-align:center; margin-top:3px; }
-  @media print {
-    @page { size: 80mm 150mm; margin: 0; }
-    html, body {
-      width: 80mm !important;
-      height: auto !important;
-      min-height: 0 !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      overflow: visible !important;
-      background: #fff !important;
-    }
-    body > *:not(.app-wrapper) { display: none !important; }
-    body > .app-wrapper {
-      display: block !important;
-      position: static !important;
-      width: 80mm !important;
-      height: auto !important;
-      min-height: 0 !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      overflow: visible !important;
-    }
-    .app-wrapper > *:not(.content-wrapper) { display: none !important; }
-    .app-wrapper > .content-wrapper {
-      display: block !important;
-      position: static !important;
-      width: 80mm !important;
-      height: auto !important;
-      min-height: 0 !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      overflow: visible !important;
-    }
-    .content-wrapper > *:not(.content) { display: none !important; }
-    .content-wrapper > .content {
-      display: block !important;
-      margin: 0 !important;
-      padding: 0 !important;
-    }
-    .content > *:not(.container-fluid) { display: none !important; }
-    .content > .container-fluid,
-    .container-fluid > .row,
-    .row > .col-md-6,
-    .col-md-6 > .card,
-    .card > .card-body {
-      display: block !important;
-      position: static !important;
-      width: 80mm !important;
-      height: auto !important;
-      min-height: 0 !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      overflow: visible !important;
-      border: 0 !important;
-      box-shadow: none !important;
-    }
-    .container-fluid > .row { display: block !important; }
-    .card-body > *:not(.pos-receipt) { display: none !important; }
-    .pos-receipt {
-      position: relative;
-      width: 76mm;
-      max-width: 76mm;
-      margin: 0 auto;
-      padding: 0;
-      overflow: visible;
-      transform: none;
-    }
-    .pos-receipt .pos-row { display: flex !important; }
-    .pos-receipt .no-print { display: none !important; }
-    .receipt-watermark { opacity: .10; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-  }
 </style>
 <section class="content">
   <div class="container-fluid">
@@ -139,6 +68,13 @@ unset($_SESSION['payment_notification_status']);
                 <h4><?= htmlspecialchars($ecole_name ?? APP_NAME) ?></h4>
                 <div class="pos-line"></div>
                 <div>REÇU DE PAIEMENT</div>
+                <?php if (!empty($ecriture['annulee_at'])): ?>
+                  <div style="font-weight:bold;color:#b02a37;border:1px solid #b02a37;padding:3px;margin-top:3px;">PAIEMENT ANNULÉ</div>
+                  <div>Annulé le <?= htmlspecialchars(formatDate($ecriture['annulee_at'])) ?></div>
+                  <?php if (!empty($ecriture['motif_annulation'])): ?>
+                    <div><?= htmlspecialchars($ecriture['motif_annulation']) ?></div>
+                  <?php endif; ?>
+                <?php endif; ?>
                 <div class="text-muted">Réf: <strong><?= htmlspecialchars($ecriture['reference_recu'] ?? '') ?></strong></div>
               </div>
 
@@ -213,7 +149,9 @@ unset($_SESSION['payment_notification_status']);
 
                 <div class="mt-3 d-flex justify-content-between no-print">
                   <a href="<?= BASE_URL ?>/paiements" class="btn btn-secondary btn-sm">Retour</a>
-                  <button class="btn btn-primary btn-sm" type="button" onclick="printReceipt()">Imprimer le reçu</button>
+                  <?php if (empty($ecriture['annulee_at'])): ?>
+                    <button class="btn btn-primary btn-sm" type="button" onclick="printReceipt()">Imprimer le reçu</button>
+                  <?php endif; ?>
                 </div>
               </div>
             </div>
@@ -224,30 +162,94 @@ unset($_SESSION['payment_notification_status']);
   </div>
 </section>
 <script>
-  function printReceipt() {
+  async function printReceipt() {
     const receipt = document.querySelector('.pos-receipt');
-    if (receipt) {
-      const measurementContainer = document.createElement('div');
-      measurementContainer.style.cssText = 'position:fixed;left:-10000px;top:0;width:80mm;visibility:hidden;';
-      const measuredReceipt = receipt.cloneNode(true);
-      measuredReceipt.querySelectorAll('.no-print').forEach(element => element.remove());
-      measuredReceipt.style.cssText += ';position:relative;width:76mm;max-width:76mm;margin:0;padding:0;overflow:visible;transform:none;';
-      measurementContainer.appendChild(measuredReceipt);
-      document.body.appendChild(measurementContainer);
-
-      const heightMillimeters = Math.ceil(measuredReceipt.getBoundingClientRect().height * 25.4 / 96 + 2);
-      measurementContainer.remove();
-
-      let pageSizeStyle = document.getElementById('receiptPrintPageSize');
-      if (!pageSizeStyle) {
-        pageSizeStyle = document.createElement('style');
-        pageSizeStyle.id = 'receiptPrintPageSize';
-        document.head.appendChild(pageSizeStyle);
-      }
-      pageSizeStyle.textContent = '@page { size: 80mm ' + heightMillimeters + 'mm; margin: 0; }';
+    if (!receipt || window.receiptPrintFrame) {
+      return;
     }
 
-    window.print();
+    const printFrame = document.createElement('iframe');
+    printFrame.setAttribute('aria-hidden', 'true');
+    printFrame.style.cssText = 'position:fixed;left:0;top:0;width:80mm;height:1000px;border:0;opacity:0;pointer-events:none;';
+    window.receiptPrintFrame = printFrame;
+    document.body.appendChild(printFrame);
+
+    const printDocument = printFrame.contentDocument;
+    if (!printDocument) {
+      printFrame.remove();
+      window.receiptPrintFrame = null;
+      throw new Error('Impossible de préparer le reçu pour impression.');
+    }
+
+    printDocument.open();
+    printDocument.write(`<!doctype html>
+      <html lang="fr">
+        <head>
+          <meta charset="utf-8">
+          <style>
+            @page { size: 80mm 150mm; margin: 0; }
+            * { box-sizing: border-box; }
+            html, body { width: 80mm; margin: 0; padding: 0; background: #fff; color: #000; }
+            body { font-family: "Courier New", monospace; font-size: 11px; }
+            .pos-receipt { position: relative; width: 72mm; max-width: 72mm; margin: 0 auto; padding: 2px; overflow: visible; }
+            .pos-receipt > *:not(.receipt-watermark) { position: relative; z-index: 1; }
+            .receipt-watermark { position: absolute; top: 25%; left: 5%; width: 90%; height: 45%; object-fit: contain; opacity: .08; pointer-events: none; z-index: 0; }
+            .pos-header { text-align: center; }
+            .pos-header h4 { font-size: 14px; margin: 2px 0; overflow-wrap: anywhere; }
+            .pos-line { border-top: 1px dashed #000; margin: 4px 0; }
+            .pos-row { display: flex; justify-content: space-between; gap: 8px; line-height: 1.15; margin-bottom: 2px; }
+            .pos-row > div:last-child { text-align: right; overflow-wrap: anywhere; }
+            .pos-amount { font-weight: bold; font-size: 14px; }
+            .qr { text-align: center; margin-top: 3px; }
+            .text-muted { color: #000 !important; }
+            .no-print { display: none !important; }
+            img { max-width: 100%; }
+            .pos-receipt, .pos-receipt * { break-inside: avoid; page-break-inside: avoid; }
+          </style>
+        </head>
+        <body></body>
+      </html>`);
+    printDocument.close();
+
+    const printableReceipt = receipt.cloneNode(true);
+    printableReceipt.querySelectorAll('.no-print').forEach(element => element.remove());
+    printDocument.body.appendChild(printableReceipt);
+
+    const images = Array.from(printableReceipt.querySelectorAll('img'));
+    await Promise.all(images.map(image => {
+      if (image.complete) {
+        return Promise.resolve();
+      }
+      return new Promise(resolve => {
+        const timeout = window.setTimeout(resolve, 3000);
+        const finish = () => {
+          window.clearTimeout(timeout);
+          resolve();
+        };
+        image.addEventListener('load', finish, { once: true });
+        image.addEventListener('error', finish, { once: true });
+      });
+    }));
+
+    if (printDocument.fonts && printDocument.fonts.ready) {
+      await printDocument.fonts.ready;
+    }
+
+    const heightMillimeters = Math.ceil(printableReceipt.getBoundingClientRect().height * 25.4 / 96 + 1);
+    const pageSize = printDocument.createElement('style');
+    pageSize.textContent = '@page { size: 80mm ' + heightMillimeters + 'mm; margin: 0; }';
+    printDocument.head.appendChild(pageSize);
+
+    let cleanupTimeout;
+    const cleanup = () => {
+      window.clearTimeout(cleanupTimeout);
+      printFrame.remove();
+      window.receiptPrintFrame = null;
+    };
+    printFrame.contentWindow.addEventListener('afterprint', cleanup, { once: true });
+    cleanupTimeout = window.setTimeout(cleanup, 60000);
+    printFrame.contentWindow.focus();
+    printFrame.contentWindow.print();
   }
 </script>
 <?php if (!empty($autoPrint)): ?>

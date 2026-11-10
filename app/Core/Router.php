@@ -124,9 +124,57 @@ class Router
             $actionName = 'notFound';
         }
 
+        $authenticatedUser = Auth::user();
+        if (
+            $authenticatedUser
+            && in_array($authenticatedUser['role'] ?? '', [
+                'eleve_ecole',
+                'eleve_école',
+                'parent_ecole',
+                'parent_école',
+            ], true)
+        ) {
+            $authenticatedUser = Auth::refresh();
+        }
+
         if (Auth::guest() && !$this->isGuestRoute($controllerClass, $actionName)) {
             header('Location: ' . BASE_URL . '/Ecole/landing');
             exit;
+        }
+
+        if (
+            !empty($authenticatedUser['must_change_password'])
+            && !(
+                $controllerClass === 'App\\Controllers\\AuthController'
+                && in_array(strtolower($actionName), ['changeinitialpassword', 'logout'], true)
+            )
+        ) {
+            header('Location: ' . BASE_URL . '/auth/changeInitialPassword');
+            exit;
+        }
+
+        if (in_array($authenticatedUser['role'] ?? '', ['eleve_ecole', 'eleve_école'], true)) {
+            $studentRoutes = [
+                'App\\Controllers\\DashboardController' => ['index', 'presence'],
+                'App\\Controllers\\MesNotesController' => ['index'],
+                'App\\Controllers\\MesPaiementsController' => ['index'],
+                'App\\Controllers\\MesPresencesController' => ['index'],
+                'App\\Controllers\\MonEmploiController' => ['index'],
+                'App\\Controllers\\EspaceEleveController' => [
+                    'discipline',
+                    'derogations',
+                    'cours',
+                    'evaluations',
+                    'communiques',
+                ],
+                'App\\Controllers\\ProfileController' => ['index', 'update'],
+                'App\\Controllers\\NotificationsController' => ['poll', 'pushsubscribe', 'pushunsubscribe'],
+                'App\\Controllers\\AuthController' => ['changeinitialpassword', 'logout'],
+            ];
+            if (!in_array(strtolower($actionName), $studentRoutes[$controllerClass] ?? [], true)) {
+                header('Location: ' . BASE_URL . '/dashboard');
+                exit;
+            }
         }
 
         if ((Auth::user()['role'] ?? '') === 'enseignant_école') {

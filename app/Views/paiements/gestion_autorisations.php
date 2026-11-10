@@ -1,4 +1,54 @@
-<?php require __DIR__ . '/../partials/app_header.php'; ?>
+<?php
+$pageStyles = <<<'CSS'
+<style>
+  .payment-authorizations .permission-control {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    min-height: 2rem;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .payment-authorizations .permission-switch {
+    width: 2.75rem;
+    height: 1.4rem;
+    margin: 0;
+    border: 2px solid #6c757d;
+    border-radius: 2rem;
+    background-color: #e9ecef;
+    background-image: radial-gradient(circle, #fff 58%, transparent 62%);
+    background-position: left center;
+    background-size: 1.1rem 1.1rem;
+    cursor: pointer;
+    transition: background-position .15s ease-in-out;
+  }
+  .payment-authorizations .permission-switch:checked {
+    border-color: #198754;
+    background-color: #198754;
+    background-position: right center;
+  }
+  .payment-authorizations .permission-switch:focus-visible {
+    outline: 0;
+    box-shadow: 0 0 0 .25rem rgba(13, 110, 253, .3);
+  }
+  .payment-authorizations .permission-status {
+    padding: .2rem .4rem;
+    border-radius: .25rem;
+    font-size: .75rem;
+    font-weight: 700;
+  }
+  .payment-authorizations .permission-status-enabled {
+    color: #0f5132;
+    background-color: #d1e7dd;
+  }
+  .payment-authorizations .permission-status-disabled {
+    color: #842029;
+    background-color: #f8d7da;
+  }
+</style>
+CSS;
+require __DIR__ . '/../partials/app_header.php';
+?>
 <section class="content-header">
   <div class="container-fluid">
     <div class="row mb-2">
@@ -28,7 +78,7 @@
       <?php unset($_SESSION['paiements_error']); ?>
     <?php endif; ?>
 
-    <div class="card card-outline card-primary">
+    <div class="card card-outline card-primary payment-authorizations">
       <div class="card-header">
         <h3 class="card-title">Autorisations de paiement par frais</h3>
         <p class="text-muted small mb-0 mt-1">Autorisez les rôles concernés à enregistrer un paiement pour chaque frais.</p>
@@ -56,9 +106,10 @@
                         <input type="hidden" name="role" value="<?= htmlspecialchars($roleKey) ?>">
                         <input type="hidden" name="frais_id" value="<?= (int) $feeId ?>">
                         <input type="hidden" name="enabled" value="0">
-                        <div class="form-check form-switch d-inline-block">
-                          <input class="form-check-input" type="checkbox" name="enabled" value="1" <?= $allowed ? 'checked' : '' ?> onchange="this.form.submit()">
-                        </div>
+                        <label class="permission-control">
+                          <input class="form-check-input permission-switch" type="checkbox" name="enabled" value="1" aria-label="Autoriser <?= htmlspecialchars($roleLabel) ?> pour <?= htmlspecialchars((string) ($fee['type_frais'] ?? 'ce frais')) ?>" <?= $allowed ? 'checked' : '' ?> onchange="this.form.submit()">
+                          <span class="permission-status <?= $allowed ? 'permission-status-enabled' : 'permission-status-disabled' ?>"><?= $allowed ? 'Autorisé' : 'Bloqué' ?></span>
+                        </label>
                       </form>
                     </td>
                   <?php endforeach; ?>

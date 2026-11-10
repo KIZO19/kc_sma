@@ -1,11 +1,14 @@
 <?php require __DIR__ . '/../partials/app_header.php'; ?>
-<?php $students = $students ?? []; ?>
+<?php
+$students = $students ?? [];
+$generatedAccountPassword = $generatedAccountPassword ?? null;
+?>
 <section class="content-header">
   <div class="container-fluid">
     <div class="row mb-2">
       <div class="col-sm-8">
         <h1>Gérer les mots de passe</h1>
-        <p class="text-muted mb-0">Créez ou renvoyez les liens sécurisés de configuration des comptes parents et élèves.</p>
+        <p class="text-muted mb-0">Générez un mot de passe temporaire pour un compte parent ou élève.</p>
       </div>
       <div class="col-sm-4">
         <ol class="breadcrumb float-sm-end">
@@ -40,13 +43,28 @@
       </div>
     <?php endif; ?>
 
+    <?php if (is_array($generatedAccountPassword) && !empty($generatedAccountPassword['password'])): ?>
+      <div class="alert alert-success" role="status">
+        <h2 class="h5">Mot de passe temporaire généré</h2>
+        <p class="mb-1">
+          Compte <?= htmlspecialchars((string) ($generatedAccountPassword['type'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+          <?php if (!empty($generatedAccountPassword['name'])): ?>
+            — <?= htmlspecialchars((string) $generatedAccountPassword['name'], ENT_QUOTES, 'UTF-8') ?>
+          <?php endif; ?>
+        </p>
+        <p class="mb-1">Identifiant : <strong><?= htmlspecialchars((string) ($generatedAccountPassword['identifier'] ?? ''), ENT_QUOTES, 'UTF-8') ?></strong></p>
+        <p class="mb-1">Mot de passe : <code class="fs-5 user-select-all"><?= htmlspecialchars((string) $generatedAccountPassword['password'], ENT_QUOTES, 'UTF-8') ?></code></p>
+        <small>Communiquez-le à l’utilisateur de façon sécurisée. Il devra choisir un nouveau mot de passe dès sa première connexion. Ce mot de passe ne sera plus affiché après avoir quitté ou actualisé cette page.</small>
+      </div>
+    <?php endif; ?>
+
     <div class="card">
       <div class="card-header">
         <h2 class="card-title">Accès des parents et des élèves</h2>
       </div>
       <div class="card-body">
         <div class="alert alert-info">
-          Les liens sont envoyés au numéro du parent/tuteur et expirent après 24 heures. Le lien élève demande son matricule avant de permettre la création du mot de passe.
+          Chaque génération remplace le mot de passe actuel. Le nouveau mot de passe est affiché une seule fois et l’utilisateur devra le modifier dès sa première connexion.
         </div>
         <?php if (empty($students)): ?>
           <p class="text-muted mb-0">Aucun élève trouvé dans votre périmètre.</p>
@@ -79,22 +97,20 @@
                     <td><?= htmlspecialchars((string) ($student['parent_nom_responsable'] ?? '-'), ENT_QUOTES, 'UTF-8') ?></td>
                     <td><?= htmlspecialchars((string) ($student['parent_telephone'] ?? '-'), ENT_QUOTES, 'UTF-8') ?></td>
                     <td class="text-nowrap">
-                      <form method="post" action="<?= BASE_URL ?>/inscriptions/sendAccountAccess" class="d-inline">
+                      <form method="post" action="<?= BASE_URL ?>/inscriptions/generateAccountPassword" class="d-inline" onsubmit="return confirm('La génération remplacera le mot de passe actuel de ce compte. Continuer ?');">
                         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($accountAccessCsrf, ENT_QUOTES, 'UTF-8') ?>">
                         <input type="hidden" name="eleve_id" value="<?= (int) ($student['id'] ?? 0) ?>">
                         <input type="hidden" name="account_type" value="student">
-                        <input type="hidden" name="return_to" value="passwords">
                         <button type="submit" class="btn btn-sm btn-outline-primary">
-                          <i class="bi bi-mortarboard me-1" aria-hidden="true"></i>Mot de passe élève
+                          <i class="bi bi-mortarboard me-1" aria-hidden="true"></i>Générer mot de passe élève
                         </button>
                       </form>
-                      <form method="post" action="<?= BASE_URL ?>/inscriptions/sendAccountAccess" class="d-inline">
+                      <form method="post" action="<?= BASE_URL ?>/inscriptions/generateAccountPassword" class="d-inline" onsubmit="return confirm('La génération remplacera le mot de passe actuel de ce compte. Continuer ?');">
                         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($accountAccessCsrf, ENT_QUOTES, 'UTF-8') ?>">
                         <input type="hidden" name="eleve_id" value="<?= (int) ($student['id'] ?? 0) ?>">
                         <input type="hidden" name="account_type" value="parent">
-                        <input type="hidden" name="return_to" value="passwords">
                         <button type="submit" class="btn btn-sm btn-outline-success">
-                          <i class="bi bi-people me-1" aria-hidden="true"></i>Mot de passe parent
+                          <i class="bi bi-people me-1" aria-hidden="true"></i>Générer mot de passe parent
                         </button>
                       </form>
                     </td>

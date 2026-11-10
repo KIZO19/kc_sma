@@ -87,7 +87,7 @@
 <section class="summary-shell">
   <div class="summary-card">
     <div class="summary-top">
-      <div class="badge">Paiement reçu</div>
+      <div class="badge"><?= !empty($ecriture['annulee_at']) ? 'Paiement annulé' : 'Paiement reçu' ?></div>
       <div class="summary-amount"><?= htmlspecialchars($formatCurrency((float) ($montant_paye ?? 0))) ?></div>
       <div><?= htmlspecialchars($eleve_name ?? '-') ?></div>
     </div>

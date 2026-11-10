@@ -49,6 +49,7 @@ class SchoolItemDelivery
                           AND ce.annee_scolaire_id = d.annee_scolaire_id
                           AND ece.frais_id = d.frais_id
                           AND ece.type_mouvement = \'CREDIT\'
+                          AND ece.annulee_at IS NULL
                           AND COALESCE(ece.reference_recu, \'\') NOT LIKE \'REG-FRAIS-%\'
                     ), 0) AS total_ledger_paye,
                     COALESCE((

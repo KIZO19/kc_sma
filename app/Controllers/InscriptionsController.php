@@ -99,6 +99,8 @@ class InscriptionsController extends Controller
     {
         Auth::requireAuth();
         Auth::requireRoles(['super_admin', 'ecole_admin', 'sec_école']);
+        header('Cache-Control: no-store, private');
+        header('Referrer-Policy: no-referrer');
 
         $user = Auth::refresh() ?: Auth::user();
         $this->requireAdministrationModuleAccess($user, 'inscriptions');
@@ -112,6 +114,9 @@ class InscriptionsController extends Controller
             $_SESSION['inscriptions_access_csrf'] = bin2hex(random_bytes(32));
         }
 
+        $generatedAccountPassword = $_SESSION['generated_account_password'] ?? null;
+        unset($_SESSION['generated_account_password']);
+
         $this->view('inscriptions/manage_passwords', [
             'title' => APP_NAME . ' - Gérer les mots de passe',
             'user' => $user,
@@ -120,7 +125,101 @@ class InscriptionsController extends Controller
             'modules' => $this->getModulesForRole((string) ($user['role'] ?? '')),
             'students' => Eleve::getAllBySchool($ecoleId, null, $sectionScopeId),
             'accountAccessCsrf' => $_SESSION['inscriptions_access_csrf'],
+            'generatedAccountPassword' => $generatedAccountPassword,
         ]);
+    }
+
+    public function generateAccountPassword(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin', 'ecole_admin', 'sec_école']);
+        header('Cache-Control: no-store, private');
+        header('Referrer-Policy: no-referrer');
+        $user = Auth::refresh() ?: Auth::user();
+        $this->requireAdministrationModuleAccess($user, 'inscriptions');
+
+        $returnPath = '/inscriptions/managePasswords';
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+            $this->redirect($returnPath);
+        }
+
+        $postedCsrf = (string) ($_POST['csrf_token'] ?? '');
+        if (
+            $postedCsrf === ''
+            || !hash_equals((string) ($_SESSION['inscriptions_access_csrf'] ?? ''), $postedCsrf)
+        ) {
+            $_SESSION['inscriptions_errors'] = ['Le formulaire a expiré. Rechargez la page et réessayez.'];
+            $this->redirect($returnPath);
+        }
+
+        $schoolId = (int) ($user['ecole_id'] ?? 0);
+        $studentId = (int) ($_POST['eleve_id'] ?? 0);
+        $accountType = trim((string) ($_POST['account_type'] ?? ''));
+        $sectionScopeId = $this->getSectionScopeForUser($user);
+
+        try {
+            if ($schoolId <= 0 || $studentId <= 0 || !in_array($accountType, ['student', 'parent'], true)) {
+                throw new \InvalidArgumentException('Élève ou type de compte invalide.');
+            }
+
+            $student = Eleve::findByIdAndSchool($studentId, $schoolId, $sectionScopeId);
+            if (!$student) {
+                throw new \RuntimeException('Cet élève n’appartient pas à votre école ou à votre section.');
+            }
+
+            if ($accountType === 'student') {
+                if (trim((string) ($student['matricule'] ?? '')) === '') {
+                    throw new \RuntimeException('Attribuez un matricule à cet élève avant de générer son mot de passe.');
+                }
+                $account = Eleve::createUserAccount($studentId);
+                $accountLabel = 'élève';
+                $accountName = trim(implode(' ', array_filter([
+                    trim((string) ($student['nom'] ?? '')),
+                    trim((string) ($student['postnom'] ?? '')),
+                    trim((string) ($student['prenom'] ?? '')),
+                ], static fn (string $part): bool => $part !== '')));
+            } else {
+                $parentId = (int) ($student['parent_id'] ?? 0);
+                $parent = $parentId > 0 ? ParentModel::findById($parentId) : null;
+                if (!$parent || (int) ($parent['ecole_id'] ?? 0) !== $schoolId) {
+                    throw new \RuntimeException('Aucun parent/tuteur de cette école n’est associé à l’élève.');
+                }
+                if (trim((string) ($parent['telephone'] ?? '')) === '') {
+                    throw new \RuntimeException('Le parent/tuteur doit avoir un numéro de téléphone renseigné.');
+                }
+                $account = ParentModel::createUserAccount($parentId);
+                $accountLabel = 'parent/tuteur';
+                $accountName = trim((string) ($parent['nom_responsable'] ?? ''));
+            }
+
+            if (($account['statut'] ?? '') !== 'Actif') {
+                throw new \RuntimeException('Le compte lié est inactif. Activez-le avant de générer un mot de passe.');
+            }
+
+            $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+            $temporaryPassword = '';
+            for ($index = 0; $index < 16; $index++) {
+                $temporaryPassword .= $alphabet[random_int(0, strlen($alphabet) - 1)];
+            }
+
+            if (!User::setTemporaryPassword((int) $account['id'], $temporaryPassword)) {
+                throw new \RuntimeException('Le mot de passe temporaire n’a pas pu être enregistré.');
+            }
+
+            $_SESSION['generated_account_password'] = [
+                'name' => $accountName !== '' ? $accountName : (string) ($account['nom_complet'] ?? ''),
+                'type' => $accountLabel,
+                'identifier' => (string) ($account['identifiant'] ?? ''),
+                'password' => $temporaryPassword,
+            ];
+        } catch (\PDOException $exception) {
+            error_log('InscriptionsController::generateAccountPassword database error: ' . $exception->getMessage());
+            $_SESSION['inscriptions_errors'] = ['Impossible de générer ou d’enregistrer le mot de passe. Vérifiez la base de données.'];
+        } catch (\DomainException|\InvalidArgumentException|\RuntimeException $exception) {
+            $_SESSION['inscriptions_errors'] = [$exception->getMessage()];
+        }
+
+        $this->redirect($returnPath);
     }
 
     public function sendAccountAccess(): void
@@ -383,6 +482,17 @@ class InscriptionsController extends Controller
             }
             if ($newParentEmail !== '' && !filter_var($newParentEmail, FILTER_VALIDATE_EMAIL)) {
                 $errors[] = 'L’adresse email du parent est invalide.';
+            } elseif ($parentChoice === 'new' && $newParentEmail !== '') {
+                $existingParentEmail = ParentModel::findByEmail($newParentEmail);
+                if ($existingParentEmail) {
+                    if ((int) ($existingParentEmail['ecole_id'] ?? 0) === $ecoleId) {
+                        $errors[] = 'Cette adresse email est déjà associée à '
+                            . $existingParentEmail['nom_responsable']
+                            . '. Sélectionnez ce parent dans « Parent existant » au lieu de créer un doublon.';
+                    } else {
+                        $errors[] = 'Cette adresse email est déjà utilisée par un autre parent. Saisissez une autre adresse ou laissez ce champ vide.';
+                    }
+                }
             }
             if ($parentChoice === 'new' && $newParentTelephone !== '' && !preg_match('/^[0-9+() .-]{7,25}$/', $newParentTelephone)) {
                 $errors[] = 'Le téléphone du parent contient des caractères invalides.';
@@ -473,7 +583,12 @@ class InscriptionsController extends Controller
                         }
                     } catch (\Throwable $e) {
                         error_log('InscriptionsController::create parent error: ' . $e->getMessage());
-                        $errors[] = 'Impossible de créer le parent/tuteur. Vérifiez ses coordonnées.';
+                        $isDuplicateEmail = $e instanceof \PDOException
+                            && (int) ($e->errorInfo[1] ?? 0) === 1062
+                            && strpos(strtolower((string) ($e->errorInfo[2] ?? '')), 'email') !== false;
+                        $errors[] = $isDuplicateEmail
+                            ? 'Cette adresse email vient d’être utilisée par un autre parent. Saisissez une autre adresse ou laissez ce champ vide.'
+                            : 'Impossible de créer le parent/tuteur. Vérifiez ses coordonnées.';
                     }
                 }
 

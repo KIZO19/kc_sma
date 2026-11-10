@@ -319,7 +319,7 @@ class DashboardController extends Controller
         // Total payments last 30 days
         try {
             $since = date('Y-m-d H:i:s', strtotime('-30 days'));
-            $sql = 'SELECT COALESCE(SUM(ece.montant),0) FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id INNER JOIN eleves el ON ce.eleve_id = el.id WHERE ece.type_mouvement = :type AND ece.date_operation >= :since ' . $schoolFilter;
+            $sql = 'SELECT COALESCE(SUM(ece.montant),0) FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id INNER JOIN eleves el ON ce.eleve_id = el.id WHERE ece.type_mouvement = :type AND ece.annulee_at IS NULL AND ece.date_operation >= :since ' . $schoolFilter;
             $stmt = $db->prepare($sql);
             $stmt->bindValue(':type', 'CREDIT');
             $stmt->bindValue(':since', $since);
@@ -335,7 +335,7 @@ class DashboardController extends Controller
         // Recent payments (limit 10)
         $recentPayments = [];
         try {
-            $sql = 'SELECT ece.id, ece.reference_recu, ece.date_operation, ece.montant, ece.libelle, el.id AS eleve_id, el.nom, el.postnom, el.prenom, cb.nom_compte FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id INNER JOIN eleves el ON ce.eleve_id = el.id LEFT JOIN caisses_banques cb ON ece.caisse_banque_id = cb.id WHERE ece.type_mouvement = :type ' . $schoolFilter . ' ORDER BY ece.date_operation DESC LIMIT 10';
+            $sql = 'SELECT ece.id, ece.reference_recu, ece.date_operation, ece.montant, ece.libelle, el.id AS eleve_id, el.nom, el.postnom, el.prenom, cb.nom_compte FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id INNER JOIN eleves el ON ce.eleve_id = el.id LEFT JOIN caisses_banques cb ON ece.caisse_banque_id = cb.id WHERE ece.type_mouvement = :type AND ece.annulee_at IS NULL ' . $schoolFilter . ' ORDER BY ece.date_operation DESC LIMIT 10';
             $stmt = $db->prepare($sql);
             $stmt->bindValue(':type', 'CREDIT');
             foreach ($params as $k => $v) {
@@ -354,7 +354,7 @@ class DashboardController extends Controller
                                         FROM (
                                             SELECT d.eleve_id, d.frais_id,
                                                          GREATEST(0, MAX(d.montant_initial) - GREATEST(
-                                                             COALESCE((SELECT SUM(ece.montant) FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce2 ON ce2.id = ece.compte_eleve_id WHERE ce2.eleve_id = d.eleve_id AND ece.frais_id = d.frais_id AND ece.type_mouvement = \'CREDIT\'), 0),
+                                                             COALESCE((SELECT SUM(ece.montant) FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce2 ON ce2.id = ece.compte_eleve_id WHERE ce2.eleve_id = d.eleve_id AND ece.frais_id = d.frais_id AND ece.type_mouvement = \'CREDIT\' AND ece.annulee_at IS NULL), 0),
                                                              COALESCE((SELECT SUM(pe.montant_paye) FROM paiements_eleves pe WHERE pe.eleve_id = d.eleve_id AND pe.frais_id = d.frais_id), 0)
                                                          )) AS montant_restant
                                             FROM dettes_eleves d
@@ -488,7 +488,7 @@ class DashboardController extends Controller
                                              FROM ecritures_comptables_eleves ece
                                              INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
                                              WHERE ce.eleve_id = d.eleve_id AND ece.frais_id = d.frais_id
-                                               AND ece.type_mouvement = \'CREDIT\'), 0),
+                                               AND ece.type_mouvement = \'CREDIT\' AND ece.annulee_at IS NULL), 0),
                                    COALESCE((SELECT SUM(pe.montant_paye)
                                              FROM paiements_eleves pe
                                              WHERE pe.eleve_id = d.eleve_id AND pe.frais_id = d.frais_id), 0)
@@ -677,7 +677,7 @@ class DashboardController extends Controller
                         ORDER BY latest.date_inscription DESC, latest.id DESC LIMIT 1
                     )
                     INNER JOIN classes c ON c.id = i.classe_id AND c.ecole_id = :school_id
-                    WHERE ece.type_mouvement = \'CREDIT\'
+                    WHERE ece.type_mouvement = \'CREDIT\' AND ece.annulee_at IS NULL
                       AND UPPER(COALESCE(fs.devise, \'USD\')) = :currency
                       AND ece.date_operation >= :date_from
                       AND ece.date_operation < :date_to_exclusive
@@ -870,7 +870,7 @@ class DashboardController extends Controller
                                                                                     FROM ecritures_comptables_eleves ece
                                                                                     INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
                                                                                     WHERE ce.eleve_id = d.eleve_id AND ece.frais_id = d.frais_id
-                                                                                        AND ece.type_mouvement = \'CREDIT\'), 0),
+                                                                                        AND ece.type_mouvement = \'CREDIT\' AND ece.annulee_at IS NULL), 0),
                                                                 COALESCE((SELECT SUM(pe.montant_paye)
                                                                                     FROM paiements_eleves pe
                                                                                     WHERE pe.eleve_id = d.eleve_id AND pe.frais_id = d.frais_id), 0)
@@ -902,7 +902,7 @@ class DashboardController extends Controller
         try {
             $db = Database::getConnection();
             $since = date('Y-m-d H:i:s', strtotime('-30 days'));
-            $sql = 'SELECT COALESCE(SUM(ece.montant),0) FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id INNER JOIN eleves el ON el.id = ce.eleve_id WHERE ece.type_mouvement = :type AND ece.date_operation >= :since';
+            $sql = 'SELECT COALESCE(SUM(ece.montant),0) FROM ecritures_comptables_eleves ece INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id INNER JOIN eleves el ON el.id = ce.eleve_id WHERE ece.type_mouvement = :type AND ece.annulee_at IS NULL AND ece.date_operation >= :since';
             $params = [':type' => 'CREDIT', ':since' => $since];
             if ($schoolId > 0) {
                 $sql .= ' AND (el.ecole_id = :ecole OR EXISTS (SELECT 1 FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id WHERE i.eleve_id = el.id AND c.ecole_id = :ecole))';

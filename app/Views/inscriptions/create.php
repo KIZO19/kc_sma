@@ -437,6 +437,7 @@ STYLE;
                         <div class="col-md-6 mb-3">
                           <label class="form-label">Email du parent/tuteur</label>
                           <input id="new-parent-email" type="email" name="new_parent_email" class="form-control" maxlength="100" value="<?= htmlspecialchars($oldInput['new_parent_email'] ?? '') ?>">
+                          <small class="form-text text-muted">Une adresse email ne peut être utilisée que par un seul parent. Ce champ est facultatif.</small>
                         </div>
                         <div class="col-md-6 mb-3">
                           <div class="alert alert-info h-100 mb-0 d-flex align-items-center">

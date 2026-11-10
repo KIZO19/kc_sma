@@ -455,6 +455,8 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
     const feeSummary = document.getElementById('feeSummary');
     const paiementForm = document.querySelector('form[action="<?= BASE_URL ?>/paiements/store"]');
     if (!fraisSelect || !montantInput || !montantHint || !paiementForm) return;
+    const submitButton = paiementForm.querySelector('button[type="submit"]');
+    let submissionStarted = false;
 
     function updateMontantHint() {
       const opt = fraisSelect.selectedOptions[0];
@@ -544,6 +546,10 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
     });
 
     paiementForm.addEventListener('submit', function (event) {
+      if (submissionStarted) {
+        event.preventDefault();
+        return;
+      }
       if (studentId && !studentId.value) {
         event.preventDefault();
         if (studentSearch) {
@@ -576,7 +582,14 @@ unset($_SESSION['paiements_old'], $_SESSION['paiements_errors']);
           montantHint.classList.add('text-danger');
           montantHint.classList.remove('text-muted');
           montantInput.focus();
+          return;
         }
+      }
+      submissionStarted = true;
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.setAttribute('aria-busy', 'true');
+        submitButton.textContent = 'Enregistrement en cours…';
       }
     });
 

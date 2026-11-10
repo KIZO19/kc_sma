@@ -342,6 +342,22 @@ class ParentModel
         return null;
     }
 
+    public static function findByEmail(string $email): ?array
+    {
+        $email = trim($email);
+        if ($email === '') {
+            return null;
+        }
+
+        $stmt = Database::getConnection()->prepare(
+            'SELECT id, ecole_id, nom_responsable FROM parents WHERE email = :email LIMIT 1'
+        );
+        $stmt->execute([':email' => $email]);
+        $parent = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $parent ?: null;
+    }
+
     public static function findById(int $id): ?array
     {
         $db = Database::getConnection();
@@ -479,7 +495,7 @@ class ParentModel
                 . 'FROM ecritures_comptables_eleves ece '
                 . 'INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id '
                 . 'LEFT JOIN frais_scolaires fs ON fs.id = ece.frais_id '
-                . 'WHERE ce.eleve_id = :eleve AND ece.type_mouvement = "CREDIT" '
+                . 'WHERE ce.eleve_id = :eleve AND ece.type_mouvement = "CREDIT" AND ece.annulee_at IS NULL '
                 . 'GROUP BY COALESCE(fs.devise, "USD")',
                 'SELECT COALESCE(fs.devise, "USD") AS devise, SUM(pe.montant_paye) AS total '
                 . 'FROM paiements_eleves pe LEFT JOIN frais_scolaires fs ON fs.id = pe.frais_id '

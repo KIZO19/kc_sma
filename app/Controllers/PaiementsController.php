@@ -22,6 +22,9 @@ class PaiementsController extends Controller
 
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
+        if (empty($_SESSION['payment_cancel_csrf'])) {
+            $_SESSION['payment_cancel_csrf'] = bin2hex(random_bytes(32));
+        }
         $modules = $this->getModulesForRole($role);
         $sectionScopeId = $this->getSectionScopeForUser($user);
         $eleveId = !empty($_GET['eleve_id']) ? (int) $_GET['eleve_id'] : null;
@@ -95,6 +98,8 @@ class PaiementsController extends Controller
             'totalDebt' => $totalDebt,
             'totalDebtByCurrency' => $totalDebtByCurrency,
             'canManageAccounting' => ($role === 'comptable_école' || $role === 'super_admin' || !empty($authorizedFeeIds)),
+            'canEditPayments' => in_array($role, ['comptable_école', 'super_admin'], true),
+            'paymentCancelCsrf' => $_SESSION['payment_cancel_csrf'],
         ]);
     }
 
@@ -115,7 +120,10 @@ class PaiementsController extends Controller
         }
 
         $format = strtolower(trim($_GET['format'] ?? 'csv'));
-        $payments = $this->fetchPaymentsForUser($user, 0, $eleveId, $fraisId);
+        $payments = array_values(array_filter(
+            $this->fetchPaymentsForUser($user, 0, $eleveId, $fraisId),
+            static fn (array $payment): bool => empty($payment['annulee_at'])
+        ));
 
         if ($format === 'csv' || $format === 'excel') {
             // output CSV (works with Excel). For `excel` we set XLS content-disposition for convenience.
@@ -203,7 +211,7 @@ class PaiementsController extends Controller
         $sql = 'SELECT SUM(ece.montant) AS total_paid FROM ecritures_comptables_eleves ece '
             . 'INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id '
             . 'INNER JOIN eleves el ON ce.eleve_id = el.id '
-            . 'WHERE ece.type_mouvement = :type AND ce.eleve_id = :eleveId ';
+            . 'WHERE ece.type_mouvement = :type AND ece.annulee_at IS NULL AND ce.eleve_id = :eleveId ';
         $params = [':type' => 'CREDIT', ':eleveId' => $eleveId];
 
         if (($user['role'] ?? '') !== 'super_admin') {
@@ -266,6 +274,9 @@ class PaiementsController extends Controller
     {
         $totals = [];
         foreach ($this->fetchPaymentsForUser($user, 0, $eleveId) as $payment) {
+            if (!empty($payment['annulee_at'])) {
+                continue;
+            }
             $currency = strtoupper(trim($payment['transaction_devise'] ?? $payment['frais_devise'] ?? 'USD')) ?: 'USD';
             if (!isset($totals[$currency])) {
                 $totals[$currency] = 0.0;
@@ -288,7 +299,7 @@ class PaiementsController extends Controller
     {
         $db = \App\Core\Database::getConnection();
         $sectionScopeId = $this->getSectionScopeForUser($user);
-        $sql = 'SELECT ece.id, ece.frais_id, ece.reference_recu, ece.date_operation, ece.montant, ece.libelle, ce.eleve_id, el.nom, el.postnom, el.prenom, COALESCE(NULLIF(us.nom_complet, \'\'), NULLIF(CONCAT_WS(\' \', a.nom, a.postnom, a.prenom), \'\'), u.nom_complet, \'Agent non identifié\') AS agent_nom, COALESCE(ra.titre_role, us.role, u.role, \'Agent\') AS agent_fonction, fs.devise AS frais_devise, COALESCE(fs.devise, ecole.devise_principale, \'USD\') AS transaction_devise '
+        $sql = 'SELECT ece.id, ece.frais_id, ece.reference_recu, ece.date_operation, ece.montant, ece.libelle, ece.annulee_at, ece.motif_annulation, ce.eleve_id, el.nom, el.postnom, el.prenom, COALESCE(NULLIF(us.nom_complet, \'\'), NULLIF(CONCAT_WS(\' \', a.nom, a.postnom, a.prenom), \'\'), u.nom_complet, \'Agent non identifié\') AS agent_nom, COALESCE(ra.titre_role, us.role, u.role, \'Agent\') AS agent_fonction, fs.devise AS frais_devise, COALESCE(fs.devise, ecole.devise_principale, \'USD\') AS transaction_devise '
             . 'FROM ecritures_comptables_eleves ece '
             . 'INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id '
             . 'INNER JOIN eleves el ON ce.eleve_id = el.id '
@@ -545,12 +556,13 @@ class PaiementsController extends Controller
             ]);
             $ecritureId = (int) $db->lastInsertId();
 
-            $legacyStmt = $db->prepare('INSERT INTO paiements_eleves (eleve_id, frais_id, montant_paye, date_paiement) VALUES (:eleve, :frais, :montant, :date_paiement)');
+            $legacyStmt = $db->prepare('INSERT INTO paiements_eleves (eleve_id, frais_id, montant_paye, date_paiement, ecriture_comptable_id) VALUES (:eleve, :frais, :montant, :date_paiement, :ecriture_comptable)');
             $legacyStmt->execute([
                 ':eleve' => $eleveId,
                 ':frais' => $fraisId,
                 ':montant' => $montant,
                 ':date_paiement' => date('Y-m-d H:i:s'),
+                ':ecriture_comptable' => $ecritureId,
             ]);
 
             $upd = $db->prepare('UPDATE comptes_eleves SET solde_debiteur = solde_debiteur - :montant WHERE id = :id');
@@ -812,6 +824,7 @@ class PaiementsController extends Controller
             header('Location: ' . BASE_URL . '/paiements/create');
             exit;
         }
+        unset($_SESSION['payment_form_token']);
 
         $eleveId = (int) ($_POST['eleve_id'] ?? 0);
         $montant = (float) ($_POST['montant'] ?? 0);
@@ -949,7 +962,6 @@ class PaiementsController extends Controller
                 $userSchool,
                 (int) ($user['id'] ?? 0)
             );
-            unset($_SESSION['payment_form_token']);
         } catch (\Throwable $e) {
             $_SESSION['paiements_errors'] = [$e->getMessage()];
             $_SESSION['paiements_old'] = $oldInput;
@@ -1063,7 +1075,7 @@ class PaiementsController extends Controller
         Auth::requireAuth();
         Auth::requireRoles(['super_admin', 'comptable_école']);
         $user = Auth::refresh() ?: Auth::user();
-        if (($user['role'] ?? '') !== 'comptable_école') {
+        if (!in_array(($user['role'] ?? ''), ['super_admin', 'comptable_école'], true)) {
             $this->redirect('/paiements');
             return;
         }
@@ -1071,21 +1083,25 @@ class PaiementsController extends Controller
         $id = (int) ($_GET['id'] ?? 0);
         $db = Database::getConnection();
         $schoolId = (int) ($user['ecole_id'] ?? 0);
-        $stmt = $db->prepare(
+        $sql =
             'SELECT ece.*, ce.eleve_id, el.nom, el.postnom, el.prenom, fs.type_frais, fs.devise
              FROM ecritures_comptables_eleves ece
              INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
              INNER JOIN eleves el ON el.id = ce.eleve_id
              LEFT JOIN frais_scolaires fs ON fs.id = ece.frais_id
-             WHERE ece.id = :id AND ece.type_mouvement = \'CREDIT\'
-               AND (el.ecole_id = :ecole OR EXISTS (
+             WHERE ece.id = :id AND ece.type_mouvement = \'CREDIT\' AND ece.annulee_at IS NULL';
+        $params = [':id' => $id];
+        if (($user['role'] ?? '') !== 'super_admin') {
+            $sql .= ' AND (el.ecole_id = :ecole OR EXISTS (
                    SELECT 1 FROM inscriptions i
                    INNER JOIN classes c ON c.id = i.classe_id
                    WHERE i.eleve_id = el.id AND c.ecole_id = :inscription_ecole
-               ))
-             LIMIT 1'
-        );
-        $stmt->execute([':id' => $id, ':ecole' => $schoolId, ':inscription_ecole' => $schoolId]);
+               ))';
+            $params[':ecole'] = $schoolId;
+            $params[':inscription_ecole'] = $schoolId;
+        }
+        $stmt = $db->prepare($sql . ' LIMIT 1');
+        $stmt->execute($params);
         $payment = $stmt->fetch(\PDO::FETCH_ASSOC);
         if (!$payment) {
             $this->redirect('/paiements');
@@ -1114,7 +1130,7 @@ class PaiementsController extends Controller
         Auth::requireAuth();
         Auth::requireRoles(['super_admin', 'comptable_école']);
         $user = Auth::refresh() ?: Auth::user();
-        if (($user['role'] ?? '') !== 'comptable_école') {
+        if (!in_array(($user['role'] ?? ''), ['super_admin', 'comptable_école'], true)) {
             $this->redirect('/paiements');
             return;
         }
@@ -1127,19 +1143,23 @@ class PaiementsController extends Controller
         $schoolId = (int) ($user['ecole_id'] ?? 0);
         $db->beginTransaction();
         try {
-            $stmt = $db->prepare(
+            $sql =
                 'SELECT ece.*, ce.eleve_id FROM ecritures_comptables_eleves ece
                  INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
                  INNER JOIN eleves el ON el.id = ce.eleve_id
-                 WHERE ece.id = :id AND ece.type_mouvement = \'CREDIT\'
-                   AND (el.ecole_id = :ecole OR EXISTS (
+                 WHERE ece.id = :id AND ece.type_mouvement = \'CREDIT\' AND ece.annulee_at IS NULL';
+            $params = [':id' => $id];
+            if (($user['role'] ?? '') !== 'super_admin') {
+                $sql .= ' AND (el.ecole_id = :ecole OR EXISTS (
                        SELECT 1 FROM inscriptions i
                        INNER JOIN classes c ON c.id = i.classe_id
                        WHERE i.eleve_id = el.id AND c.ecole_id = :inscription_ecole
-                   ))
-                 FOR UPDATE'
-            );
-            $stmt->execute([':id' => $id, ':ecole' => $schoolId, ':inscription_ecole' => $schoolId]);
+                   ))';
+                $params[':ecole'] = $schoolId;
+                $params[':inscription_ecole'] = $schoolId;
+            }
+            $stmt = $db->prepare($sql . ' FOR UPDATE');
+            $stmt->execute($params);
             $payment = $stmt->fetch(\PDO::FETCH_ASSOC);
             if (!$payment || $newAmount <= 0 || $newLabel === '') {
                 throw new \RuntimeException('Paiement ou montant invalide.');
@@ -1171,12 +1191,23 @@ class PaiementsController extends Controller
             $update->execute([':montant' => $newAmount, ':libelle' => $newLabel, ':id' => $id]);
 
             // Keep the mirrored legacy row synchronized when it can be identified.
-            $legacy = $db->prepare('SELECT pe.id FROM paiements_eleves pe WHERE pe.eleve_id = :eleve AND pe.frais_id = :frais AND ABS(pe.montant_paye - :montant) < 0.001 ORDER BY ABS(TIMESTAMPDIFF(SECOND, pe.date_paiement, :date_operation)) ASC LIMIT 1');
-            $legacy->execute([':eleve' => $payment['eleve_id'], ':frais' => $payment['frais_id'], ':montant' => $oldAmount, ':date_operation' => $payment['date_operation']]);
+            $legacy = $db->prepare('SELECT id FROM paiements_eleves WHERE ecriture_comptable_id = :ecriture_comptable LIMIT 1');
+            $legacy->execute([':ecriture_comptable' => $id]);
             $legacyId = $legacy->fetchColumn();
+            if (!$legacyId) {
+                $legacy = $db->prepare('SELECT pe.id FROM paiements_eleves pe WHERE pe.eleve_id = :eleve AND pe.frais_id = :frais AND ABS(pe.montant_paye - :montant) < 0.001 AND ABS(TIMESTAMPDIFF(SECOND, pe.date_paiement, :date_check)) <= 2 ORDER BY ABS(TIMESTAMPDIFF(SECOND, pe.date_paiement, :date_sort)) ASC LIMIT 1');
+                $legacy->execute([
+                    ':eleve' => $payment['eleve_id'],
+                    ':frais' => $payment['frais_id'],
+                    ':montant' => $oldAmount,
+                    ':date_check' => $payment['date_operation'],
+                    ':date_sort' => $payment['date_operation'],
+                ]);
+                $legacyId = $legacy->fetchColumn();
+            }
             if ($legacyId) {
-                $legacyUpdate = $db->prepare('UPDATE paiements_eleves SET montant_paye = :montant WHERE id = :id');
-                $legacyUpdate->execute([':montant' => $newAmount, ':id' => $legacyId]);
+                $legacyUpdate = $db->prepare('UPDATE paiements_eleves SET montant_paye = :montant, ecriture_comptable_id = :ecriture_comptable WHERE id = :id');
+                $legacyUpdate->execute([':montant' => $newAmount, ':ecriture_comptable' => $id, ':id' => $legacyId]);
             }
 
             if (abs($delta) > 0.0001) {
@@ -1202,6 +1233,123 @@ class PaiementsController extends Controller
             $this->redirect('/paiements/edit?id=' . $id);
             return;
         }
+        $this->redirect('/paiements');
+    }
+
+    public function cancel(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['super_admin', 'comptable_école']);
+
+        $user = Auth::refresh() ?: Auth::user();
+        if (
+            !in_array(($user['role'] ?? ''), ['super_admin', 'comptable_école'], true)
+            || !isset($_SESSION['payment_cancel_csrf'])
+            || !hash_equals((string) $_SESSION['payment_cancel_csrf'], (string) ($_POST['csrf_token'] ?? ''))
+        ) {
+            $_SESSION['paiements_errors'] = ['La demande d’annulation est invalide ou a expiré.'];
+            $this->redirect('/paiements');
+            return;
+        }
+
+        $id = (int) ($_POST['id'] ?? 0);
+        $db = Database::getConnection();
+        $schoolId = (int) ($user['ecole_id'] ?? 0);
+        $db->beginTransaction();
+        try {
+            $sql =
+                'SELECT ece.*, ce.eleve_id FROM ecritures_comptables_eleves ece
+                 INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
+                 INNER JOIN eleves el ON el.id = ce.eleve_id
+                 WHERE ece.id = :id AND ece.type_mouvement = \'CREDIT\' AND ece.annulee_at IS NULL';
+            $params = [':id' => $id];
+            if (($user['role'] ?? '') !== 'super_admin') {
+                $sql .= ' AND (el.ecole_id = :ecole OR EXISTS (
+                    SELECT 1 FROM inscriptions i
+                    INNER JOIN classes c ON c.id = i.classe_id
+                    WHERE i.eleve_id = el.id AND c.ecole_id = :inscription_ecole
+                ))';
+                $params[':ecole'] = $schoolId;
+                $params[':inscription_ecole'] = $schoolId;
+            }
+            $stmt = $db->prepare($sql . ' FOR UPDATE');
+            $stmt->execute($params);
+            $payment = $stmt->fetch(\PDO::FETCH_ASSOC);
+            if (!$payment) {
+                throw new \RuntimeException('Paiement introuvable ou déjà annulé.');
+            }
+
+            $studentLock = $db->prepare('SELECT id FROM eleves WHERE id = :id FOR UPDATE');
+            $studentLock->execute([':id' => (int) $payment['eleve_id']]);
+
+            $amount = (float) $payment['montant'];
+            $accountUpdate = $db->prepare('UPDATE comptes_eleves SET solde_debiteur = solde_debiteur + :montant WHERE id = :id');
+            $accountUpdate->execute([':montant' => $amount, ':id' => (int) $payment['compte_eleve_id']]);
+
+            $debtStmt = $db->prepare(
+                'SELECT * FROM dettes_eleves
+                 WHERE eleve_id = :eleve AND frais_id = :frais
+                 ORDER BY id ASC LIMIT 1 FOR UPDATE'
+            );
+            $debtStmt->execute([':eleve' => (int) $payment['eleve_id'], ':frais' => (int) $payment['frais_id']]);
+            $debt = $debtStmt->fetch(\PDO::FETCH_ASSOC);
+            if ($debt) {
+                $debtUpdate = $db->prepare(
+                    'UPDATE dettes_eleves
+                     SET montant_restant = LEAST(montant_initial, GREATEST(0, montant_restant + :montant))
+                     WHERE id = :id'
+                );
+                $debtUpdate->execute([':montant' => $amount, ':id' => (int) $debt['id']]);
+            }
+
+            $legacyStmt = $db->prepare('SELECT id FROM paiements_eleves WHERE ecriture_comptable_id = :ecriture_comptable LIMIT 1 FOR UPDATE');
+            $legacyStmt->execute([':ecriture_comptable' => $id]);
+            $legacyId = $legacyStmt->fetchColumn();
+            if (!$legacyId && !empty($payment['frais_id'])) {
+                $legacyStmt = $db->prepare(
+                    'SELECT id FROM paiements_eleves
+                     WHERE eleve_id = :eleve AND frais_id = :frais AND ABS(montant_paye - :montant) < 0.001
+                       AND ABS(TIMESTAMPDIFF(SECOND, date_paiement, :date_check)) <= 2
+                     ORDER BY ABS(TIMESTAMPDIFF(SECOND, date_paiement, :date_sort)) ASC
+                     LIMIT 1 FOR UPDATE'
+                );
+                $legacyStmt->execute([
+                    ':eleve' => (int) $payment['eleve_id'],
+                    ':frais' => (int) $payment['frais_id'],
+                    ':montant' => $amount,
+                    ':date_check' => $payment['date_operation'],
+                    ':date_sort' => $payment['date_operation'],
+                ]);
+                $legacyId = $legacyStmt->fetchColumn();
+            }
+            if ($legacyId) {
+                $deleteLegacy = $db->prepare('DELETE FROM paiements_eleves WHERE id = :id');
+                $deleteLegacy->execute([':id' => (int) $legacyId]);
+            }
+
+            $cancel = $db->prepare(
+                'UPDATE ecritures_comptables_eleves
+                 SET annulee_at = NOW(), annulee_par = :user_id, motif_annulation = :reason
+                 WHERE id = :id AND annulee_at IS NULL'
+            );
+            $cancel->execute([
+                ':user_id' => (int) ($user['id'] ?? 0),
+                ':reason' => 'Annulation pour erreur de saisie',
+                ':id' => $id,
+            ]);
+            if ($cancel->rowCount() !== 1) {
+                throw new \RuntimeException('Le paiement a déjà été annulé.');
+            }
+
+            $db->commit();
+            $_SESSION['paiements_success'] = 'Paiement annulé; les soldes ont été rétablis.';
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            $_SESSION['paiements_errors'] = [$e->getMessage()];
+        }
+
         $this->redirect('/paiements');
     }
 
@@ -1360,7 +1508,7 @@ class PaiementsController extends Controller
             'ecole_logo' => $ecoleLogo,
             'total_paye_par_devise' => $totalPayeParDevise,
             'reste_a_payer_par_devise' => $resteParDevise,
-            'autoPrint' => ($_GET['print'] ?? '') === '1',
+            'autoPrint' => empty($data['annulee_at']) && ($_GET['print'] ?? '') === '1',
         ]);
     }
 
@@ -1465,7 +1613,7 @@ class PaiementsController extends Controller
         }
 
         $this->view('paiements/qr_summary', [
-            'title' => 'Paiement reçu',
+            'title' => !empty($data['annulee_at']) ? 'Paiement annulé' : 'Paiement reçu',
             'user' => $user,
             'role' => $user['role'] ?? 'default',
             'roleLabel' => User::getRoleLabel($user['role'] ?? 'default'),

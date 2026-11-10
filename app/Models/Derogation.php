@@ -214,6 +214,24 @@ class Derogation
         return $requests;
     }
 
+    public static function getForStudent(int $studentId, int $schoolId): array
+    {
+        if ($studentId <= 0 || $schoolId <= 0) {
+            return [];
+        }
+
+        $stmt = Database::getConnection()->prepare(
+            'SELECT d.*, v.nom_complet AS validateur_nom
+             FROM derogations d
+             LEFT JOIN utilisateurs v ON v.id = d.validateur_id
+             WHERE d.eleve_id = :eleve_id AND d.ecole_id = :ecole_id
+             ORDER BY d.created_at DESC, d.id DESC'
+        );
+        $stmt->execute([':eleve_id' => $studentId, ':ecole_id' => $schoolId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public static function getPendingForAccountant(int $ecoleId, int $limit = 5): array
     {
         if ($ecoleId <= 0) {

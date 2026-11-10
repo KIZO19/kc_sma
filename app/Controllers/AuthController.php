@@ -40,7 +40,11 @@ class AuthController extends Controller
                         $_SESSION['location_consent_nonce'] = bin2hex(random_bytes(16));
                     }
                     UserPresence::recordLogin($user);
-                    $this->redirect('/dashboard');
+                    $this->redirect(
+                        !empty($user['must_change_password'])
+                            ? '/auth/changeInitialPassword'
+                            : '/dashboard'
+                    );
                     return;
                 }
             }
@@ -66,6 +70,67 @@ class AuthController extends Controller
             'title' => APP_NAME,
             'identifiant' => $identifiant,
             'portal' => $portal,
+        ]);
+    }
+
+    public function changeInitialPassword(): void
+    {
+        Auth::requireAuth();
+        header('Cache-Control: no-store, private');
+        header('Referrer-Policy: no-referrer');
+
+        $user = Auth::refresh() ?: Auth::user();
+        if (!in_array($user['role'] ?? '', ['eleve_ecole', 'eleve_école', 'parent_ecole', 'parent_école'], true)) {
+            $this->redirect('/dashboard');
+        }
+        if (empty($user['must_change_password'])) {
+            $this->redirect('/dashboard');
+        }
+
+        if (empty($_SESSION['initial_password_change_csrf'])) {
+            $_SESSION['initial_password_change_csrf'] = bin2hex(random_bytes(32));
+        }
+
+        $errors = [];
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+            $postedToken = (string) ($_POST['csrf_token'] ?? '');
+            if (
+                $postedToken === ''
+                || !hash_equals((string) $_SESSION['initial_password_change_csrf'], $postedToken)
+            ) {
+                $errors[] = 'Le formulaire a expiré. Rechargez la page et réessayez.';
+            } else {
+                $password = (string) ($_POST['mot_de_passe'] ?? '');
+                $passwordConfirm = (string) ($_POST['mot_de_passe_confirm'] ?? '');
+                if (strlen($password) < 8 || strlen($password) > 72) {
+                    $errors[] = 'Le mot de passe doit contenir entre 8 et 72 caractères.';
+                }
+                if ($password !== $passwordConfirm) {
+                    $errors[] = 'Les mots de passe ne correspondent pas.';
+                }
+                if (!$errors) {
+                    try {
+                        if (!User::changeTemporaryPassword((int) $user['id'], $password)) {
+                            $errors[] = 'Le mot de passe temporaire a déjà été modifié. Reconnectez-vous.';
+                        } else {
+                            unset($_SESSION['initial_password_change_csrf']);
+                            Auth::refresh();
+                            $this->redirect('/dashboard');
+                        }
+                    } catch (\PDOException $exception) {
+                        error_log('AuthController::changeInitialPassword database error: ' . $exception->getMessage());
+                        $errors[] = 'Le changement du mot de passe a échoué. Réessayez.';
+                    } catch (\DomainException|\InvalidArgumentException|\RuntimeException $exception) {
+                        $errors[] = $exception->getMessage();
+                    }
+                }
+            }
+        }
+
+        $this->view('auth/change_initial_password', [
+            'title' => APP_NAME . ' - Changer le mot de passe',
+            'csrfToken' => (string) $_SESSION['initial_password_change_csrf'],
+            'errors' => $errors,
         ]);
     }
 

@@ -227,6 +227,73 @@ class User
         return $user ?: null;
     }
 
+    public static function setTemporaryPassword(int $userId, string $password): bool
+    {
+        if ($userId <= 0 || strlen($password) < 8 || strlen($password) > 72) {
+            throw new \InvalidArgumentException('Le mot de passe temporaire est invalide.');
+        }
+
+        $stmt = Database::getConnection()->prepare(
+            "UPDATE utilisateurs
+             SET mot_de_passe = :password_hash, must_change_password = 1
+             WHERE id = :id AND role IN ('eleve_ecole', 'eleve_école', 'parent_ecole', 'parent_école')"
+        );
+        $stmt->execute([
+            ':password_hash' => password_hash($password, PASSWORD_DEFAULT),
+            ':id' => $userId,
+        ]);
+
+        return $stmt->rowCount() === 1;
+    }
+
+    public static function changeTemporaryPassword(int $userId, string $password): bool
+    {
+        if ($userId <= 0 || strlen($password) < 8 || strlen($password) > 72) {
+            throw new \InvalidArgumentException('Le mot de passe doit contenir entre 8 et 72 caractères.');
+        }
+
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        try {
+            $stmt = $db->prepare(
+                "SELECT mot_de_passe FROM utilisateurs
+                 WHERE id = :id AND must_change_password = 1
+                   AND role IN ('eleve_ecole', 'eleve_école', 'parent_ecole', 'parent_école')
+                 LIMIT 1 FOR UPDATE"
+            );
+            $stmt->execute([':id' => $userId]);
+            $currentHash = $stmt->fetchColumn();
+            if (!is_string($currentHash)) {
+                $db->rollBack();
+                return false;
+            }
+            if (password_verify($password, $currentHash)) {
+                throw new \DomainException('Choisissez un mot de passe différent du mot de passe temporaire.');
+            }
+
+            $update = $db->prepare(
+                'UPDATE utilisateurs
+                 SET mot_de_passe = :password_hash, must_change_password = 0
+                 WHERE id = :id AND must_change_password = 1'
+            );
+            $update->execute([
+                ':password_hash' => password_hash($password, PASSWORD_DEFAULT),
+                ':id' => $userId,
+            ]);
+            if ($update->rowCount() !== 1) {
+                throw new \RuntimeException('Le changement du mot de passe n’a pas été enregistré.');
+            }
+
+            $db->commit();
+            return true;
+        } catch (\Throwable $exception) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $exception;
+        }
+    }
+
     public static function getRoleEntityByRole(string $role)
     {
         return RoleFactory::make($role);

@@ -209,8 +209,9 @@ $entryTotalsByCurrency = $entryTotalsByCurrency ?? [];
                               <td><?= $i+1 ?></td>
                               <td><?= htmlspecialchars(formatDate($ec['date_operation'] ?? null)) ?></td>
                               <?php $movementType = strtoupper((string) ($ec['type_mouvement'] ?? '')); ?>
-                              <?php $movementLabel = $movementType === 'CREDIT' ? 'Montant déjà payé' : 'Dette restante'; ?>
-                              <td><span class="badge <?= $movementType === 'CREDIT' ? 'bg-success' : 'bg-danger' ?>"><?= htmlspecialchars($movementLabel) ?></span></td>
+                              <?php $isCancelledPayment = !empty($ec['annulee_at']); ?>
+                              <?php $movementLabel = $isCancelledPayment ? 'Paiement annulé' : ($movementType === 'CREDIT' ? 'Montant déjà payé' : 'Dette restante'); ?>
+                              <td><span class="badge <?= $isCancelledPayment ? 'bg-secondary' : ($movementType === 'CREDIT' ? 'bg-success' : 'bg-danger') ?>"><?= htmlspecialchars($movementLabel) ?></span></td>
                               <td><?= htmlspecialchars(number_format((float) ($ec['montant'] ?? 0), 2, ',', ' ')) ?></td>
                               <td><?= htmlspecialchars($ec['frais_devise'] ?? 'USD') ?></td>
                               <td><?= htmlspecialchars($ec['reference_recu'] ?? '-') ?></td>

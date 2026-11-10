@@ -261,11 +261,16 @@ class Controller
                 ['name' => 'Notes de mes cours', 'path' => '/notes', 'icon' => 'bi-pencil-square'],
                 ['name' => 'Élèves inscrits', 'path' => '/eleves', 'icon' => 'bi-people'],
             ],
-            'eleve_ecole' => [
+            'eleve_ecole', 'eleve_école' => [
                 ['name' => 'Mon emploi du temps', 'path' => '/mon-emploi', 'icon' => 'bi-calendar2-week'],
                 ['name' => 'Mes notes', 'path' => '/mes-notes', 'icon' => 'bi-bar-chart-steps'],
-                ['name' => 'Mes présences', 'path' => '/mes-presences', 'icon' => 'bi-check2-square'],
                 ['name' => 'Mes paiements', 'path' => '/mes-paiements', 'icon' => 'bi-wallet2'],
+                ['name' => 'Mon dossier disciplinaire', 'path' => '/espace-eleve/discipline', 'icon' => 'bi-journal-text'],
+                ['name' => 'Mes dérogations', 'path' => '/espace-eleve/derogations', 'icon' => 'bi-file-earmark-check'],
+                ['name' => 'Mes cours', 'path' => '/espace-eleve/cours', 'icon' => 'bi-book'],
+                ['name' => 'Mes évaluations', 'path' => '/espace-eleve/evaluations', 'icon' => 'bi-journal-check'],
+                ['name' => 'Mes communiqués', 'path' => '/espace-eleve/communiques', 'icon' => 'bi-megaphone'],
+                ['name' => 'Mes présences', 'path' => '/mes-presences', 'icon' => 'bi-check2-square'],
             ],
             'parent_ecole', 'parent_école' => [
                 ['name' => 'Enfants', 'path' => '/mes-enfants', 'icon' => 'bi-people'],

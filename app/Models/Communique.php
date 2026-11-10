@@ -72,6 +72,57 @@ class Communique
         return array_slice($communiques, 0, max(1, min(100, $limit)));
     }
 
+    public static function latestForAudience(int $ecoleId, string $role, ?int $sectionId, int $limit = 30): array
+    {
+        if ($ecoleId <= 0 || $role === '') {
+            return [];
+        }
+
+        self::ensureTable();
+        $stmt = Database::getConnection()->prepare(
+            'SELECT c.*, u.nom_complet AS auteur_nom
+             FROM communiques c
+             LEFT JOIN utilisateurs u ON u.id = c.auteur_user_id
+             WHERE c.ecole_id = :ecole_id AND c.statut IN (\'success\', \'partial\')
+             ORDER BY c.created_at DESC, c.id DESC
+             LIMIT 500'
+        );
+        $stmt->execute([':ecole_id' => $ecoleId]);
+        $matching = [];
+        $roleAliases = in_array($role, ['eleve_ecole', 'eleve_école'], true)
+            ? ['eleve_ecole', 'eleve_école']
+            : [$role];
+
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $communique) {
+            $roles = json_decode((string) ($communique['destinataires_roles'] ?? ''), true);
+            if (!is_array($roles) || array_intersect($roleAliases, $roles) === []) {
+                continue;
+            }
+
+            $sections = json_decode((string) ($communique['destinataires_sections'] ?? ''), true);
+            if ($sectionId !== null) {
+                if (is_array($sections) && $sections !== []
+                    && !in_array($sectionId, array_map('intval', $sections), true)) {
+                    continue;
+                }
+            } elseif (is_array($sections) && $sections !== []) {
+                continue;
+            }
+
+            if ($sectionId === null && trim((string) ($communique['destinataires_sections'] ?? '')) !== ''
+                && !is_array($sections)) {
+                continue;
+            }
+
+            $matching[] = $communique;
+            if (count($matching) >= max(1, min(100, $limit))) {
+                break;
+            }
+        }
+
+        return $matching;
+    }
+
     private static function ensureTable(): void
     {
         if (self::$tableEnsured) {

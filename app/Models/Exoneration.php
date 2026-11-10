@@ -78,7 +78,7 @@ class Exoneration
                             COALESCE((SELECT SUM(ece.montant) FROM ecritures_comptables_eleves ece
                                       INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
                                       WHERE ce.eleve_id = d.eleve_id AND ece.frais_id = d.frais_id
-                                        AND ece.type_mouvement = \'CREDIT\'), 0),
+                                        AND ece.type_mouvement = \'CREDIT\' AND ece.annulee_at IS NULL), 0),
                             COALESCE((SELECT SUM(pe.montant_paye) FROM paiements_eleves pe
                                       WHERE pe.eleve_id = d.eleve_id AND pe.frais_id = d.frais_id), 0)
                         ) AS montant_paye,
@@ -166,7 +166,7 @@ class Exoneration
                     COALESCE((SELECT SUM(ece.montant) FROM ecritures_comptables_eleves ece
                               INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
                               WHERE ce.eleve_id = :ledger_student AND ece.frais_id = :ledger_fee
-                                AND ece.type_mouvement = \'CREDIT\'), 0),
+                                AND ece.type_mouvement = \'CREDIT\' AND ece.annulee_at IS NULL), 0),
                     COALESCE((SELECT SUM(pe.montant_paye) FROM paiements_eleves pe
                               WHERE pe.eleve_id = :legacy_student AND pe.frais_id = :legacy_fee), 0)
                 )
