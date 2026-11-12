@@ -35,7 +35,7 @@ $pageStyles = <<<'CSS'
   .inscriptions-page .enrolled-grid-footer { margin-top: .9rem; color: var(--text-muted, #6c757d); font-size: .8125rem; }
   .inscriptions-page .enrolled-grid-footer .paginate_button { margin: 0 .1rem; padding: .35rem .65rem !important; border: 1px solid transparent !important; border-radius: .4rem; }
   .inscriptions-page .enrolled-grid-footer .paginate_button.current { border-color: #c9ddea !important; background: #eaf3f8 !important; color: #2c698e !important; }
-  .inscriptions-page .enrolled-student-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; margin-bottom: .9rem; }
+  .inscriptions-page .enrolled-student-filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin-bottom: .9rem; }
   .inscriptions-page .enrolled-student-filters label { display: grid; gap: .3rem; color: var(--text-muted, #6c757d); font-size: .78rem; font-weight: 600; }
   .inscriptions-page .enrolled-student-filters select { min-width: 0; min-height: 2.4rem; padding: .4rem .65rem; border: 1px solid var(--border, #dee2e6); border-radius: .45rem; background: var(--surface, #fff); color: var(--text, #212529); }
   .inscriptions-page .enrolled-grid-toolbar .dataTables_processing { background: var(--surface, #fff); color: var(--text, #212529); }
@@ -57,6 +57,9 @@ $pageStyles = <<<'CSS'
     .inscriptions-page .enrolled-grid-toolbar .dataTables_filter input { width: 100%; min-width: 0; }
     .inscriptions-page .enrolled-student-filters { grid-template-columns: 1fr; }
     .inscriptions-page .enrolled-grid-footer .dataTables_paginate { align-self: center; }
+  }
+  @media (min-width: 768px) and (max-width: 991.98px) {
+    .inscriptions-page .enrolled-student-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   .inscriptions-page .content-header h1 { font-weight: 700; letter-spacing: -.03em; }
   .inscriptions-page .registration-summary { border: 0; border-radius: .85rem; box-shadow: 0 .25rem 1rem rgba(31, 41, 55, .06); }
@@ -104,9 +107,19 @@ $pageScripts = <<<'SCRIPT'
     if (!table || !window.jQuery || !jQuery.fn.DataTable) return;
 
     const headerCells = Array.from(table.querySelectorAll('thead th'));
+    const columnIndex = function (label) {
+      return headerCells.findIndex(function (header) {
+        return header.textContent.trim() === label;
+      });
+    };
     const actionsColumn = headerCells.findIndex(function (header) {
       return header.classList.contains('student-account-actions-column');
     });
+    const detailColumns = headerCells.reduce(function (columns, header, index) {
+      if (header.hasAttribute('data-enrolled-detail')) columns.push(index);
+      return columns;
+    }, []);
+    const dateColumn = columnIndex('Date de naissance');
     const exportColumns = [];
     for (let index = 1; index < headerCells.length; index += 1) {
       if (index !== actionsColumn) exportColumns.push(index);
@@ -117,8 +130,18 @@ $pageScripts = <<<'SCRIPT'
     };
     const columnDefs = [
       { targets: [0], orderable: false, searchable: false, className: 'text-muted' },
-      { targets: [6], type: 'date' }
+      { targets: [dateColumn], type: 'date' }
     ];
+    if (detailColumns.length) {
+      columnDefs.push({ targets: detailColumns, visible: false });
+    }
+    const nonSortableColumns = headerCells.reduce(function (columns, header, index) {
+      if (header.dataset.gridSort === 'off') columns.push(index);
+      return columns;
+    }, []);
+    if (nonSortableColumns.length) {
+      columnDefs.push({ targets: nonSortableColumns, orderable: false });
+    }
     if (actionsColumn >= 0) {
       columnDefs.push({ targets: [actionsColumn], orderable: false, searchable: false });
     }
@@ -161,9 +184,10 @@ $pageScripts = <<<'SCRIPT'
       initComplete: function () {
         const api = this.api();
         [
-          { column: 5, id: 'enrolledGenderFilter' },
-          { column: 7, id: 'enrolledSectionFilter' },
-          { column: 9, id: 'enrolledClassFilter' }
+          { column: columnIndex('Genre'), id: 'enrolledGenderFilter' },
+          { column: columnIndex('Section'), id: 'enrolledSectionFilter' },
+          { column: columnIndex('Classe'), id: 'enrolledClassFilter' },
+          { column: columnIndex('Option'), id: 'enrolledOptionFilter' }
         ].forEach(function (filter) {
           const select = document.getElementById(filter.id);
           if (!select) return;
@@ -186,13 +210,25 @@ $pageScripts = <<<'SCRIPT'
     const resetFilters = document.getElementById('resetEnrolledStudentFilters');
     if (resetFilters) {
       resetFilters.addEventListener('click', function () {
-        ['enrolledGenderFilter', 'enrolledSectionFilter', 'enrolledClassFilter'].forEach(function (id) {
+        ['enrolledGenderFilter', 'enrolledSectionFilter', 'enrolledClassFilter', 'enrolledOptionFilter'].forEach(function (id) {
           const select = document.getElementById(id);
           if (select) select.value = '';
         });
         dataTable.search('');
         dataTable.columns().search('');
         dataTable.draw();
+      });
+    }
+
+    const detailsToggle = document.getElementById('toggleEnrolledStudentDetails');
+    if (detailsToggle && detailColumns.length) {
+      detailsToggle.addEventListener('click', function () {
+        const showDetails = this.getAttribute('aria-pressed') !== 'true';
+        dataTable.columns(detailColumns).visible(showDetails);
+        this.setAttribute('aria-pressed', String(showDetails));
+        this.innerHTML = showDetails
+          ? '<i class="bi bi-arrows-collapse me-1" aria-hidden="true"></i>Masquer les détails'
+          : '<i class="bi bi-arrows-expand me-1" aria-hidden="true"></i>Afficher les détails';
       });
     }
   });
@@ -394,7 +430,7 @@ require __DIR__ . '/../partials/app_header.php';
                             <i class="bi bi-person-check"></i>
                             Élèves déjà inscrits <span class="badge rounded-pill text-bg-primary"><?= $enrolledCount ?></span>
                           </h4>
-                          <small class="text-muted">Filtrez par genre, section ou classe, puis exportez les résultats. Les liens d’accès sont envoyés au téléphone du parent/tuteur.</small>
+                          <small class="text-muted">Filtrez les élèves, affichez les informations complémentaires au besoin et exportez les résultats. Les liens d’accès sont envoyés au téléphone du parent/tuteur.</small>
                           <?php if ($canManageAccountAccess): ?>
                             <div class="small text-muted mt-2">
                               <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>
@@ -403,9 +439,14 @@ require __DIR__ . '/../partials/app_header.php';
                           <?php endif; ?>
                         </div>
                         <?php if (!empty($enrolledStudents)): ?>
-                          <button type="button" class="btn btn-sm btn-outline-secondary" id="resetEnrolledStudentFilters">
-                            <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>Réinitialiser les filtres
-                          </button>
+                          <div class="d-flex flex-wrap gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="toggleEnrolledStudentDetails" aria-pressed="false">
+                              <i class="bi bi-arrows-expand me-1" aria-hidden="true"></i>Afficher les détails
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="resetEnrolledStudentFilters">
+                              <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>Réinitialiser les filtres
+                            </button>
+                          </div>
                         <?php endif; ?>
                       </div>
                     </div>
@@ -430,9 +471,15 @@ require __DIR__ . '/../partials/app_header.php';
                           </select>
                         </label>
                         <label for="enrolledClassFilter">
-                          Classe / option
+                          Classe
                           <select id="enrolledClassFilter">
                             <option value="">Toutes les classes</option>
+                          </select>
+                        </label>
+                        <label for="enrolledOptionFilter">
+                          Option
+                          <select id="enrolledOptionFilter">
+                            <option value="">Toutes les options</option>
                           </select>
                         </label>
                       </div>
@@ -443,24 +490,27 @@ require __DIR__ . '/../partials/app_header.php';
                               <th>N°</th>
                               <th>Matricule</th>
                               <th>Nom</th>
-                              <th>Postnom</th>
-                              <th>Prénom</th>
+                              <?php if ($canSubmit): ?>
+                                <th data-grid-sort="off">Année / réinscription</th>
+                              <?php endif; ?>
+                              <th data-enrolled-detail>Postnom</th>
+                              <th data-enrolled-detail>Prénom</th>
                               <th>Genre</th>
                               <th>Date de naissance</th>
                               <th>Section</th>
-                              <th>Option</th>
                               <th>Classe</th>
+                              <th>Option</th>
                               <th>Parent / responsable</th>
                               <th>Téléphone du parent</th>
-                              <th>Email du parent</th>
-                              <th>Nom du père</th>
-                              <th>Nom de la mère</th>
-                              <th>Province d’origine</th>
-                              <th>Territoire</th>
-                              <th>Numéro permanent</th>
-                              <th>Lieu de naissance</th>
-                              <th>Adresse</th>
-                              <th>Photo</th>
+                              <th data-enrolled-detail>Email du parent</th>
+                              <th data-enrolled-detail>Nom du père</th>
+                              <th data-enrolled-detail>Nom de la mère</th>
+                              <th data-enrolled-detail>Province d’origine</th>
+                              <th data-enrolled-detail>Territoire</th>
+                              <th data-enrolled-detail>Numéro permanent</th>
+                              <th data-enrolled-detail>Lieu de naissance</th>
+                              <th data-enrolled-detail>Adresse</th>
+                              <th data-enrolled-detail>Photo</th>
                               <?php if ($canManageAccountAccess): ?>
                                 <th class="student-account-actions-column" data-grid-sort="off">Accès comptes</th>
                               <?php endif; ?>
@@ -472,6 +522,13 @@ require __DIR__ . '/../partials/app_header.php';
                                 $studentGender = ($student['genre'] ?? '') === 'M'
                                     ? 'Masculin'
                                     : ((($student['genre'] ?? '') === 'F') ? 'Féminin' : '-');
+                                $studentFullName = trim(implode(' ', array_filter([
+                                    $student['nom'] ?? '',
+                                    $student['postnom'] ?? '',
+                                    $student['prenom'] ?? '',
+                                ], static function ($part) {
+                                    return trim((string) $part) !== '';
+                                })));
                                 $studentClass = trim((string) ($student['nom_classe'] ?? ''));
                                 $studentOption = trim((string) ($student['nom_option'] ?? ''));
                               ?>
@@ -480,16 +537,31 @@ require __DIR__ . '/../partials/app_header.php';
                                 <td><span class="student-reference"><?= htmlspecialchars($student['matricule'] ?? 'N/A', ENT_QUOTES, 'UTF-8') ?></span></td>
                                 <td>
                                   <a href="<?= BASE_URL ?>/eleves/show?id=<?= (int) ($student['id'] ?? 0) ?>">
-                                    <span class="student-name"><?= htmlspecialchars($student['nom'] ?? '-', ENT_QUOTES, 'UTF-8') ?></span>
+                                    <span class="student-name"><?= htmlspecialchars($studentFullName !== '' ? $studentFullName : '-', ENT_QUOTES, 'UTF-8') ?></span>
                                   </a>
                                 </td>
+                                <?php if ($canSubmit): ?>
+                                  <td class="text-nowrap">
+                                    <div class="small text-muted mb-1">
+                                      Année : <?= htmlspecialchars($student['annee_scolaire'] ?? 'Non précisée', ENT_QUOTES, 'UTF-8') ?>
+                                    </div>
+                                    <a class="btn btn-sm btn-outline-secondary mb-1" href="<?= BASE_URL ?>/inscriptions/parcours?id=<?= (int) ($student['id'] ?? 0) ?>">
+                                      <i class="bi bi-journal-text me-1" aria-hidden="true"></i>Parcours
+                                    </a>
+                                    <?php if (!empty($student['annee_scolaire_id']) && (int) $student['annee_scolaire_id'] !== (int) ($activeYearId ?? 0) && (int) ($activeYearId ?? 0) > 0): ?>
+                                      <a class="btn btn-sm btn-success mb-1" href="<?= BASE_URL ?>/inscriptions/reenroll?id=<?= (int) ($student['id'] ?? 0) ?>" aria-label="Confirmer la réinscription de <?= htmlspecialchars($studentFullName !== '' ? $studentFullName : 'cet élève', ENT_QUOTES, 'UTF-8') ?>" title="Confirmer la réinscription">
+                                        <i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Réinscrire
+                                      </a>
+                                    <?php endif; ?>
+                                  </td>
+                                <?php endif; ?>
                                 <td><?= htmlspecialchars($student['postnom'] ?? '-', ENT_QUOTES, 'UTF-8') ?></td>
                                 <td><?= htmlspecialchars($student['prenom'] ?? '-', ENT_QUOTES, 'UTF-8') ?></td>
                                 <td><?= htmlspecialchars($studentGender, ENT_QUOTES, 'UTF-8') ?></td>
                                 <td data-order="<?= htmlspecialchars((string) ($student['date_naissance'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(formatDate($student['date_naissance'] ?? null), ENT_QUOTES, 'UTF-8') ?></td>
                                 <td><?= htmlspecialchars($student['nom_section'] ?? '-', ENT_QUOTES, 'UTF-8') ?></td>
-                                <td><?= htmlspecialchars($studentOption !== '' ? $studentOption : '-', ENT_QUOTES, 'UTF-8') ?></td>
                                 <td><?= htmlspecialchars($studentClass !== '' ? $studentClass : '-', ENT_QUOTES, 'UTF-8') ?></td>
+                                <td><?= htmlspecialchars($studentOption !== '' ? $studentOption : '-', ENT_QUOTES, 'UTF-8') ?></td>
                                 <td><?= htmlspecialchars($student['parent_nom_responsable'] ?? '-', ENT_QUOTES, 'UTF-8') ?></td>
                                 <td><?= htmlspecialchars($student['parent_telephone'] ?? '-', ENT_QUOTES, 'UTF-8') ?></td>
                                 <td><?= htmlspecialchars($student['parent_email'] ?? '-', ENT_QUOTES, 'UTF-8') ?></td>

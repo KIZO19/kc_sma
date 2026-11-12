@@ -100,7 +100,7 @@
       ecole_admin: 'Administrateur école',
       'préfet_école': 'Préfet des études',
       'DE_école': 'Directeur des études',
-      'DD_école': 'Directeur département',
+      'DD_école': 'Directeur de Discipline',
       'DP_école': 'Directeur principal',
       'DA_école': 'Directeur adjoint',
       'comptable_école': 'Comptable',

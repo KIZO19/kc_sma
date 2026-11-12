@@ -199,6 +199,91 @@ class FraisScolaire
         return $row ?: null;
     }
 
+    public static function getStudentsPaymentStatus(int $feeId, int $ecoleId, int $yearId, string $currency): array
+    {
+        if ($feeId <= 0 || $ecoleId <= 0 || $yearId <= 0) {
+            return [];
+        }
+
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            "SELECT e.id AS eleve_id, e.matricule, e.nom, e.postnom, e.prenom,
+                    c.nom_classe, o.nom_option,
+                    COALESCE(d.montant_initial, fs.montant_total) AS montant_initial,
+                    COALESCE(p.montant_paye, 0) AS montant_paye,
+                    COALESCE(x.montant_exonere, 0) AS montant_exonere,
+                    GREATEST(
+                      0,
+                      COALESCE(d.montant_initial, fs.montant_total)
+                        - COALESCE(p.montant_paye, 0)
+                        - COALESCE(x.montant_exonere, 0)
+                    ) AS montant_restant
+             FROM frais_scolaires fs
+             INNER JOIN inscriptions i
+               ON i.annee_scolaire_id = fs.annee_scolaire_id
+              AND i.id = (
+                  SELECT latest.id
+                  FROM inscriptions latest
+                  WHERE latest.eleve_id = i.eleve_id
+                    AND latest.annee_scolaire_id = i.annee_scolaire_id
+                  ORDER BY latest.date_inscription DESC, latest.id DESC
+                  LIMIT 1
+              )
+             INNER JOIN eleves e ON e.id = i.eleve_id
+             INNER JOIN classes c ON c.id = i.classe_id AND c.ecole_id = e.ecole_id
+             LEFT JOIN options o ON o.id = c.option_id
+             LEFT JOIN (
+                 SELECT eleve_id, frais_id, annee_scolaire_id, MAX(montant_initial) AS montant_initial
+                 FROM dettes_eleves
+                 WHERE frais_id = :debt_fee_id AND annee_scolaire_id = :debt_year_id
+                 GROUP BY eleve_id, frais_id, annee_scolaire_id
+             ) d ON d.eleve_id = e.id AND d.frais_id = fs.id
+                AND d.annee_scolaire_id = fs.annee_scolaire_id
+             LEFT JOIN (
+                 SELECT ce.eleve_id, ece.frais_id, SUM(ece.montant) AS montant_paye
+                 FROM ecritures_comptables_eleves ece
+                 INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
+                 WHERE ece.frais_id = :payment_fee_id
+                   AND ece.type_mouvement = 'CREDIT'
+                   AND ece.annulee_at IS NULL
+                   AND NULLIF(TRIM(ece.reference_recu), '') IS NOT NULL
+                   AND ece.reference_recu NOT LIKE 'REG-FRAIS-%'
+                 GROUP BY ce.eleve_id, ece.frais_id
+             ) p ON p.eleve_id = e.id AND p.frais_id = fs.id
+             LEFT JOIN (
+                 SELECT eleve_id, frais_id, SUM(montant) AS montant_exonere
+                 FROM exonerations
+                 WHERE frais_id = :exoneration_fee_id
+                   AND statut = 'Approuvee'
+                   AND UPPER(devise) = UPPER(:exoneration_currency)
+                 GROUP BY eleve_id, frais_id
+             ) x ON x.eleve_id = e.id AND x.frais_id = fs.id
+             WHERE fs.id = :fee_id
+               AND fs.annee_scolaire_id = :year_id
+               AND e.ecole_id = :student_school_id
+               AND (
+                    COALESCE(fs.scope, 'class') = 'school'
+                    OR (COALESCE(fs.scope, 'class') = 'class'
+                        AND (fs.classe_id = c.id OR fs.scope_id = c.id))
+                    OR (fs.scope = 'section' AND fs.scope_id = c.section_id)
+                    OR (fs.scope = 'option' AND fs.scope_id = c.option_id)
+               )
+             ORDER BY c.nom_classe ASC, e.nom ASC, e.postnom ASC, e.prenom ASC"
+        );
+        $stmt->execute([
+            ':debt_fee_id' => $feeId,
+            ':debt_year_id' => $yearId,
+            ':payment_fee_id' => $feeId,
+            ':exoneration_fee_id' => $feeId,
+            ':exoneration_currency' => $currency,
+            ':fee_id' => $feeId,
+            ':year_id' => $yearId,
+            ':student_school_id' => $ecoleId,
+        ]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public static function existsEncodage(string $encodage, int $ecoleId, ?int $excludeId = null): bool
     {
         $db = Database::getConnection();

@@ -94,15 +94,18 @@ class FraisController extends Controller
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
         $activeYear = $ecoleId > 0 ? AnneeScolaire::getActiveBySchool($ecoleId) : null;
         $allFees = $ecoleId > 0 ? FraisScolaire::getAllBySchool($ecoleId) : [];
-        $schoolFees = array_values(array_filter($allFees, static fn (array $fee): bool =>
+        $yearFees = array_values(array_filter($allFees, static fn (array $fee): bool =>
+            (int) ($fee['annee_scolaire_id'] ?? 0) === (int) ($activeYear['id'] ?? 0)
+        ));
+        $items = array_values(array_filter($yearFees, static fn (array $fee): bool =>
             ($fee['scope'] ?? '') === 'school'
-            && (int) ($fee['annee_scolaire_id'] ?? 0) === (int) ($activeYear['id'] ?? 0)
+            && str_starts_with((string) ($fee['encodage'] ?? ''), 'ART-SCOL-')
         ));
-        $items = array_values(array_filter($schoolFees, static fn (array $fee): bool =>
-            str_starts_with((string) ($fee['encodage'] ?? ''), 'ART-SCOL-')
-        ));
-        $otherSchoolFees = array_values(array_filter($schoolFees, static fn (array $fee): bool =>
-            !str_starts_with((string) ($fee['encodage'] ?? ''), 'ART-SCOL-')
+        $availableFees = array_values(array_filter($yearFees, static fn (array $fee): bool =>
+            !(
+                ($fee['scope'] ?? '') === 'school'
+                && str_starts_with((string) ($fee['encodage'] ?? ''), 'ART-SCOL-')
+            )
         ));
         $editId = (int) ($_GET['id'] ?? 0);
         $editItem = null;
@@ -132,7 +135,7 @@ class FraisController extends Controller
             'activeYear' => $activeYear,
             'schoolCurrency' => $school['devise_principale'] ?? 'USD',
             'items' => $items,
-            'otherSchoolFees' => $otherSchoolFees,
+            'availableFees' => $availableFees,
             'editItem' => $editItem,
             'csrfToken' => $_SESSION['school_items_csrf'],
         ]);
@@ -840,6 +843,43 @@ class FraisController extends Controller
             return;
         }
 
+        $feeStudents = FraisScolaire::getStudentsPaymentStatus(
+            $id,
+            $ecoleId,
+            (int) ($fee['annee_scolaire_id'] ?? 0),
+            (string) ($fee['devise'] ?? 'USD')
+        );
+        $paidStudentsCount = 0;
+        $indebtedStudentsCount = 0;
+        $exoneratedStudentsCount = 0;
+        $totalRemaining = 0.0;
+        foreach ($feeStudents as &$student) {
+            $initialAmount = (float) ($student['montant_initial'] ?? 0);
+            $paidAmount = (float) ($student['montant_paye'] ?? 0);
+            $exoneratedAmount = (float) ($student['montant_exonere'] ?? 0);
+            $remainingAmount = max(0.0, $initialAmount - $paidAmount - $exoneratedAmount);
+
+            if ($remainingAmount <= 0.005) {
+                if ($paidAmount + 0.005 >= $initialAmount) {
+                    $student['statut_paiement'] = 'Payé';
+                    $paidStudentsCount++;
+                } else {
+                    $student['statut_paiement'] = 'Exonéré';
+                    $exoneratedStudentsCount++;
+                }
+            } elseif ($paidAmount > 0.005) {
+                $student['statut_paiement'] = 'Partiellement payé';
+                $indebtedStudentsCount++;
+            } else {
+                $student['statut_paiement'] = 'En dette';
+                $indebtedStudentsCount++;
+            }
+
+            $student['montant_restant'] = $remainingAmount;
+            $totalRemaining += $remainingAmount;
+        }
+        unset($student);
+
         $this->view('frais/show', [
             'title' => APP_NAME . ' - Détail frais',
             'user' => $user,
@@ -847,6 +887,11 @@ class FraisController extends Controller
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $modules,
             'fee' => $fee,
+            'feeStudents' => $feeStudents,
+            'paidStudentsCount' => $paidStudentsCount,
+            'indebtedStudentsCount' => $indebtedStudentsCount,
+            'exoneratedStudentsCount' => $exoneratedStudentsCount,
+            'totalRemaining' => $totalRemaining,
         ]);
     }
 

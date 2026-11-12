@@ -11,13 +11,15 @@ class Inscription
     {
         $db = Database::getConnection();
         $stmt = $db->prepare(
-            'INSERT INTO inscriptions (eleve_id, classe_id, annee_scolaire_id) VALUES (:eleve_id, :classe_id, :annee_scolaire_id)'
+            'INSERT INTO inscriptions (eleve_id, classe_id, annee_scolaire_id, decision_finale) '
+            . 'VALUES (:eleve_id, :classe_id, :annee_scolaire_id, :decision_finale)'
         );
 
         $stmt->execute([
             ':eleve_id' => $data['eleve_id'],
             ':classe_id' => $data['classe_id'],
             ':annee_scolaire_id' => $data['annee_scolaire_id'],
+            ':decision_finale' => $data['decision_finale'] ?? 'En cours',
         ]);
 
         return self::findById((int) $db->lastInsertId());

@@ -82,6 +82,9 @@ class Router
         } elseif ($segments[0] === 'reset-password') {
             $controllerName = 'Auth';
             $actionName = 'resetPassword';
+        } elseif ($segments[0] === 'manuel-guide') {
+            $controllerName = 'Manuel';
+            $actionName = 'index';
         } elseif ($segments[0] === 'dashboard') {
             $controllerName = 'Dashboard';
             $actionName = $segments[1] ?? 'index';
@@ -171,6 +174,8 @@ class Router
                 ],
                 'App\\Controllers\\ProfileController' => ['index', 'update'],
                 'App\\Controllers\\NotificationsController' => ['poll', 'pushsubscribe', 'pushunsubscribe'],
+                'App\\Controllers\\ManuelController' => ['index'],
+                'App\\Controllers\\EcolesController' => ['subscriptionrequired'],
                 'App\\Controllers\\AuthController' => ['changeinitialpassword', 'logout'],
             ];
             if (!in_array(strtolower($actionName), $studentRoutes[$controllerClass] ?? [], true)) {
@@ -189,6 +194,7 @@ class Router
                 'App\\Controllers\\MonEmploiController' => ['index'],
                 'App\\Controllers\\MessagesController' => ['index', 'open', 'thread', 'chatpoll', 'chatreply', 'chattyping'],
                 'App\\Controllers\\NotificationsController' => ['poll', 'pushsubscribe', 'pushunsubscribe'],
+                'App\\Controllers\\ManuelController' => ['index'],
                 'App\\Controllers\\ContactController' => ['index', 'send'],
                 'App\\Controllers\\ProfileController' => ['index', 'update'],
                 'App\\Controllers\\AuthController' => ['logout'],

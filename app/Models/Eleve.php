@@ -371,18 +371,65 @@ class Eleve
         return $compte ?: null;
     }
 
-    public static function getAccountingEntries(int $eleveId): array
+    public static function getEnrollmentHistoryForSchool(int $eleveId, int $ecoleId, ?int $sectionId = null): array
+    {
+        if ($eleveId <= 0 || $ecoleId <= 0) {
+            return [];
+        }
+
+        $db = Database::getConnection();
+        $sql = 'SELECT a.id AS annee_scolaire_id, a.annee, a.est_active,
+                       i.id AS inscription_id, i.date_inscription,
+                       c.id AS classe_id, c.nom_classe, c.section_id,
+                       sec.nom_section, c.option_id, opt.nom_option,
+                       CONCAT(c.nom_classe, CASE WHEN opt.nom_option IS NOT NULL AND opt.nom_option <> \'\' THEN CONCAT(\' · \', opt.nom_option) ELSE \'\' END) AS classe_label
+                FROM inscriptions i
+                INNER JOIN annees_scolaires a ON a.id = i.annee_scolaire_id AND a.ecole_id = :year_school
+                INNER JOIN eleves e ON e.id = i.eleve_id
+                INNER JOIN classes c ON c.id = i.classe_id AND c.ecole_id = :class_school
+                LEFT JOIN sections sec ON sec.id = c.section_id
+                LEFT JOIN options opt ON opt.id = c.option_id
+                WHERE i.eleve_id = :eleve_id
+                  AND e.ecole_id = :student_school
+                  AND i.id = (
+                      SELECT latest.id FROM inscriptions latest
+                      WHERE latest.eleve_id = i.eleve_id AND latest.annee_scolaire_id = i.annee_scolaire_id
+                      ORDER BY latest.date_inscription DESC, latest.id DESC LIMIT 1
+                  )';
+        $params = [
+            ':year_school' => $ecoleId,
+            ':class_school' => $ecoleId,
+            ':eleve_id' => $eleveId,
+            ':student_school' => $ecoleId,
+        ];
+        if ($sectionId !== null) {
+            $sql .= ' AND c.section_id = :section_id';
+            $params[':section_id'] = $sectionId;
+        }
+        $sql .= ' ORDER BY a.annee DESC, a.id DESC';
+
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function getAccountingEntries(int $eleveId, ?int $yearId = null): array
     {
         $db = Database::getConnection();
-        $stmt = $db->prepare(
+        $sql =
             'SELECT ece.*, fs.devise AS frais_devise, fs.type_frais AS frais_type_frais FROM ecritures_comptables_eleves ece '
             . 'INNER JOIN comptes_eleves ce ON ece.compte_eleve_id = ce.id '
             . 'LEFT JOIN frais_scolaires fs ON fs.id = ece.frais_id '
             . 'WHERE ce.eleve_id = :eleve '
             . 'AND (UPPER(ece.type_mouvement) <> \'CREDIT\' '
-            . 'OR NULLIF(TRIM(ece.reference_recu), \'\') IS NOT NULL)'
-        );
-        $stmt->execute([':eleve' => $eleveId]);
+            . 'OR NULLIF(TRIM(ece.reference_recu), \'\') IS NOT NULL)';
+        $params = [':eleve' => $eleveId];
+        if ($yearId !== null) {
+            $sql .= ' AND ce.annee_scolaire_id = :year_id';
+            $params[':year_id'] = $yearId;
+        }
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
         $records = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $seenKeys = [];
@@ -416,10 +463,10 @@ class Eleve
         return $records;
     }
 
-    public static function getNotes(int $eleveId): array
+    public static function getNotes(int $eleveId, ?int $yearId = null): array
     {
         $db = Database::getConnection();
-        $stmt = $db->prepare(
+        $sql =
             'SELECT n.*, ev.attribution_cours_id, ev.periode_id, ev.type_evaluation,
                     ev.date_evaluation, ev.ponderation_max, co.nom_cours, p.nom_periode
              FROM notes n
@@ -427,18 +474,206 @@ class Eleve
              LEFT JOIN attribution_cours ac ON ac.id = ev.attribution_cours_id
              LEFT JOIN cours co ON co.id = ac.cours_id
              LEFT JOIN periodes p ON p.id = ev.periode_id '
-            . 'WHERE n.eleve_id = :eleve ORDER BY ev.date_evaluation DESC'
-        );
-        $stmt->execute([':eleve' => $eleveId]);
+            . 'WHERE n.eleve_id = :eleve';
+        $params = [':eleve' => $eleveId];
+        if ($yearId !== null) {
+            $sql .= ' AND ac.annee_scolaire_id = :year_id';
+            $params[':year_id'] = $yearId;
+        }
+        $stmt = $db->prepare($sql . ' ORDER BY ev.date_evaluation DESC');
+        $stmt->execute($params);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public static function getDiscipline(int $eleveId): array
     {
         $db = Database::getConnection();
-        $stmt = $db->prepare('SELECT * FROM discipline_eleves WHERE eleve_id = :eleve ORDER BY date_evenement DESC');
+        $stmt = $db->prepare(
+            'SELECT d.*, p.nom_periode, a.annee
+             FROM discipline_eleves d
+             LEFT JOIN periodes p ON p.id = d.periode_id
+             LEFT JOIN annees_scolaires a ON a.id = p.annee_scolaire_id
+             WHERE d.eleve_id = :eleve
+             ORDER BY d.date_evenement DESC, d.id DESC'
+        );
         $stmt->execute([':eleve' => $eleveId]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function getDisciplinePeriodsForSchool(int $schoolId): array
+    {
+        if ($schoolId <= 0) {
+            return [];
+        }
+
+        $stmt = Database::getConnection()->prepare(
+            'SELECT p.id, p.nom_periode, p.cloturee, a.annee
+             FROM periodes p
+             INNER JOIN annees_scolaires a ON a.id = p.annee_scolaire_id
+             WHERE a.ecole_id = :school_id
+             ORDER BY a.est_active DESC, a.annee DESC, p.id ASC'
+        );
+        $stmt->execute([':school_id' => $schoolId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function createDiscipline(int $studentId, int $schoolId, array $data): int
+    {
+        $values = self::validateDisciplineData($data);
+        $db = Database::getConnection();
+        self::assertDisciplineStudent($db, $studentId, $schoolId);
+        self::assertDisciplinePeriod($db, $values['periode_id'], $schoolId);
+
+        $stmt = $db->prepare(
+            'INSERT INTO discipline_eleves (eleve_id, periode_id, faute, sanction, retrait_points, date_evenement)
+             VALUES (:student_id, :period_id, :fault, :sanction, :points, :event_date)'
+        );
+        $stmt->execute([
+            ':student_id' => $studentId,
+            ':period_id' => $values['periode_id'],
+            ':fault' => $values['faute'],
+            ':sanction' => $values['sanction'],
+            ':points' => $values['retrait_points'],
+            ':event_date' => $values['date_evenement'],
+        ]);
+
+        return (int) $db->lastInsertId();
+    }
+
+    public static function updateDiscipline(int $entryId, int $studentId, int $schoolId, array $data): void
+    {
+        $values = self::validateDisciplineData($data);
+        $db = Database::getConnection();
+        self::assertDisciplineStudent($db, $studentId, $schoolId);
+        self::assertDisciplinePeriod($db, $values['periode_id'], $schoolId);
+        self::assertDisciplineEntry($db, $entryId, $studentId);
+
+        $stmt = $db->prepare(
+            'UPDATE discipline_eleves
+             SET periode_id = :period_id, faute = :fault, sanction = :sanction,
+                 retrait_points = :points, date_evenement = :event_date
+             WHERE id = :entry_id AND eleve_id = :student_id'
+        );
+        $stmt->execute([
+            ':period_id' => $values['periode_id'],
+            ':fault' => $values['faute'],
+            ':sanction' => $values['sanction'],
+            ':points' => $values['retrait_points'],
+            ':event_date' => $values['date_evenement'],
+            ':entry_id' => $entryId,
+            ':student_id' => $studentId,
+        ]);
+    }
+
+    public static function deleteDiscipline(int $entryId, int $studentId, int $schoolId): void
+    {
+        $db = Database::getConnection();
+        self::assertDisciplineStudent($db, $studentId, $schoolId);
+        self::assertDisciplineEntry($db, $entryId, $studentId);
+
+        $stmt = $db->prepare(
+            'DELETE FROM discipline_eleves WHERE id = :entry_id AND eleve_id = :student_id'
+        );
+        $stmt->execute([':entry_id' => $entryId, ':student_id' => $studentId]);
+    }
+
+    private static function validateDisciplineData(array $data): array
+    {
+        $faultInput = $data['faute'] ?? '';
+        $sanctionInput = $data['sanction'] ?? '';
+        $dateInput = $data['date_evenement'] ?? '';
+        if (!is_scalar($faultInput) || !is_scalar($sanctionInput) || !is_scalar($dateInput)) {
+            throw new \InvalidArgumentException('Les champs du dossier disciplinaire sont invalides.');
+        }
+
+        $fault = trim((string) $faultInput);
+        $sanction = trim((string) $sanctionInput);
+        $date = trim((string) $dateInput);
+        $periodId = filter_var($data['periode_id'] ?? null, FILTER_VALIDATE_INT);
+        $points = filter_var($data['retrait_points'] ?? null, FILTER_VALIDATE_INT);
+        $parsedDate = \DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+
+        if ($fault === '' || mb_strlen($fault, 'UTF-8') > 255) {
+            throw new \InvalidArgumentException('Le fait consigné est obligatoire et limité à 255 caractères.');
+        }
+        if (mb_strlen($sanction, 'UTF-8') > 255) {
+            throw new \InvalidArgumentException('La sanction est limitée à 255 caractères.');
+        }
+        if ($periodId === false || $periodId <= 0) {
+            throw new \InvalidArgumentException('Sélectionnez une période scolaire valide.');
+        }
+        if ($points === false || $points < 0 || $points > 2147483647) {
+            throw new \InvalidArgumentException('Le retrait de points doit être un entier positif ou nul compatible avec le dossier.');
+        }
+        if (!$parsedDate || $parsedDate->format('Y-m-d') !== $date) {
+            throw new \InvalidArgumentException('Saisissez une date d’incident valide.');
+        }
+
+        return [
+            'periode_id' => $periodId,
+            'faute' => $fault,
+            'sanction' => $sanction !== '' ? $sanction : null,
+            'retrait_points' => $points,
+            'date_evenement' => $date,
+        ];
+    }
+
+    private static function assertDisciplineStudent(PDO $db, int $studentId, int $schoolId): void
+    {
+        if ($studentId <= 0 || $schoolId <= 0) {
+            throw new \InvalidArgumentException('Élève ou école invalide.');
+        }
+
+        $stmt = $db->prepare(
+            'SELECT e.id
+             FROM eleves e
+             WHERE e.id = :student_id
+               AND (
+                 e.ecole_id = :school_id
+                 OR EXISTS (
+                   SELECT 1
+                   FROM inscriptions i
+                   INNER JOIN classes c ON c.id = i.classe_id
+                   WHERE i.eleve_id = e.id AND c.ecole_id = :enrollment_school_id
+                 )
+               )
+             LIMIT 1'
+        );
+        $stmt->execute([
+            ':student_id' => $studentId,
+            ':school_id' => $schoolId,
+            ':enrollment_school_id' => $schoolId,
+        ]);
+        if (!$stmt->fetchColumn()) {
+            throw new \DomainException('Cet élève ne relève pas de votre école.');
+        }
+    }
+
+    private static function assertDisciplinePeriod(PDO $db, int $periodId, int $schoolId): void
+    {
+        $stmt = $db->prepare(
+            'SELECT p.id
+             FROM periodes p
+             INNER JOIN annees_scolaires a ON a.id = p.annee_scolaire_id
+             WHERE p.id = :period_id AND a.ecole_id = :school_id
+             LIMIT 1'
+        );
+        $stmt->execute([':period_id' => $periodId, ':school_id' => $schoolId]);
+        if (!$stmt->fetchColumn()) {
+            throw new \DomainException('La période sélectionnée ne relève pas de votre école.');
+        }
+    }
+
+    private static function assertDisciplineEntry(PDO $db, int $entryId, int $studentId): void
+    {
+        $stmt = $db->prepare(
+            'SELECT id FROM discipline_eleves WHERE id = :entry_id AND eleve_id = :student_id LIMIT 1'
+        );
+        $stmt->execute([':entry_id' => $entryId, ':student_id' => $studentId]);
+        if (!$stmt->fetchColumn()) {
+            throw new \DomainException('Le dossier disciplinaire demandé est introuvable.');
+        }
     }
 
     public static function update(int $id, array $data): bool

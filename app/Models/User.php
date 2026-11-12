@@ -447,7 +447,7 @@ class User
             'sec_école' => 'Secrétaire',
             'prefet_école' => 'Préfet des études',
             'DE_école' => 'Directeur des études',
-            'DD_école' => 'Directeur Département',
+            'DD_école' => 'Directeur de Discipline',
             'DP_école' => 'Directeur Principal',
             'DA_école' => 'Directeur Adjoint',
         ];
@@ -864,7 +864,7 @@ class User
             'ecole_admin' => 'Administrateur École',
             'préfet_école', 'prefet_école' => 'Préfet des études',
             'DE_école' => 'Directeur des études',
-            'DD_école' => 'Directeur Département',
+            'DD_école' => 'Directeur de Discipline',
             'DP_école' => 'Directeur Principal',
             'DA_école' => 'Directeur Adjoint',
             'comptable_école' => 'Comptable',

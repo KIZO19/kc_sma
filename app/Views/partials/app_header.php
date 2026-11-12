@@ -346,6 +346,11 @@ if (!empty($schoolContext['logo_url'])) {
           <?php endif; ?>
         </ul>
         <ul class="navbar-nav ms-auto">
+          <li class="nav-item d-flex align-items-center me-2">
+            <a class="btn btn-sm btn-outline-primary" href="<?= BASE_URL ?>/manuel-guide" aria-label="Ouvrir le manuel guide personnalisé">
+              <i class="bi bi-journal-bookmark me-1" aria-hidden="true"></i><span class="d-none d-md-inline">Manuel guide</span>
+            </a>
+          </li>
             <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle d-flex align-items-center" data-bs-toggle="dropdown" href="#" role="button">
                       <?php

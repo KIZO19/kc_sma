@@ -11,6 +11,7 @@ use App\Models\Classe;
 use App\Models\Ecole;
 use App\Models\Inscription;
 use App\Models\Option;
+use App\Models\ParcoursScolaire;
 use App\Models\OriginesRDC;
 use App\Models\PasswordReset;
 use App\Models\ParentModel;
@@ -33,6 +34,33 @@ class InscriptionsController extends Controller
     ];
 
     private const IDENTITY_EDIT_ROLES = ['super_admin', 'comptable_école', 'préfet_école', 'sec_école'];
+
+    private function formatStudentAddress(array $input): ?string
+    {
+        $read = static fn (string $key): string => is_scalar($input[$key] ?? null)
+            ? trim((string) $input[$key])
+            : '';
+        $parts = [
+            'Commune' => $read('adresse_commune'),
+            'Quartier' => $read('adresse_quartier'),
+            'Avenue/rue' => $read('adresse_avenue'),
+            'N° maison' => $read('adresse_numero_maison'),
+        ];
+        $parts = array_filter(
+            $parts,
+            static fn (string $value): bool => $value !== ''
+        );
+        if ($parts === []) {
+            return null;
+        }
+
+        $address = [];
+        foreach ($parts as $label => $value) {
+            $address[] = $label . ' : ' . $value;
+        }
+
+        return implode(', ', $address);
+    }
 
     private function getMandatorySchoolItems(int $schoolId, int $yearId): array
     {
@@ -62,6 +90,7 @@ class InscriptionsController extends Controller
         $modules = $this->getModulesForRole($role);
         $ecoleId = (int) ($user['ecole_id'] ?? 0);
         $sectionScopeId = $this->getSectionScopeForUser($user);
+        $activeYear = $ecoleId > 0 ? AnneeScolaire::getActiveBySchool($ecoleId) : null;
         $pendingStudents = $ecoleId > 0
             ? Eleve::getPendingBySchool($ecoleId, $sectionScopeId)
             : ($role === 'super_admin' ? Eleve::getPending() : []);
@@ -85,6 +114,7 @@ class InscriptionsController extends Controller
             'modules' => $modules,
             'pendingStudents' => $pendingStudents,
             'enrolledStudents' => $enrolledStudents,
+            'activeYearId' => (int) ($activeYear['id'] ?? 0),
             'sections' => $sections,
             'options' => $options,
             'canSubmit' => in_array($role, self::SUBMISSION_ROLES, true),
@@ -432,6 +462,8 @@ class InscriptionsController extends Controller
 
             $errors = [];
             $errors = array_merge($errors, $this->validateOriginSelection($_POST));
+            [$academicDocuments, $academicPathErrors] = $this->validateAcademicDocuments($_POST, $_FILES['bulletins'] ?? []);
+            $errors = array_merge($errors, $academicPathErrors);
             $activeYear = null;
             if ($nom === '') {
                 $errors[] = 'Le nom de l’élève est requis.';
@@ -565,6 +597,7 @@ class InscriptionsController extends Controller
 
                 $registrationDb = Database::getConnection();
                 $registrationDb->beginTransaction();
+                $uploadedBulletinPaths = [];
 
                 if ($parentChoice === 'new') {
                     try {
@@ -627,7 +660,7 @@ class InscriptionsController extends Controller
                         'genre' => $genre,
                         'lieu_naissance' => trim($_POST['lieu_naissance'] ?? null),
                         'nationalite' => trim($_POST['nationalite'] ?? 'CONGOLAISE'),
-                        'adresse' => trim($_POST['adresse'] ?? null),
+                        'adresse' => $this->formatStudentAddress($_POST),
                         'date_naissance' => $dateNaissance,
                         'parent_id' => $parentId > 0 ? $parentId : null,
                         'ecole_id' => $studentSchoolId > 0 ? $studentSchoolId : null,
@@ -696,11 +729,21 @@ class InscriptionsController extends Controller
                     if (!$createdRegistration) {
                         throw new \RuntimeException('La création de l’inscription n’a retourné aucun dossier.');
                     }
+                    if ($academicDocuments !== []) {
+                        ParcoursScolaire::createForInscription(
+                            (int) $createdRegistration['id'],
+                            $academicDocuments,
+                            $studentSchoolId,
+                            (int) $newStudent['id'],
+                            $uploadedBulletinPaths
+                        );
+                    }
                     $registrationDb->commit();
                 } catch (\PDOException $e) {
                     if ($registrationDb->inTransaction()) {
                         $registrationDb->rollBack();
                     }
+                    ParcoursScolaire::removeFiles($uploadedBulletinPaths);
                     error_log('InscriptionsController::create registration error: ' . $e->getMessage());
                     $_SESSION['inscriptions_errors'] = ['Impossible d’enregistrer l’inscription dans la base de données.'];
                     $_SESSION['inscriptions_old'] = $_POST;
@@ -710,6 +753,7 @@ class InscriptionsController extends Controller
                     if ($registrationDb->inTransaction()) {
                         $registrationDb->rollBack();
                     }
+                    ParcoursScolaire::removeFiles($uploadedBulletinPaths);
                     $_SESSION['inscriptions_errors'] = [$e->getMessage()];
                     $_SESSION['inscriptions_old'] = $_POST;
                     $this->redirect('/inscriptions/create');
@@ -718,6 +762,7 @@ class InscriptionsController extends Controller
                     if ($registrationDb->inTransaction()) {
                         $registrationDb->rollBack();
                     }
+                    ParcoursScolaire::removeFiles($uploadedBulletinPaths);
                     error_log('InscriptionsController::create registration error: ' . $e->getMessage());
                     $_SESSION['inscriptions_errors'] = ['Impossible de finaliser le dossier d’inscription.'];
                     $_SESSION['inscriptions_old'] = $_POST;
@@ -725,117 +770,21 @@ class InscriptionsController extends Controller
                     return;
                 }
 
-                // After creating the inscription, assign applicable fees to the student's account
-                $appliedFees = [];
-                $appliedTotal = 0.0;
+                $feeSummary = ['fees' => [], 'total' => 0.0];
                 try {
-                    $db = \App\Core\Database::getConnection();
-                    $activeYear = $activeYear ?? AnneeScolaire::getActiveBySchool($ecoleId);
-                    $yearId = $activeYear['id'] ?? null;
-                    $studentId = (int) ($newStudent['id'] ?? 0);
-                    if ($studentId > 0 && $yearId) {
-                        // load class details to determine option/section
-                        $classRec = Classe::findById($classeId);
-                        $classOption = (int) ($classRec['option_id'] ?? 0);
-                        $classSection = (int) ($classRec['section_id'] ?? 0);
-
-                        // fetch fees for the school and filter by applicability and year
-                        $schoolIdForFees = $studentSchoolId > 0 ? $studentSchoolId : ($ecoleId > 0 ? $ecoleId : 0);
-                        $fees = \App\Models\FraisScolaire::getAllBySchool((int) $schoolIdForFees);
-
-                        // determine agent id for ecritures
-                        $agentId = $user['reference_id'] ?? null;
-                        if (empty($agentId)) {
-                            $agstmt = $db->prepare('SELECT id FROM agents WHERE ecole_id = :ecole LIMIT 1');
-                            $agstmt->execute([':ecole' => $ecoleId]);
-                            $found = $agstmt->fetch(\PDO::FETCH_ASSOC);
-                            $agentId = $found['id'] ?? null;
-                        }
-                        if (empty($agentId)) $agentId = 1;
-
-                        // ensure compte exists for this student and year
-                        $cstmt = $db->prepare('SELECT id, solde_debiteur FROM comptes_eleves WHERE eleve_id = :eleve AND annee_scolaire_id = :annee LIMIT 1');
-                        $cstmt->execute([':eleve' => $studentId, ':annee' => $yearId]);
-                        $compte = $cstmt->fetch(\PDO::FETCH_ASSOC);
-                        if (!$compte) {
-                            $ist = $db->prepare('INSERT INTO comptes_eleves (eleve_id, annee_scolaire_id, solde_debiteur) VALUES (:eleve, :annee, 0.00)');
-                            $ist->execute([':eleve' => $studentId, ':annee' => $yearId]);
-                            $compteId = (int) $db->lastInsertId();
-                            $currentBalance = 0.00;
-                        } else {
-                            $compteId = (int) $compte['id'];
-                            $currentBalance = (float) $compte['solde_debiteur'];
-                        }
-
-                        foreach ($fees as $f) {
-                            $apply = false;
-                            $scope = $f['scope'] ?? 'class';
-                            $scopeId = isset($f['scope_id']) ? (int) $f['scope_id'] : null;
-                            // only consider fees for the active year
-                            if (!empty($f['annee_scolaire_id']) && (int) $f['annee_scolaire_id'] !== (int) $yearId) {
-                                continue;
-                            }
-
-                            // For class-scoped fees we accept either explicit classe_id or scope_id (backwards compatibility)
-                            if ($scope === 'class') {
-                                $feeClasseId = isset($f['classe_id']) ? (int) $f['classe_id'] : null;
-                                if ($feeClasseId === $classeId || $scopeId === $classeId) {
-                                    $apply = true;
-                                }
-                            } elseif ($scope === 'option') {
-                                if (!empty($scopeId) && $scopeId === $classOption) $apply = true;
-                            } elseif ($scope === 'section') {
-                                if (!empty($scopeId) && $scopeId === $classSection) $apply = true;
-                            } elseif ($scope === 'school') {
-                                $apply = true;
-                            }
-
-                            if ($apply) {
-                                $montant = (float) ($f['montant_total'] ?? 0);
-                                if ($montant <= 0) continue;
-                                $libelle = 'Facturation inscription: ' . ($f['type_frais'] ?? 'Frais');
-                                $est = $db->prepare('INSERT INTO ecritures_comptables_eleves (compte_eleve_id, frais_id, caisse_banque_id, type_mouvement, montant, reference_recu, libelle, agent_saisie_id) VALUES (:compte, :frais, NULL, :type, :montant, NULL, :libelle, :agent)');
-                                $est->execute([
-                                    ':compte' => $compteId,
-                                    ':frais' => $f['id'] ?? null,
-                                    ':type' => 'DEBIT',
-                                    ':montant' => $montant,
-                                    ':libelle' => $libelle,
-                                    ':agent' => $agentId,
-                                ]);
-
-                                $debtStmt = $db->prepare(
-                                    'INSERT INTO dettes_eleves
-                                        (eleve_id, frais_id, annee_scolaire_id, montant_initial, montant_restant, devise)
-                                     VALUES (:eleve_id, :frais_id, :year_id, :initial, :remaining, :devise)'
-                                );
-                                $debtStmt->execute([
-                                    ':eleve_id' => $studentId,
-                                    ':frais_id' => (int) $f['id'],
-                                    ':year_id' => (int) $yearId,
-                                    ':initial' => $montant,
-                                    ':remaining' => $montant,
-                                    ':devise' => strtoupper(trim((string) ($f['devise'] ?? 'USD'))) ?: 'USD',
-                                ]);
-
-                                $currentBalance += $montant;
-                                $appliedFees[] = [
-                                    'id' => $f['id'] ?? null,
-                                    'label' => $f['type_frais'] ?? 'Frais',
-                                    'amount' => $montant,
-                                ];
-                                $appliedTotal += $montant;
-                            }
-                        }
-
-                        // update compte balance if changed
-                        $ust = $db->prepare('UPDATE comptes_eleves SET solde_debiteur = :solde WHERE id = :id');
-                        $ust->execute([':solde' => $currentBalance, ':id' => $compteId]);
-                    }
+                    $feeSummary = $this->assignApplicableFees(
+                        Database::getConnection(),
+                        (int) ($newStudent['id'] ?? 0),
+                        $classeId,
+                        (int) ($activeYear['id'] ?? 0),
+                        (int) ($studentSchoolId > 0 ? $studentSchoolId : $ecoleId),
+                        $user
+                    );
                 } catch (\Throwable $e) {
                     error_log('InscriptionsController::assign fees error: ' . $e->getMessage());
-                    // non-blocking: continue without failing the inscription
                 }
+                $appliedFees = $feeSummary['fees'];
+                $appliedTotal = $feeSummary['total'];
 
                 // Handle optional student photo upload (saved to public/uploads/avatars/eleve_{id}.{ext})
                 if ($newStudent && !empty($_FILES['photo']['name']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
@@ -876,6 +825,351 @@ class InscriptionsController extends Controller
         }
 
         $this->redirect('/inscriptions/create');
+    }
+
+    public function reenroll(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(self::SUBMISSION_ROLES);
+
+        $user = Auth::refresh() ?: Auth::user();
+        $this->requireAdministrationModuleAccess($user, 'inscriptions');
+        $schoolId = (int) ($user['ecole_id'] ?? 0);
+        $sectionScopeId = $this->getSectionScopeForUser($user);
+        $studentId = (int) ($_GET['id'] ?? 0);
+        $student = $studentId > 0
+            ? Eleve::findByIdAndSchool($studentId, $schoolId, $sectionScopeId)
+            : null;
+        $activeYear = $schoolId > 0 ? AnneeScolaire::getActiveBySchool($schoolId) : null;
+
+        if (!$student || !$activeYear) {
+            $_SESSION['inscriptions_errors'] = [
+                !$student
+                    ? 'Élève introuvable ou n’appartenant pas à votre école.'
+                    : 'Aucune année scolaire active n’est configurée pour cette école.',
+            ];
+            $this->redirect('/inscriptions');
+            return;
+        }
+
+        $db = Database::getConnection();
+        $previousSectionFilter = $sectionScopeId !== null ? ' AND c.section_id = :section_id' : '';
+        $currentStmt = $db->prepare(
+            'SELECT i.*, c.nom_classe, c.section_id, c.option_id, s.nom_section, o.nom_option '
+            . 'FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id '
+            . 'LEFT JOIN sections s ON s.id = c.section_id LEFT JOIN options o ON o.id = c.option_id '
+            . 'WHERE i.eleve_id = :student_id AND i.annee_scolaire_id <> :active_year '
+            . 'AND c.ecole_id = :school_id' . $previousSectionFilter
+            . ' ORDER BY i.date_inscription DESC, i.id DESC LIMIT 1'
+        );
+        $previousParams = [
+            ':student_id' => $studentId,
+            ':active_year' => (int) $activeYear['id'],
+            ':school_id' => $schoolId,
+        ];
+        if ($sectionScopeId !== null) {
+            $previousParams[':section_id'] = $sectionScopeId;
+        }
+        $currentStmt->execute($previousParams);
+        $previousEnrollment = $currentStmt->fetch(\PDO::FETCH_ASSOC) ?: null;
+        $existsStmt = $db->prepare(
+            'SELECT 1 FROM inscriptions WHERE eleve_id = :student_id AND annee_scolaire_id = :year_id LIMIT 1'
+        );
+        $existsStmt->execute([':student_id' => $studentId, ':year_id' => (int) $activeYear['id']]);
+        if (!$previousEnrollment || $existsStmt->fetchColumn()) {
+            $_SESSION['inscriptions_errors'] = [
+                !$previousEnrollment
+                    ? 'Aucune inscription précédente n’a été trouvée pour cet élève dans votre école.'
+                    : 'Cet élève est déjà inscrit pour l’année scolaire active.',
+            ];
+            $this->redirect('/inscriptions');
+            return;
+        }
+
+        $school = Ecole::findById($schoolId);
+        if (empty($_SESSION['inscriptions_reenroll_csrf'])) {
+            $_SESSION['inscriptions_reenroll_csrf'] = bin2hex(random_bytes(32));
+        }
+        $role = (string) ($user['role'] ?? 'default');
+        $this->view('inscriptions/reenroll', [
+            'title' => APP_NAME . ' - Réinscription annuelle',
+            'user' => $user,
+            'role' => $role,
+            'roleLabel' => User::getRoleLabel($role),
+            'modules' => $this->getModulesForRole($role),
+            'student' => $student,
+            'parent' => !empty($student['parent_id']) ? ParentModel::findById((int) $student['parent_id']) : null,
+            'schoolName' => (string) ($school['nom_etablissement'] ?? ''),
+            'activeYear' => $activeYear,
+            'previousEnrollment' => $previousEnrollment,
+            'classes' => $schoolId > 0 ? Classe::getAllBySchool($schoolId, $sectionScopeId) : [],
+            'sections' => $sectionScopeId !== null
+                ? array_values(array_filter(Section::getAll(), static fn (array $section): bool => (int) $section['id'] === $sectionScopeId))
+                : Section::getAll(),
+            'options' => $schoolId > 0
+                ? ($sectionScopeId !== null
+                    ? Option::getAllForSchoolAndSection($schoolId, $sectionScopeId)
+                    : Option::getAllForSchool($schoolId))
+                : [],
+            'csrfToken' => $_SESSION['inscriptions_reenroll_csrf'],
+        ]);
+    }
+
+    public function submitReenrollment(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(self::SUBMISSION_ROLES);
+        $user = Auth::refresh() ?: Auth::user();
+        $this->requireAdministrationModuleAccess($user, 'inscriptions');
+
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+            $this->redirect('/inscriptions');
+            return;
+        }
+        $csrfToken = (string) ($_POST['csrf_token'] ?? '');
+        if (
+            $csrfToken === ''
+            || !hash_equals((string) ($_SESSION['inscriptions_reenroll_csrf'] ?? ''), $csrfToken)
+        ) {
+            $_SESSION['inscriptions_errors'] = ['Le formulaire a expiré. Rechargez la page et réessayez.'];
+            $this->redirect('/inscriptions');
+            return;
+        }
+
+        $schoolId = (int) ($user['ecole_id'] ?? 0);
+        $sectionScopeId = $this->getSectionScopeForUser($user);
+        $studentId = (int) ($_POST['eleve_id'] ?? 0);
+        $progression = trim((string) ($_POST['progression'] ?? ''));
+        $student = $studentId > 0
+            ? Eleve::findByIdAndSchool($studentId, $schoolId, $sectionScopeId)
+            : null;
+        $activeYear = $schoolId > 0 ? AnneeScolaire::getActiveBySchool($schoolId) : null;
+        if (!$student || !$activeYear) {
+            $_SESSION['inscriptions_errors'] = [
+                !$student
+                    ? 'Élève introuvable ou n’appartenant pas à votre école.'
+                    : 'Aucune année scolaire active n’est configurée pour cette école.',
+            ];
+            $this->redirect('/inscriptions');
+            return;
+        }
+
+        $db = Database::getConnection();
+        $previousSectionFilter = $sectionScopeId !== null ? ' AND c.section_id = :section_id' : '';
+        $previousStmt = $db->prepare(
+            'SELECT i.*, c.nom_classe, c.section_id, c.option_id '
+            . 'FROM inscriptions i INNER JOIN classes c ON c.id = i.classe_id '
+            . 'WHERE i.eleve_id = :student_id AND i.annee_scolaire_id <> :active_year '
+            . 'AND c.ecole_id = :school_id' . $previousSectionFilter
+            . ' ORDER BY i.date_inscription DESC, i.id DESC LIMIT 1'
+        );
+        $previousParams = [
+            ':student_id' => $studentId,
+            ':active_year' => (int) $activeYear['id'],
+            ':school_id' => $schoolId,
+        ];
+        if ($sectionScopeId !== null) {
+            $previousParams[':section_id'] = $sectionScopeId;
+        }
+        $previousStmt->execute($previousParams);
+        $previous = $previousStmt->fetch(\PDO::FETCH_ASSOC) ?: null;
+        $alreadyEnrolled = $db->prepare(
+            'SELECT 1 FROM inscriptions WHERE eleve_id = :student_id AND annee_scolaire_id = :year_id LIMIT 1'
+        );
+        $alreadyEnrolled->execute([':student_id' => $studentId, ':year_id' => (int) $activeYear['id']]);
+
+        if (!$previous || $alreadyEnrolled->fetchColumn()) {
+            $_SESSION['inscriptions_errors'] = [
+                !$previous
+                    ? 'Aucune inscription précédente n’a été trouvée pour cet élève dans votre école.'
+                    : 'Cet élève est déjà inscrit pour l’année scolaire active.',
+            ];
+            $this->redirect('/inscriptions');
+            return;
+        }
+
+        [$academicDocuments, $academicPathErrors] = $this->validateAcademicDocuments($_POST, $_FILES['bulletins'] ?? []);
+        if ($academicPathErrors !== []) {
+            $_SESSION['inscriptions_errors'] = $academicPathErrors;
+            $this->redirect('/inscriptions/reenroll?id=' . $studentId);
+            return;
+        }
+
+        $classId = (int) $previous['classe_id'];
+        $decision = '';
+        if ($progression === 'redoublement') {
+            $decision = 'Doublant';
+        } elseif ($progression === 'passage') {
+            $decision = 'Admis';
+            $classId = (int) ($_POST['classe_id'] ?? 0);
+            if ($classId === (int) $previous['classe_id']) {
+                $_SESSION['inscriptions_errors'] = ['Pour un passage dans une autre classe, sélectionnez une classe différente.'];
+                $this->redirect('/inscriptions/reenroll?id=' . $studentId);
+                return;
+            }
+        } else {
+            $_SESSION['inscriptions_errors'] = ['Choisissez si l’élève reprend sa classe ou passe dans une autre classe.'];
+            $this->redirect('/inscriptions/reenroll?id=' . $studentId);
+            return;
+        }
+
+        $class = Classe::findByIdForSchool($classId, $schoolId, $sectionScopeId);
+        if (!$class || !$this->isAllowedClassLevel((string) ($class['nom_classe'] ?? ''), (int) ($class['section_id'] ?? 0))) {
+            $_SESSION['inscriptions_errors'] = ['La classe choisie est invalide pour votre école ou votre section.'];
+            $this->redirect('/inscriptions/reenroll?id=' . $studentId);
+            return;
+        }
+        if ($progression === 'passage') {
+            $selectedSectionId = (int) ($_POST['section_id'] ?? 0);
+            $selectedOptionId = (int) ($_POST['option_id'] ?? 0);
+            $section = $selectedSectionId > 0 ? Section::findById($selectedSectionId) : null;
+            $isSecondary = mb_strtolower(trim((string) ($section['nom_section'] ?? '')), 'UTF-8') === 'secondaire';
+            if (
+                !$section
+                || (int) ($class['section_id'] ?? 0) !== $selectedSectionId
+                || ($isSecondary && (int) ($class['option_id'] ?? 0) !== $selectedOptionId)
+                || (!$isSecondary && ((int) ($class['option_id'] ?? 0) > 0 || $selectedOptionId > 0))
+            ) {
+                $_SESSION['inscriptions_errors'] = ['La section, l’option et la classe sélectionnées ne correspondent pas.'];
+                $this->redirect('/inscriptions/reenroll?id=' . $studentId);
+                return;
+            }
+        }
+        if (empty($this->getMandatorySchoolItems($schoolId, (int) $activeYear['id']))) {
+            $_SESSION['inscriptions_errors'] = ['La fiche des objets classiques obligatoires n’est pas configurée pour l’année active.'];
+            $this->redirect('/inscriptions/reenroll?id=' . $studentId);
+            return;
+        }
+
+        $uploadedBulletinPaths = [];
+        try {
+            $db->beginTransaction();
+            $registration = Inscription::create([
+                'eleve_id' => $studentId,
+                'classe_id' => $classId,
+                'annee_scolaire_id' => (int) $activeYear['id'],
+                'decision_finale' => $decision,
+            ]);
+            if (!$registration) {
+                throw new \RuntimeException('Impossible d’enregistrer la réinscription annuelle.');
+            }
+            if ($academicDocuments !== []) {
+                ParcoursScolaire::createForInscription(
+                    (int) $registration['id'],
+                    $academicDocuments,
+                    $schoolId,
+                    $studentId,
+                    $uploadedBulletinPaths
+                );
+            }
+
+            $feeSummary = $this->assignApplicableFees(
+                $db,
+                $studentId,
+                $classId,
+                (int) $activeYear['id'],
+                $schoolId,
+                $user
+            );
+
+            $statusStmt = $db->prepare('UPDATE eleves SET statut_eleve = :status WHERE id = :student_id');
+            $statusStmt->execute([':status' => 'actif', ':student_id' => $studentId]);
+            $db->commit();
+            $_SESSION['inscriptions_success'] = 'Réinscription confirmée pour l’année '
+                . (string) $activeYear['annee'] . '. Les informations identitaires de l’élève ont été conservées.'
+                . ($feeSummary['total'] > 0
+                    ? ' Frais appliqués : ' . number_format($feeSummary['total'], 2, ',', ' ') . ' (' . count($feeSummary['fees']) . ' frais).'
+                    : '');
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            ParcoursScolaire::removeFiles($uploadedBulletinPaths);
+            error_log('InscriptionsController::submitReenrollment failed: ' . $e->getMessage());
+            $_SESSION['inscriptions_errors'] = ['La réinscription n’a pas pu être enregistrée. Vérifiez qu’elle n’existe pas déjà, puis réessayez.'];
+        }
+
+        $this->redirect('/inscriptions');
+    }
+
+    public function parcours(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(self::SUBMISSION_ROLES);
+        $user = Auth::refresh() ?: Auth::user();
+        $this->requireAdministrationModuleAccess($user, 'inscriptions');
+
+        $schoolId = (int) ($user['ecole_id'] ?? 0);
+        $studentId = (int) ($_GET['id'] ?? 0);
+        $student = $studentId > 0
+            ? Eleve::findByIdAndSchool($studentId, $schoolId, $this->getSectionScopeForUser($user))
+            : null;
+        if (!$student) {
+            $this->redirect('/error/notFound');
+            return;
+        }
+
+        $role = (string) ($user['role'] ?? 'default');
+        $this->view('inscriptions/parcours', [
+            'title' => APP_NAME . ' - Parcours scolaire',
+            'user' => $user,
+            'role' => $role,
+            'roleLabel' => User::getRoleLabel($role),
+            'modules' => $this->getModulesForRole($role),
+            'student' => $student,
+            'academicPaths' => ParcoursScolaire::getForStudent($studentId),
+        ]);
+    }
+
+    public function bulletin(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(self::SUBMISSION_ROLES);
+        $user = Auth::refresh() ?: Auth::user();
+        $this->requireAdministrationModuleAccess($user, 'inscriptions');
+
+        $bulletinId = (int) ($_GET['id'] ?? 0);
+        $bulletin = $bulletinId > 0 ? ParcoursScolaire::findBulletinById($bulletinId) : null;
+        $schoolId = (int) ($user['ecole_id'] ?? 0);
+        if (
+            !$bulletin
+            || $schoolId <= 0
+            || !Eleve::findByIdAndSchool(
+                (int) $bulletin['eleve_id'],
+                $schoolId,
+                $this->getSectionScopeForUser($user)
+            )
+        ) {
+            $this->redirect('/error/notFound');
+            return;
+        }
+
+        $storedPath = (string) ($bulletin['fichier_stockage'] ?? '');
+        if (strpos($storedPath, 'bulletins/') !== 0 || strpos($storedPath, '..') !== false) {
+            $this->redirect('/error/notFound');
+            return;
+        }
+        $storageRoot = realpath(dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'private');
+        $filePath = $storageRoot !== false
+            ? realpath($storageRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $storedPath))
+            : false;
+        if ($storageRoot === false || $filePath === false || strpos($filePath, $storageRoot . DIRECTORY_SEPARATOR) !== 0 || !is_file($filePath)) {
+            $this->redirect('/error/notFound');
+            return;
+        }
+
+        $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($filePath);
+        if (!in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true)) {
+            $this->redirect('/error/notFound');
+            return;
+        }
+        header('Content-Type: ' . $mime);
+        header('Content-Length: ' . (string) filesize($filePath));
+        header('Content-Disposition: inline; filename*=UTF-8\'\'' . rawurlencode((string) $bulletin['nom_original']));
+        header('X-Content-Type-Options: nosniff');
+        header('Cache-Control: private, no-store');
+        readfile($filePath);
+        exit;
     }
 
     public function matriculePreview(): void
@@ -1320,6 +1614,217 @@ class InscriptionsController extends Controller
         }
 
         $this->redirect('/inscriptions');
+    }
+
+    private function assignApplicableFees(
+        \PDO $db,
+        int $studentId,
+        int $classId,
+        int $yearId,
+        int $schoolId,
+        array $user
+    ): array {
+        if ($studentId <= 0 || $classId <= 0 || $yearId <= 0 || $schoolId <= 0) {
+            throw new \InvalidArgumentException('Données d’affectation des frais invalides.');
+        }
+
+        $class = Classe::findByIdForSchool($classId, $schoolId);
+        if (!$class) {
+            throw new \RuntimeException('La classe de l’inscription est introuvable.');
+        }
+        $classOption = (int) ($class['option_id'] ?? 0);
+        $classSection = (int) ($class['section_id'] ?? 0);
+        $fees = \App\Models\FraisScolaire::getAllBySchool($schoolId);
+
+        $agentId = (int) ($user['reference_id'] ?? 0);
+        if ($agentId <= 0) {
+            $agentStmt = $db->prepare('SELECT id FROM agents WHERE ecole_id = :school_id LIMIT 1');
+            $agentStmt->execute([':school_id' => $schoolId]);
+            $agentId = (int) ($agentStmt->fetchColumn() ?: 0);
+        }
+        if ($agentId <= 0) {
+            $agentId = 1;
+        }
+
+        $accountStmt = $db->prepare(
+            'SELECT id, solde_debiteur FROM comptes_eleves '
+            . 'WHERE eleve_id = :student_id AND annee_scolaire_id = :year_id LIMIT 1'
+        );
+        $accountStmt->execute([':student_id' => $studentId, ':year_id' => $yearId]);
+        $account = $accountStmt->fetch(\PDO::FETCH_ASSOC);
+        if (!$account) {
+            $insertAccount = $db->prepare(
+                'INSERT INTO comptes_eleves (eleve_id, annee_scolaire_id, solde_debiteur) '
+                . 'VALUES (:student_id, :year_id, 0.00)'
+            );
+            $insertAccount->execute([':student_id' => $studentId, ':year_id' => $yearId]);
+            $accountId = (int) $db->lastInsertId();
+            $balance = 0.0;
+        } else {
+            $accountId = (int) $account['id'];
+            $balance = (float) $account['solde_debiteur'];
+        }
+
+        $summary = ['fees' => [], 'total' => 0.0];
+        $existingDebt = $db->prepare(
+            'SELECT id FROM dettes_eleves WHERE eleve_id = :student_id AND frais_id = :fee_id '
+            . 'AND annee_scolaire_id = :year_id LIMIT 1'
+        );
+        $insertEntry = $db->prepare(
+            'INSERT INTO ecritures_comptables_eleves '
+            . '(compte_eleve_id, frais_id, caisse_banque_id, type_mouvement, montant, reference_recu, libelle, agent_saisie_id) '
+            . 'VALUES (:account_id, :fee_id, NULL, :movement, :amount, NULL, :label, :agent_id)'
+        );
+        $insertDebt = $db->prepare(
+            'INSERT INTO dettes_eleves '
+            . '(eleve_id, frais_id, annee_scolaire_id, montant_initial, montant_restant, devise) '
+            . 'VALUES (:student_id, :fee_id, :year_id, :initial_amount, :remaining_amount, :currency)'
+        );
+
+        foreach ($fees as $fee) {
+            if (!empty($fee['annee_scolaire_id']) && (int) $fee['annee_scolaire_id'] !== $yearId) {
+                continue;
+            }
+            $feeScopeId = (int) ($fee['scope_id'] ?? 0);
+            $applies = match ($fee['scope'] ?? 'class') {
+                'class' => (int) ($fee['classe_id'] ?? 0) === $classId || $feeScopeId === $classId,
+                'option' => $feeScopeId > 0 && $feeScopeId === $classOption,
+                'section' => $feeScopeId > 0 && $feeScopeId === $classSection,
+                'school' => true,
+                default => false,
+            };
+            $feeId = (int) ($fee['id'] ?? 0);
+            $amount = (float) ($fee['montant_total'] ?? 0);
+            if (!$applies || $feeId <= 0 || $amount <= 0) {
+                continue;
+            }
+
+            $existingDebt->execute([
+                ':student_id' => $studentId,
+                ':fee_id' => $feeId,
+                ':year_id' => $yearId,
+            ]);
+            if ($existingDebt->fetchColumn()) {
+                continue;
+            }
+
+            $insertEntry->execute([
+                ':account_id' => $accountId,
+                ':fee_id' => $feeId,
+                ':movement' => 'DEBIT',
+                ':amount' => $amount,
+                ':label' => 'Facturation inscription: ' . ($fee['type_frais'] ?? 'Frais'),
+                ':agent_id' => $agentId,
+            ]);
+            $insertDebt->execute([
+                ':student_id' => $studentId,
+                ':fee_id' => $feeId,
+                ':year_id' => $yearId,
+                ':initial_amount' => $amount,
+                ':remaining_amount' => $amount,
+                ':currency' => strtoupper(trim((string) ($fee['devise'] ?? 'USD'))) ?: 'USD',
+            ]);
+            $balance += $amount;
+            $summary['total'] += $amount;
+            $summary['fees'][] = [
+                'id' => $feeId,
+                'label' => $fee['type_frais'] ?? 'Frais',
+                'amount' => $amount,
+            ];
+        }
+
+        $updateAccount = $db->prepare('UPDATE comptes_eleves SET solde_debiteur = :balance WHERE id = :id');
+        $updateAccount->execute([':balance' => $balance, ':id' => $accountId]);
+
+        return $summary;
+    }
+
+    private function validateAcademicDocuments(array $input, array $upload): array
+    {
+        $errors = [];
+        $schools = \is_array($input['ecole_provenance'] ?? null) ? $input['ecole_provenance'] : [];
+        $years = \is_array($input['annee_document'] ?? null) ? $input['annee_document'] : [];
+        $mentions = \is_array($input['mention'] ?? null) ? $input['mention'] : [];
+        $fileNames = \is_array($upload['name'] ?? null) ? $upload['name'] : [];
+        $fileCount = max(\count($fileNames), \count($schools), \count($years), \count($mentions));
+        if ($fileCount > 5) {
+            $errors[] = 'Vous pouvez joindre au maximum 5 images de bulletins.';
+        }
+
+        $documents = [];
+        $allowedMimes = [
+            'image/jpeg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+        ];
+        for ($index = 0; $index < min($fileCount, 5); $index++) {
+            $schoolValue = $schools[$index] ?? '';
+            $yearValue = $years[$index] ?? '';
+            $mentionValue = $mentions[$index] ?? '';
+            $school = \is_string($schoolValue) ? trim($schoolValue) : '';
+            $year = \is_string($yearValue) ? trim($yearValue) : '';
+            $mention = \is_string($mentionValue) ? trim($mentionValue) : '';
+            $errorCode = (int) ($upload['error'][$index] ?? UPLOAD_ERR_NO_FILE);
+            $hasMetadata = $school !== '' || $year !== '' || $mention !== '';
+
+            if ($errorCode === UPLOAD_ERR_NO_FILE) {
+                if ($hasMetadata) {
+                    $errors[] = 'Chaque bulletin renseigné doit être accompagné de son image.';
+                }
+                continue;
+            }
+            if ($errorCode !== UPLOAD_ERR_OK) {
+                $errors[] = 'Une image de bulletin n’a pas pu être téléversée. Réessayez.';
+                continue;
+            }
+            if ($school === '' || mb_strlen($school, 'UTF-8') > 150) {
+                $errors[] = 'Indiquez une école de provenance (150 caractères maximum) pour chaque bulletin.';
+            }
+            try {
+                $year = AnneeScolaire::validateYear($year);
+            } catch (\InvalidArgumentException $e) {
+                $errors[] = 'L’année scolaire de chaque bulletin doit être au format AAAA-AAAA.';
+            }
+            if (!\in_array($mention, ['reussite', 'echec'], true)) {
+                $errors[] = 'Indiquez la mention de réussite ou d’échec pour chaque bulletin.';
+            }
+
+            $temporaryPath = (string) ($upload['tmp_name'][$index] ?? '');
+            $size = (int) ($upload['size'][$index] ?? 0);
+            $mime = $temporaryPath !== '' && is_uploaded_file($temporaryPath)
+                ? (new \finfo(FILEINFO_MIME_TYPE))->file($temporaryPath)
+                : false;
+            if (
+                !isset($allowedMimes[$mime])
+                || $size <= 0
+                || $size > 5 * 1024 * 1024
+                || @getimagesize($temporaryPath) === false
+            ) {
+                $errors[] = 'Chaque bulletin doit être une image JPEG, PNG ou WebP de 5 Mo maximum.';
+                continue;
+            }
+
+            if (
+                $school !== ''
+                && mb_strlen($school, 'UTF-8') <= 150
+                && preg_match('/^\d{4}-\d{4}$/', $year)
+                && \in_array($mention, ['reussite', 'echec'], true)
+            ) {
+                $originalName = basename((string) ($upload['name'][$index] ?? 'bulletin'));
+                $documents[] = [
+                    'school' => $school,
+                    'year' => $year,
+                    'mention' => $mention,
+                    'bulletin' => [
+                        'tmp_name' => $temporaryPath,
+                        'name' => mb_substr($originalName, 0, 255, 'UTF-8'),
+                        'extension' => $allowedMimes[$mime],
+                    ],
+                ];
+            }
+        }
+
+        return [$documents, $errors];
     }
 
     private function validateOriginSelection(array $input): array

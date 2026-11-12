@@ -300,6 +300,32 @@
         hasSection = true;
       }
 
+      if (data.schoolYearRequests.length) {
+        if (hasSection) addDivider(messagesMenu);
+        addSectionTitle(messagesMenu, 'Demandes de changement d’année scolaire');
+        data.schoolYearRequests.forEach(function (item) {
+          const date = formatDate(item.created_at, true);
+          const detail = [
+            item.annee_actuelle + ' → ' + item.annee_demandee,
+            item.requester_name ? 'Par ' + item.requester_name : null,
+            date
+          ].filter(Boolean).join(' · ');
+          addLink(
+            messagesMenu,
+            baseUrl + '/ecoles/requests',
+            'bi bi-calendar2-week text-warning',
+            item.nom_etablissement || 'Demande de changement d’année',
+            detail
+          );
+        });
+        hasSection = true;
+      } else if (data.schoolYearRequestCount !== null) {
+        if (hasSection) addDivider(messagesMenu);
+        addSectionTitle(messagesMenu, 'Demandes de changement d’année scolaire');
+        messagesMenu.appendChild(createElement('span', 'dropdown-item-text text-muted small', 'Aucune demande en attente.'));
+        hasSection = true;
+      }
+
       if (data.decisionMessages.length) {
         if (hasSection) addDivider(messagesMenu);
         addSectionTitle(messagesMenu, 'Décisions sur vos demandes');
@@ -405,6 +431,16 @@
         ].filter(Boolean).join(' · ') || 'Une demande attend votre validation.',
         href: baseUrl + '/derogations#derogation-' + encodeURIComponent(item.id)
       }));
+      data.schoolYearRequests.forEach(item => items.push({
+        id: 'school-year-request-' + item.id,
+        title: 'Demande de changement d’année scolaire',
+        body: [
+          item.nom_etablissement,
+          item.annee_actuelle + ' → ' + item.annee_demandee,
+          item.requester_name ? 'Par ' + item.requester_name : null
+        ].filter(Boolean).join(' · '),
+        href: baseUrl + '/ecoles/requests'
+      }));
       data.decisionMessages.forEach(item => items.push({
         id: 'decision-' + item.id,
         title: 'Décision sur une dérogation',
@@ -463,6 +499,7 @@
       const totalMessages = Number(data.messageCount || 0)
         + Number(data.directMessageCount || 0)
         + Number(data.pendingDerogationCount || 0)
+        + Number(data.schoolYearRequestCount || 0)
         + Number(data.decisionMessageCount || 0);
       const signature = JSON.stringify(data);
       if (signature !== lastRenderSignature) {

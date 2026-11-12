@@ -19,7 +19,7 @@ try {
         ['role' => 'ecole_admin', 'identifiant' => 'ecole_admin@test.local', 'nom_complet' => 'École Admin Test', 'ecole_id' => 1],
         ['role' => 'préfet_école', 'identifiant' => 'prefet_ecole@test.local', 'nom_complet' => 'Préfet École Test', 'ecole_id' => 1],
         ['role' => 'DE_école', 'identifiant' => 'DE_ecole@test.local', 'nom_complet' => 'Directeur des études Test', 'ecole_id' => 1],
-        ['role' => 'DD_école', 'identifiant' => 'DD_ecole@test.local', 'nom_complet' => 'Directeur Département Test', 'ecole_id' => 1],
+        ['role' => 'DD_école', 'identifiant' => 'DD_ecole@test.local', 'nom_complet' => 'Directeur de Discipline Test', 'ecole_id' => 1],
         ['role' => 'DP_école', 'identifiant' => 'DP_ecole@test.local', 'nom_complet' => 'Directeur Principal Test', 'ecole_id' => 1],
         ['role' => 'DA_école', 'identifiant' => 'DA_ecole@test.local', 'nom_complet' => 'Directeur Adjoint Test', 'ecole_id' => 1],
         ['role' => 'comptable_école', 'identifiant' => 'comptable_ecole@test.local', 'nom_complet' => 'Comptable École Test', 'ecole_id' => 1],

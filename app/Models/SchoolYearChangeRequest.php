@@ -95,6 +95,35 @@ class SchoolYearChangeRequest
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public static function getPendingForNotifications(int $limit = 10): array
+    {
+        self::ensureTable();
+        $limit = max(1, min($limit, 50));
+        $stmt = Database::getConnection()->query(
+            "SELECT r.id, r.annee_actuelle, r.annee_demandee, r.created_at,
+                    e.nom_etablissement, requester.nom_complet AS requester_name
+             FROM demandes_changement_annee_scolaire r
+             INNER JOIN ecoles e ON e.id = r.ecole_id
+             LEFT JOIN utilisateurs requester ON requester.id = r.demandeur_id
+             WHERE r.statut = 'En_attente'
+             ORDER BY r.created_at DESC, r.id DESC
+             LIMIT {$limit}"
+        );
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function countPending(): int
+    {
+        self::ensureTable();
+        $stmt = Database::getConnection()->query(
+            "SELECT COUNT(*) FROM demandes_changement_annee_scolaire
+             WHERE statut = 'En_attente'"
+        );
+
+        return (int) $stmt->fetchColumn();
+    }
+
     public static function review(int $requestId, int $reviewerId, string $status, string $note): bool
     {
         if (

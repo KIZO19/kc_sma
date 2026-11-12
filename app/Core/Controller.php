@@ -208,7 +208,14 @@ class Controller
                 ['name' => 'Évaluations', 'path' => '/evaluations', 'icon' => 'bi-journal-check'],
                 ['name' => 'Événements', 'path' => '/evenements', 'icon' => 'bi-calendar-event'],
             ],
-            'promoteur_école', 'DE_école', 'DD_école', 'DA_école' => [
+            'DD_école' => [
+                ['name' => 'Dossiers disciplinaires', 'path' => '/eleves', 'icon' => 'bi-journal-x'],
+                ['name' => 'Présences des élèves', 'path' => '/presences', 'icon' => 'bi-calendar-check'],
+                ['name' => 'Évaluations', 'path' => '/evaluations', 'icon' => 'bi-journal-check'],
+                ['name' => 'Événements', 'path' => '/evenements', 'icon' => 'bi-calendar-event'],
+                ['name' => 'Messages', 'path' => '/messages', 'icon' => 'bi-chat-dots'],
+            ],
+            'promoteur_école', 'DE_école', 'DA_école' => [
                 ['name' => 'Admissions', 'path' => '/inscriptions', 'icon' => 'bi-person-plus'],
                 ['name' => 'Utilisateurs', 'path' => '/utilisateurs', 'icon' => 'bi-person-check'],
                 ['name' => 'Classes', 'path' => '/classes', 'icon' => 'bi-houses'],

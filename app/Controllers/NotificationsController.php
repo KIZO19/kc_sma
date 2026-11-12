@@ -8,6 +8,7 @@ use App\Models\Derogation;
 use App\Models\EvenementNotification;
 use App\Models\NotificationAccess;
 use App\Models\PushNotification;
+use App\Models\SchoolYearChangeRequest;
 use App\Models\SchoolMessage;
 use App\Models\UserMessage;
 
@@ -120,6 +121,9 @@ class NotificationsController
             $events = $schoolId > 0
                 ? EvenementNotification::getForUser($userId, 10)
                 : [];
+            $schoolYearRequests = $role === 'super_admin'
+                ? SchoolYearChangeRequest::getPendingForNotifications(10)
+                : [];
 
             echo json_encode([
                 'messages' => $messages,
@@ -152,6 +156,10 @@ class NotificationsController
                 'eventCount' => $schoolId > 0
                     ? EvenementNotification::countUnreadForUser($userId)
                     : 0,
+                'schoolYearRequests' => $schoolYearRequests,
+                'schoolYearRequestCount' => $role === 'super_admin'
+                    ? SchoolYearChangeRequest::countPending()
+                    : null,
             ], JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE);
         } catch (\Throwable $exception) {
             error_log('NotificationsController::poll failed: ' . $exception->getMessage());

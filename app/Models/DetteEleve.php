@@ -52,8 +52,9 @@ class DetteEleve
 
         if ($scope === 'class') {
             $feeClassId = (int) ($fee['classe_id'] ?? 0);
-            return ($feeClassId > 0 && $feeClassId === $classId)
-                || ($scopeId !== null && $scopeId === $classId);
+            return $feeClassId > 0
+                ? $feeClassId === $classId
+                : ($scopeId !== null && $scopeId === $classId);
         }
         if ($scope === 'option') {
             return $scopeId !== null && $scopeId === (int) ($enrollment['option_id'] ?? 0);
@@ -109,6 +110,95 @@ class DetteEleve
              ORDER BY d.date_creation DESC"
         );
         $stmt->execute([':eleve_id' => $eleveId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function getFeeStatusForStudentYear(int $eleveId, int $ecoleId, int $yearId): array
+    {
+        if ($eleveId <= 0 || $ecoleId <= 0 || $yearId <= 0) {
+            return [];
+        }
+
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            "SELECT fs.id AS frais_id, fs.type_frais, fs.devise, fs.scope,
+                    CASE
+                      WHEN COALESCE(fs.scope, 'class') = 'class' THEN COALESCE(fee_class.nom_classe, 'Classe')
+                      WHEN fs.scope = 'option' THEN COALESCE(fee_option.nom_option, 'Option')
+                      WHEN fs.scope = 'section' THEN COALESCE(fee_section.nom_section, 'Section')
+                      WHEN fs.scope = 'school' THEN 'École entière'
+                      ELSE 'N/A'
+                    END AS scope_label,
+                    COALESCE(d.montant_initial, fs.montant_total) AS montant_initial,
+                    COALESCE(p.montant_paye, 0) AS montant_paye,
+                    COALESCE(x.montant_exonere, 0) AS montant_exonere,
+                    GREATEST(
+                      0,
+                      COALESCE(d.montant_initial, fs.montant_total)
+                        - COALESCE(p.montant_paye, 0)
+                        - COALESCE(x.montant_exonere, 0)
+                    ) AS montant_restant
+             FROM inscriptions i
+             INNER JOIN classes c ON c.id = i.classe_id AND c.ecole_id = :class_school_id
+             INNER JOIN frais_scolaires fs
+               ON fs.annee_scolaire_id = i.annee_scolaire_id
+              AND fs.ecole_id = c.ecole_id
+              AND (
+                    COALESCE(fs.scope, 'class') = 'school'
+                    OR (COALESCE(fs.scope, 'class') = 'class'
+                        AND (fs.classe_id = c.id OR fs.scope_id = c.id))
+                    OR (fs.scope = 'section' AND fs.scope_id = c.section_id)
+                    OR (fs.scope = 'option' AND fs.scope_id = c.option_id)
+              )
+             LEFT JOIN classes fee_class
+               ON fee_class.id = COALESCE(fs.classe_id, CASE WHEN COALESCE(fs.scope, 'class') = 'class' THEN fs.scope_id END)
+             LEFT JOIN options fee_option ON fs.scope = 'option' AND fee_option.id = fs.scope_id
+             LEFT JOIN sections fee_section ON fs.scope = 'section' AND fee_section.id = fs.scope_id
+             LEFT JOIN (
+                 SELECT frais_id, MAX(montant_initial) AS montant_initial
+                 FROM dettes_eleves
+                 WHERE eleve_id = :debt_student_id AND annee_scolaire_id = :debt_year_id
+                 GROUP BY frais_id
+             ) d ON d.frais_id = fs.id
+             LEFT JOIN (
+                 SELECT ece.frais_id, SUM(ece.montant) AS montant_paye
+                 FROM ecritures_comptables_eleves ece
+                 INNER JOIN comptes_eleves ce ON ce.id = ece.compte_eleve_id
+                 WHERE ce.eleve_id = :payment_student_id
+                   AND ce.annee_scolaire_id = :payment_year_id
+                   AND ece.type_mouvement = 'CREDIT'
+                   AND ece.annulee_at IS NULL
+                   AND NULLIF(TRIM(ece.reference_recu), '') IS NOT NULL
+                   AND ece.reference_recu NOT LIKE 'REG-FRAIS-%'
+                 GROUP BY ece.frais_id
+             ) p ON p.frais_id = fs.id
+             LEFT JOIN (
+                 SELECT x.frais_id, SUM(x.montant) AS montant_exonere
+                 FROM exonerations x
+                 INNER JOIN frais_scolaires xfs
+                   ON xfs.id = x.frais_id AND UPPER(x.devise) = UPPER(xfs.devise)
+                 WHERE x.eleve_id = :exoneration_student_id AND x.statut = 'Approuvee'
+                 GROUP BY x.frais_id
+             ) x ON x.frais_id = fs.id
+             WHERE i.eleve_id = :student_id
+               AND i.annee_scolaire_id = :year_id
+               AND i.id = (
+                   SELECT latest.id FROM inscriptions latest
+                   WHERE latest.eleve_id = i.eleve_id AND latest.annee_scolaire_id = i.annee_scolaire_id
+                   ORDER BY latest.date_inscription DESC, latest.id DESC LIMIT 1
+               )
+             ORDER BY fs.type_frais ASC"
+        );
+        $stmt->execute([
+            ':class_school_id' => $ecoleId,
+            ':debt_student_id' => $eleveId,
+            ':debt_year_id' => $yearId,
+            ':payment_student_id' => $eleveId,
+            ':payment_year_id' => $yearId,
+            ':exoneration_student_id' => $eleveId,
+            ':student_id' => $eleveId,
+            ':year_id' => $yearId,
+        ]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 

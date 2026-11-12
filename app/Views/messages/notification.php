@@ -15,6 +15,11 @@
       </div>
       <div class="card-body">
         <p class="mb-0"><?= nl2br(htmlspecialchars((string) $message['body'], ENT_QUOTES, 'UTF-8')) ?></p>
+        <?php if (!empty($disciplineReportUrl)): ?>
+          <a class="btn btn-primary mt-3" href="<?= htmlspecialchars($disciplineReportUrl, ENT_QUOTES, 'UTF-8') ?>">
+            <i class="bi bi-file-earmark-text me-1" aria-hidden="true"></i>Consulter le procès-verbal
+          </a>
+        <?php endif; ?>
       </div>
     </article>
   </div>

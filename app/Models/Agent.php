@@ -59,7 +59,7 @@ class Agent
             'sec_école' => ['secretaire'],
             'comptable_école' => ['comptab'],
             'DE_école' => ['directeur des etudes'],
-            'DD_école' => ['directeur departement'],
+            'DD_école' => ['directeur de discipline', 'directeur discipline'],
             'DP_école' => ['directeur principal'],
             'DA_école' => ['directeur adjoint'],
         ];
@@ -119,7 +119,7 @@ class Agent
             if (strpos($normalizedFunction, 'principal') !== false) {
                 return 'DP_école';
             }
-            if (strpos($normalizedFunction, 'departement') !== false) {
+            if (strpos($normalizedFunction, 'discipline') !== false) {
                 return 'DD_école';
             }
             if (strpos($normalizedFunction, 'etude') !== false) {

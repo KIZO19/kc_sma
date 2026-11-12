@@ -484,6 +484,22 @@ class PaymentParentNotifier
         return $this->channel === 'whatsapp' || $this->channel === 'both';
     }
 
+    public function sendDirectSms(string $phone, string $message, string $schoolName): array
+    {
+        $phone = $this->normalizePhone($phone);
+        if ($phone === '' || trim($message) === '') {
+            return [
+                'sent' => false,
+                'channel' => 'sms',
+                'reason' => 'invalid_sms_data',
+                'message' => 'Échec de l’envoi de la convocation par SMS.',
+                'details' => 'Le numéro du parent ou le texte du SMS est invalide.',
+            ];
+        }
+
+        return $this->sendSmsWithFallback($phone, $message, $schoolName);
+    }
+
     private function sendSms(string $phone, string $message, string $schoolName): array
     {
         $payload = [

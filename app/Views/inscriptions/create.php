@@ -48,7 +48,7 @@ $pageStyles = <<<STYLE
   }
   .registration-stepper {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: .5rem;
     margin-top: 1rem;
   }
@@ -235,9 +235,9 @@ STYLE;
                     <div class="registration-wizard" id="registration-wizard" hidden>
                       <div class="registration-wizard-top">
                         <strong>Progression du dossier</strong>
-                        <span id="registration-step-status" aria-live="polite">Étape 1 sur 6</span>
+                        <span id="registration-step-status" aria-live="polite">Étape 1 sur 7</span>
                       </div>
-                      <div class="registration-progress" role="progressbar" aria-label="Progression du formulaire" aria-valuemin="1" aria-valuemax="6" aria-valuenow="1">
+                      <div class="registration-progress" role="progressbar" aria-label="Progression du formulaire" aria-valuemin="1" aria-valuemax="7" aria-valuenow="1">
                         <div class="registration-progress-bar" id="registration-progress-bar"></div>
                       </div>
                       <nav class="registration-stepper" aria-label="Étapes de l’inscription">
@@ -248,6 +248,7 @@ STYLE;
                             'Parent',
                             'Famille',
                             'Coordonnées',
+                            'Parcours',
                         ] as $stepIndex => $stepLabel): ?>
                           <button type="button" class="registration-step-button" data-registration-go-to="<?= $stepIndex ?>" aria-label="Étape <?= $stepIndex + 1 ?> : <?= htmlspecialchars($stepLabel, ENT_QUOTES, 'UTF-8') ?>">
                             <span class="registration-step-number"><?= $stepIndex + 1 ?></span>
@@ -494,7 +495,7 @@ STYLE;
                         <span class="registration-section-step">6</span>
                         <div>
                           <h4 id="registration-contact-heading">Coordonnées et photo</h4>
-                          <p>Lieu de naissance, adresse et photo facultative.</p>
+                          <p>Lieu de naissance, adresse résidentielle et photo facultative.</p>
                         </div>
                       </div>
                     <div class="row">
@@ -506,11 +507,44 @@ STYLE;
                         <label class="form-label" for="student-photo">Photo de l’élève <span class="text-muted fw-normal">(facultative, PNG/JPEG, 250 Ko maximum)</span></label>
                         <input id="student-photo" type="file" name="photo" accept="image/png,image/jpeg" class="form-control">
                       </div>
-                      <div class="col-12 mb-3">
-                        <label class="form-label" for="student-address">Adresse</label>
-                        <textarea id="student-address" name="adresse" class="form-control" rows="3"><?= htmlspecialchars($oldInput['adresse'] ?? '') ?></textarea>
+                      <div class="col-12">
+                        <p class="form-label mb-2">Adresse de résidence</p>
+                        <div class="row">
+                          <div class="col-md-6 mb-3">
+                            <label class="form-label" for="student-address-commune">Commune</label>
+                            <input id="student-address-commune" type="text" name="adresse_commune" class="form-control" maxlength="150" value="<?= htmlspecialchars($oldInput['adresse_commune'] ?? '', ENT_QUOTES, 'UTF-8') ?>" autocomplete="address-level3">
+                          </div>
+                          <div class="col-md-6 mb-3">
+                            <label class="form-label" for="student-address-quartier">Quartier</label>
+                            <input id="student-address-quartier" type="text" name="adresse_quartier" class="form-control" maxlength="150" value="<?= htmlspecialchars($oldInput['adresse_quartier'] ?? '', ENT_QUOTES, 'UTF-8') ?>" autocomplete="address-level2">
+                          </div>
+                          <div class="col-md-6 mb-3">
+                            <label class="form-label" for="student-address-avenue">Avenue / rue</label>
+                            <input id="student-address-avenue" type="text" name="adresse_avenue" class="form-control" maxlength="150" value="<?= htmlspecialchars($oldInput['adresse_avenue'] ?? '', ENT_QUOTES, 'UTF-8') ?>" autocomplete="address-line1">
+                          </div>
+                          <div class="col-md-6 mb-3">
+                            <label class="form-label" for="student-address-house-number">Numéro de la maison</label>
+                            <input id="student-address-house-number" type="text" name="adresse_numero_maison" class="form-control" maxlength="50" value="<?= htmlspecialchars($oldInput['adresse_numero_maison'] ?? '', ENT_QUOTES, 'UTF-8') ?>" autocomplete="address-line2">
+                          </div>
+                        </div>
                       </div>
                     </div>
+                    </section>
+                    <section class="registration-section" data-registration-step="6" aria-labelledby="registration-path-heading">
+                      <div class="registration-section-heading">
+                        <span class="registration-section-step">7</span>
+                        <div>
+                          <h4 id="registration-path-heading">Parcours scolaire antérieur</h4>
+                          <p>Ces renseignements sont facultatifs si l’élève n’a pas encore fréquenté une autre école.</p>
+                        </div>
+                      </div>
+                      <div class="mb-3">
+                        <label class="form-label" for="school-bulletins">Images des bulletins <span class="text-muted fw-normal">(facultatif, 5 images maximum, 5 Mo chacune)</span></label>
+                        <input id="school-bulletins" type="file" name="bulletins[]" accept="image/jpeg,image/png,image/webp" class="form-control academic-bulletin-input" multiple>
+                        <div class="form-text">Sélectionnez plusieurs images à la fois. Elles seront optimisées avant l’envoi, puis indiquez l’école, l’année et la mention de chaque bulletin.</div>
+                        <div class="small text-muted mt-2" data-bulletin-compression-status role="status" aria-live="polite"></div>
+                      </div>
+                      <div class="academic-bulletin-metadata" aria-live="polite"></div>
                     </section>
                     <div class="registration-wizard-controls" id="registration-wizard-controls" hidden>
                       <a href="<?= BASE_URL ?>/inscriptions" class="btn btn-link text-secondary px-0" id="registration-wizard-exit">
@@ -880,6 +914,21 @@ STYLE;
                   return;
                 }
               }
+              const bulletins = document.getElementById('school-bulletins');
+              if (bulletins && bulletins.files.length > 5) {
+                event.preventDefault();
+                window.alert('Vous pouvez joindre au maximum 5 images de bulletins.');
+                return;
+              }
+              if (bulletins) {
+                for (const file of bulletins.files) {
+                  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+                    event.preventDefault();
+                    window.alert('Chaque bulletin doit être une image JPEG, PNG ou WebP de 5 Mo maximum.');
+                    return;
+                  }
+                }
+              }
               if (registrationSubmit) {
                 registrationSubmit.disabled = true;
                 registrationSubmit.textContent = 'Enregistrement...';
@@ -1007,4 +1056,5 @@ STYLE;
           }
         })();
       </script>
+      <script src="<?= BASE_URL ?>/assets/academic-bulletins.js" defer></script>
 <?php require __DIR__ . '/../partials/app_footer.php'; ?>

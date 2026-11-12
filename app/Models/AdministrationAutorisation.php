@@ -59,7 +59,7 @@ class AdministrationAutorisation
             'sec_école' => 'Secrétaire',
             'préfet_école' => 'Préfet',
             'DE_école' => 'Directeur des études',
-            'DD_école' => 'Directeur département',
+            'DD_école' => 'Directeur de Discipline',
             'DP_école' => 'Directeur principal',
             'DA_école' => 'Directeur adjoint',
             'enseignant_école' => 'Enseignant',

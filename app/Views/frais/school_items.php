@@ -4,7 +4,7 @@ $editItem = $editItem ?? null;
 $csrfToken = $csrfToken ?? '';
 $schoolCurrency = $schoolCurrency ?? 'USD';
 $items = $items ?? [];
-$otherSchoolFees = $otherSchoolFees ?? [];
+$availableFees = $availableFees ?? [];
 $activeYear = $activeYear ?? null;
 ?>
 <section class="content-header">
@@ -97,25 +97,39 @@ $activeYear = $activeYear ?? null;
           </div>
         </div>
         <div class="card mt-3">
-          <div class="card-header"><h2 class="h6 mb-0">Autres frais de portée école entière</h2></div>
+          <div class="card-header d-flex justify-content-between align-items-center gap-2">
+            <h2 class="h6 mb-0">Frais déjà disponibles pour l’année active</h2>
+            <span class="badge text-bg-secondary"><?= count($availableFees) ?> frais</span>
+          </div>
+          <div class="card-body border-bottom small text-muted">
+            Les frais existants apparaissent ici. Seuls les frais de portée « Toutes les options » peuvent être ajoutés à la fiche des objets classiques.
+          </div>
           <div class="card-body p-0">
-            <?php if (empty($otherSchoolFees)): ?>
-              <p class="text-muted text-center p-4 mb-0">Tous les frais école entière de l’année active sont déjà sélectionnés, ou aucun autre frais n’est défini.</p>
+            <?php if (empty($activeYear)): ?>
+              <p class="text-muted text-center p-4 mb-0">Aucune année scolaire active n’est configurée. Les frais ne peuvent pas être rattachés à la fiche des objets classiques.</p>
+            <?php elseif (empty($availableFees)): ?>
+              <p class="text-muted text-center p-4 mb-0">Aucun autre frais n’est enregistré pour l’année active. Les objets déjà sélectionnés sont affichés dans la liste ci-dessus.</p>
             <?php else: ?>
               <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
-                  <thead><tr><th class="ps-3">Frais</th><th class="text-end">Montant</th><th class="text-end pe-3">Action</th></tr></thead>
+                  <thead><tr><th class="ps-3">Frais</th><th class="text-end">Montant</th><th>Portée</th><th>Année</th><th class="text-end pe-3">Action</th></tr></thead>
                   <tbody>
-                    <?php foreach ($otherSchoolFees as $fee): ?>
+                    <?php foreach ($availableFees as $fee): ?>
                       <tr>
                         <td class="ps-3 fw-semibold"><?= htmlspecialchars($fee['type_frais'], ENT_QUOTES, 'UTF-8') ?></td>
                         <td class="text-end"><?= number_format((float) $fee['montant_total'], 2, ',', ' ') ?> <?= htmlspecialchars($fee['devise'] ?? $schoolCurrency, ENT_QUOTES, 'UTF-8') ?></td>
-                        <td class="text-end pe-3">
+                        <td><?= htmlspecialchars($fee['scope_label'] ?? 'Portée non précisée', ENT_QUOTES, 'UTF-8') ?></td>
+                        <td><?= htmlspecialchars($fee['annee_scolaire'] ?? '', ENT_QUOTES, 'UTF-8') ?></td>
+                        <td class="text-end pe-3 text-nowrap">
+                          <?php if (($fee['scope'] ?? '') === 'school'): ?>
                           <form method="post" action="<?= BASE_URL ?>/frais/toggleSchoolItem" class="d-inline">
                             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
                             <input type="hidden" name="id" value="<?= (int) $fee['id'] ?>">
                             <button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Ajouter à la fiche</button>
                           </form>
+                          <?php else: ?>
+                            <span class="text-muted small">Non applicable à toute l’école</span>
+                          <?php endif; ?>
                         </td>
                       </tr>
                     <?php endforeach; ?>

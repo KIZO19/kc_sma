@@ -12,7 +12,7 @@ class Roles
             'agent_ecole' => 'Agent de l’école',
             'préfet_école' => 'Préfet des études',
             'DE_école' => 'Directeur des études',
-            'DD_école' => 'Directeur Département',
+            'DD_école' => 'Directeur de Discipline',
             'DP_école' => 'Directeur Principal',
             'DA_école' => 'Directeur Adjoint',
             'comptable_école' => 'Comptable',

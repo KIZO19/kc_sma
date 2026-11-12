@@ -11,6 +11,6 @@ class DDEcole extends RoleEntity
 
     public function can(string $permission): bool
     {
-        return in_array($permission, ['manage_department', 'view_reports'], true);
+        return in_array($permission, ['manage_discipline', 'manage_student_attendance', 'view_reports'], true);
     }
 }

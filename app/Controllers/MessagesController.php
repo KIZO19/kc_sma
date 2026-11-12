@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Core\Auth;
 use App\Core\Controller;
+use App\Models\DisciplineAudition;
 use App\Models\NotificationAccess;
 use App\Models\SchoolMessage;
 use App\Models\UserMessage;
@@ -397,6 +398,31 @@ class MessagesController extends Controller
         }
 
         $role = (string) ($user['role'] ?? 'default');
+        $disciplineReportUrl = null;
+        if (($message['type'] ?? '') === 'discipline_audition') {
+            $schoolId = (int) ($user['ecole_id'] ?? 0);
+            $auditionId = (int) ($message['reference_id'] ?? 0);
+            $audition = DisciplineAudition::findByIdAndSchool(
+                $auditionId,
+                $schoolId,
+                $this->getSectionScopeForUser($user)
+            );
+            $isReportRecipient = in_array(
+                (int) ($user['id'] ?? 0),
+                DisciplineAudition::getReportRecipientIds($auditionId),
+                true
+            );
+            if (
+                $audition !== null
+                && (
+                    in_array($role, ['DD_école', 'ecole_admin'], true)
+                    || $isReportRecipient
+                )
+            ) {
+                $disciplineReportUrl = BASE_URL . '/eleves/disciplineReport?id=' . $auditionId;
+            }
+        }
+
         $this->view('messages/notification', [
             'title' => APP_NAME . ' - ' . $message['title'],
             'user' => $user,
@@ -404,6 +430,7 @@ class MessagesController extends Controller
             'roleLabel' => User::getRoleLabel($role),
             'modules' => $this->getModulesForRole($role),
             'message' => $message,
+            'disciplineReportUrl' => $disciplineReportUrl,
         ]);
     }
 }

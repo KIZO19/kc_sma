@@ -267,6 +267,27 @@ class UserMessage
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public static function notifyUsers(array $userIds, int $referenceId, string $title, string $body): int
+    {
+        if ($referenceId <= 0 || trim($title) === '' || trim($body) === '') {
+            throw new \InvalidArgumentException('La notification interne est incomplète.');
+        }
+
+        self::ensureTable();
+        $sent = 0;
+        $uniqueUserIds = array_values(array_unique(array_filter(
+            array_map('intval', $userIds),
+            static fn (int $userId): bool => $userId > 0
+        )));
+        foreach ($uniqueUserIds as $userId) {
+            if (self::create($userId, 'discipline_audition', $referenceId, $title, $body)) {
+                $sent++;
+            }
+        }
+
+        return $sent;
+    }
+
     public static function getUnreadForUser(int $userId, int $limit = 5): array
     {
         self::ensureTable();
@@ -321,10 +342,10 @@ class UserMessage
         return $message ?: null;
     }
 
-    private static function create(int $userId, string $type, int $referenceId, string $title, string $body): void
+    private static function create(int $userId, string $type, int $referenceId, string $title, string $body): bool
     {
         if ($userId <= 0 || $referenceId <= 0) {
-            return;
+            return false;
         }
 
         $db = Database::getConnection();
@@ -349,7 +370,10 @@ class UserMessage
                 BASE_URL . '/messages',
                 'kc-sma-message-' . (int) $db->lastInsertId()
             );
+            return true;
         }
+
+        return false;
     }
 
     private static function userHasSelectedSection(int $schoolId, array $user, array $selectedSections): bool

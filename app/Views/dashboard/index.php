@@ -602,7 +602,7 @@ require __DIR__ . '/../partials/app_header.php';
                 'ecole_admin' => ['title' => 'Pilotage de l’établissement', 'eyebrow' => 'ADMINISTRATION'],
                 'promoteur_école' => ['title' => 'Vue d’ensemble de l’établissement', 'eyebrow' => 'PROMOTEUR'],
                 'DE_école' => ['title' => 'Pilotage des études', 'eyebrow' => 'DIRECTION DES ÉTUDES', 'description' => 'Suivez les présences des enseignants et pilotez les activités pédagogiques.'],
-                'DD_école' => ['title' => 'Suivi des départements', 'eyebrow' => 'DIRECTION DÉPARTEMENTALE'],
+                'DD_école' => ['title' => 'Suivi disciplinaire', 'eyebrow' => 'DIRECTION DE DISCIPLINE'],
                 'DA_école' => ['title' => 'Suivi de l’établissement', 'eyebrow' => 'DIRECTION ADJOINTE'],
                 'sec_école' => ['title' => 'Espace secrétariat', 'eyebrow' => 'SECRÉTARIAT'],
                 'enseignant_école' => ['title' => 'Espace enseignant', 'eyebrow' => 'ENSEIGNEMENT'],
