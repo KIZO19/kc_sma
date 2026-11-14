@@ -44,7 +44,7 @@ $studentName = \App\Core\PersonName::format($audition);
 </head>
 <body>
   <nav class="toolbar">
-    <a href="<?= BASE_URL ?>/eleves/show?id=<?= (int) $audition['student_id'] ?>#discipline">Retour au dossier</a>
+    <a href="<?= BASE_URL ?>/eleves/show?id=<?= (int) ($audition['student_id'] ?? 0) ?>#discipline">Retour au dossier</a>
     <button type="button" onclick="window.print()">Imprimer / enregistrer en PDF</button>
   </nav>
   <main>

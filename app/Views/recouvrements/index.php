@@ -16,9 +16,8 @@ $currencies = array_values(array_unique(array_merge(
 )));
 $formatAmount = static fn ($amount) => number_format((float) $amount, 2, ',', ' ');
 $exportColumns = [
-  'classe' => 'Classe', 'eleve' => 'Élève', 'matricule' => 'Matricule',
-  'frais' => 'Frais', 'initial' => 'Montant initial', 'exonere' => 'Montant exonéré',
-  'paye' => 'Total déjà payé', 'restant' => 'Dette restante', 'solvabilite' => 'Solvabilité',
+  'eleve' => 'Nom, postnom, prénom', 'classe' => 'Classe',
+  'paye' => 'Montant payé', 'restant' => 'Dette restante',
 ];
 $exportQuery = static function (string $format, array $columns) use ($filters): string {
    $query = array_filter([
@@ -64,7 +63,7 @@ $exportQuery = static function (string $format, array $columns) use ($filters): 
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
       <div>
         <h1 class="mb-1">Recouvrements</h1>
-        <p class="text-muted mb-0">Toutes les dettes, avec les montants payés et les soldes restants.</p>
+        <p class="text-muted mb-0">Élèves regroupés par classe, avec les dettes les plus élevées en premier.</p>
       </div>
       <div class="d-flex flex-wrap gap-2">
         <a class="btn btn-primary" href="<?= BASE_URL ?>/paiements"><i class="bi bi-wallet2 me-1"></i>Enregistrer un paiement</a>
@@ -263,6 +262,9 @@ $exportQuery = static function (string $format, array $columns) use ($filters): 
                     $paidAmounts = $debt['paid_by_currency'] ?? [];
                     $exoneratedAmounts = $debt['exonerated_by_currency'] ?? [];
                     $remainingAmounts = $debt['remaining_by_currency'] ?? [];
+                    $debtPriority = !empty($filters['devise'])
+                      ? (float) ($remainingAmounts[$filters['devise']] ?? 0)
+                      : max(array_map('floatval', array_values($remainingAmounts)) ?: [0]);
                     $hasRemaining = (bool) array_filter($remainingAmounts, static fn ($amount) => (float) $amount > 0.005);
                     $hasPaid = (bool) array_filter($paidAmounts, static fn ($amount) => (float) $amount > 0.005);
                     $status = !$hasRemaining ? 'regle' : ($hasPaid ? 'partiel' : 'impaye');
@@ -279,7 +281,7 @@ $exportQuery = static function (string $format, array $columns) use ($filters): 
                       return $values ? '<div class="rec-money-stack">' . implode('', $values) . '</div>' : '<span class="text-muted">—</span>';
                     };
                   ?>
-                  <tr class="recouvrements-grid-row" data-section="<?= htmlspecialchars(strtolower($studentSection), ENT_QUOTES, 'UTF-8') ?>" data-section-label="<?= htmlspecialchars($studentSection, ENT_QUOTES, 'UTF-8') ?>" data-class="<?= htmlspecialchars(strtolower($classLabel), ENT_QUOTES, 'UTF-8') ?>" data-eleve="<?= htmlspecialchars(strtolower($name), ENT_QUOTES, 'UTF-8') ?>" data-fees="<?= count($debt['frais_details'] ?? []) ?>" data-status="<?= $status ?>" data-orientation="<?= htmlspecialchars(strtolower(str_replace(' ', '-', $debt['collection_status'] ?? '')), ENT_QUOTES, 'UTF-8') ?>" data-search="<?= htmlspecialchars(strtolower($studentSection . ' ' . $classLabel . ' ' . $name . ' ' . ($debt['matricule'] ?? '') . ' ' . ($debt['frais_liste'] ?? '')), ENT_QUOTES, 'UTF-8') ?>" data-detail-id="<?= $detailsId ?>">
+                  <tr class="recouvrements-grid-row" data-section="<?= htmlspecialchars(strtolower($studentSection), ENT_QUOTES, 'UTF-8') ?>" data-section-label="<?= htmlspecialchars($studentSection, ENT_QUOTES, 'UTF-8') ?>" data-class="<?= htmlspecialchars(strtolower($classLabel), ENT_QUOTES, 'UTF-8') ?>" data-eleve="<?= htmlspecialchars(strtolower($name), ENT_QUOTES, 'UTF-8') ?>" data-debt="<?= $debtPriority ?>" data-fees="<?= count($debt['frais_details'] ?? []) ?>" data-status="<?= $status ?>" data-orientation="<?= htmlspecialchars(strtolower(str_replace(' ', '-', $debt['collection_status'] ?? '')), ENT_QUOTES, 'UTF-8') ?>" data-search="<?= htmlspecialchars(strtolower($studentSection . ' ' . $classLabel . ' ' . $name . ' ' . ($debt['matricule'] ?? '') . ' ' . ($debt['frais_liste'] ?? '')), ENT_QUOTES, 'UTF-8') ?>" data-detail-id="<?= $detailsId ?>">
                     <td><?= htmlspecialchars($studentSection) ?></td>
                     <td><span class="fw-semibold"><?= htmlspecialchars($classLabel) ?></span></td>
                     <td>
@@ -400,7 +402,7 @@ $exportQuery = static function (string $format, array $columns) use ($filters): 
       const match = String(value || '').replace(/\s/g, '').match(/-?[\d]+(?:[,.][\d]+)?/);
       return match ? Number(match[0].replace(',', '.')) : 0;
     };
-    const getSortValue = (row, key) => row.dataset[key] || '';
+    const getSortValue = (row, key) => row.dataset[key === 'classe' ? 'class' : key] || '';
 
     const renderGrid = () => {
       const query = gridSearch.value.trim().toLowerCase();
@@ -408,21 +410,35 @@ $exportQuery = static function (string $format, array $columns) use ($filters): 
       const pageSize = Number(pageSizeSelect.value) || 25;
       let visibleRows = rows.filter((row) => (row.dataset.search || '').includes(query)
         && (!selectedStatus || row.dataset.status === selectedStatus));
-      if (sortKey) {
-        visibleRows.sort((left, right) => {
+      visibleRows.sort((left, right) => {
+        const sectionDirection = sortKey === 'section' ? sortDirection : 1;
+        const sectionCompare = getSortValue(left, 'section').localeCompare(
+          getSortValue(right, 'section'),
+          'fr',
+          { sensitivity: 'base' }
+        ) * sectionDirection;
+        if (sectionCompare) return sectionCompare;
+
+        const classDirection = sortKey === 'classe' ? sortDirection : 1;
+        const classCompare = getSortValue(left, 'classe').localeCompare(
+          getSortValue(right, 'classe'),
+          'fr',
+          { sensitivity: 'base' }
+        ) * classDirection;
+        if (classCompare) return classCompare;
+
+        if (sortKey && sortKey !== 'section' && sortKey !== 'classe') {
           const leftValue = getSortValue(left, sortKey);
           const rightValue = getSortValue(right, sortKey);
-          if (sortKey === 'fees') return (Number(leftValue) - Number(rightValue)) * sortDirection;
-          const valueCompare = leftValue.localeCompare(rightValue, 'fr', { sensitivity: 'base' }) * sortDirection;
-          if (valueCompare) return valueCompare;
-          return getSortValue(left, 'class').localeCompare(getSortValue(right, 'class'), 'fr', { sensitivity: 'base' })
-            || getSortValue(left, 'eleve').localeCompare(getSortValue(right, 'eleve'), 'fr', { sensitivity: 'base' });
-        });
-      } else {
-        visibleRows.sort((left, right) => getSortValue(left, 'section').localeCompare(getSortValue(right, 'section'), 'fr', { sensitivity: 'base' })
-          || getSortValue(left, 'class').localeCompare(getSortValue(right, 'class'), 'fr', { sensitivity: 'base' })
-          || getSortValue(left, 'eleve').localeCompare(getSortValue(right, 'eleve'), 'fr', { sensitivity: 'base' }));
-      }
+          const valueCompare = sortKey === 'fees'
+            ? Number(leftValue) - Number(rightValue)
+            : leftValue.localeCompare(rightValue, 'fr', { sensitivity: 'base' });
+          if (valueCompare) return valueCompare * sortDirection;
+        }
+
+        return numericValue(right.dataset.debt) - numericValue(left.dataset.debt)
+          || getSortValue(left, 'eleve').localeCompare(getSortValue(right, 'eleve'), 'fr', { sensitivity: 'base' });
+      });
 
       const total = visibleRows.length;
       const totalPages = Math.max(1, Math.ceil(total / pageSize));

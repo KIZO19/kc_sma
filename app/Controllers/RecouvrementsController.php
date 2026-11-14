@@ -108,10 +108,25 @@ class RecouvrementsController extends Controller
         $format = strtolower(trim((string) ($_GET['format'] ?? 'csv')));
         $columns = $this->getExportColumns();
 
-        if ($format === 'csv' || $format === 'excel') {
-            $extension = $format === 'excel' ? 'xls' : 'csv';
-            header('Content-Type: ' . ($format === 'excel' ? 'application/vnd.ms-excel' : 'text/csv') . '; charset=UTF-8');
-            header('Content-Disposition: attachment; filename="recouvrements_' . date('Ymd_His') . '.' . $extension . '"');
+        if ($format === 'excel') {
+            $file = $this->createExcelFile($debts, $columns);
+            try {
+                header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                header('Content-Disposition: attachment; filename="recouvrements_' . date('Ymd_His') . '.xlsx"');
+                if (readfile($file) === false) {
+                    throw new \RuntimeException('Impossible de transmettre le fichier Excel des recouvrements.');
+                }
+            } finally {
+                if (is_file($file)) {
+                    unlink($file);
+                }
+            }
+            exit;
+        }
+
+        if ($format === 'csv') {
+            header('Content-Type: text/csv; charset=UTF-8');
+            header('Content-Disposition: attachment; filename="recouvrements_' . date('Ymd_His') . '.csv"');
             echo "\xEF\xBB\xBF";
             $out = fopen('php://output', 'w');
             fputcsv($out, $this->getExportHeaders($columns));
@@ -128,6 +143,8 @@ class RecouvrementsController extends Controller
                 'columns' => $columns,
                 'title' => 'Liste des recouvrements',
                 'generatedAt' => date('d/m/Y à H:i'),
+                'generatedByName' => trim((string) ($user['nom_complet'] ?? '')),
+                'generatedByRole' => User::getRoleLabel((string) ($user['role'] ?? '')),
             ]);
             if (class_exists('\\Dompdf\\Dompdf')) {
                 $dompdfClass = '\\Dompdf\\Dompdf';
@@ -146,6 +163,8 @@ class RecouvrementsController extends Controller
                 'columns' => $columns,
                 'title' => 'Liste des recouvrements',
                 'generatedAt' => date('d/m/Y à H:i'),
+                'generatedByName' => trim((string) ($user['nom_complet'] ?? '')),
+                'generatedByRole' => User::getRoleLabel((string) ($user['role'] ?? '')),
                 'printFallback' => true,
             ]);
             return;
@@ -562,35 +581,113 @@ class RecouvrementsController extends Controller
 
     private function getExportColumns(): array
     {
-        $allowed = ['classe', 'eleve', 'matricule', 'frais', 'initial', 'paye', 'exonere', 'restant', 'solvabilite'];
+        $allowed = ['eleve', 'classe', 'paye', 'restant'];
         $requested = array_map('trim', explode(',', (string) ($_GET['colonnes'] ?? '')));
         $columns = array_values(array_intersect($allowed, $requested));
         return $columns ?: $allowed;
     }
 
+    private function createExcelFile(array $debts, array $columns): string
+    {
+        if (!class_exists(\ZipArchive::class)) {
+            throw new \RuntimeException('L’extension PHP ZIP est nécessaire pour exporter les recouvrements au format Excel.');
+        }
+
+        $file = tempnam(sys_get_temp_dir(), 'recouvrements_');
+        if ($file === false) {
+            throw new \RuntimeException('Impossible de créer le fichier Excel des recouvrements.');
+        }
+
+        $zip = new \ZipArchive();
+        if ($zip->open($file, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+            unlink($file);
+            throw new \RuntimeException('Impossible de préparer le fichier Excel des recouvrements.');
+        }
+
+        $completed = false;
+        try {
+            $sheetRows = [];
+            $rows = array_merge(
+                [$this->getExportHeaders($columns)],
+                array_map(fn (array $debt): array => $this->getExportRow($debt, $columns), $debts)
+            );
+            foreach ($rows as $rowIndex => $row) {
+                $cells = [];
+                $rowNumber = $rowIndex + 1;
+                foreach ($row as $columnIndex => $value) {
+                    $reference = \chr(65 + $columnIndex) . $rowNumber;
+                    $text = htmlspecialchars((string) $value, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+                    $cells[] = '<c r="' . $reference . '" t="inlineStr"><is><t xml:space="preserve">'
+                        . $text . '</t></is></c>';
+                }
+                $sheetRows[] = '<row r="' . $rowNumber . '">' . implode('', $cells) . '</row>';
+            }
+
+            $files = [
+                '[Content_Types].xml' => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                    . '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+                    . '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+                    . '<Default Extension="xml" ContentType="application/xml"/>'
+                    . '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+                    . '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+                    . '</Types>',
+                '_rels/.rels' => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                    . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                    . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+                    . '</Relationships>',
+                'xl/workbook.xml' => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                    . '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+                    . ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+                    . '<sheets><sheet name="Recouvrements" sheetId="1" r:id="rId1"/></sheets></workbook>',
+                'xl/_rels/workbook.xml.rels' => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                    . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                    . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+                    . '</Relationships>',
+                'xl/worksheets/sheet1.xml' => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                    . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+                    . implode('', $sheetRows)
+                    . '</sheetData></worksheet>',
+            ];
+            foreach ($files as $name => $contents) {
+                if (!$zip->addFromString($name, $contents)) {
+                    throw new \RuntimeException('Impossible d’écrire le fichier Excel des recouvrements.');
+                }
+            }
+
+            if (!$zip->close()) {
+                throw new \RuntimeException('Impossible de finaliser le fichier Excel des recouvrements.');
+            }
+            $completed = true;
+        } finally {
+            if (!$completed) {
+                $zip->close();
+                if (is_file($file)) {
+                    unlink($file);
+                }
+            }
+        }
+
+        return $file;
+    }
+
     private function getExportHeaders(array $columns): array
     {
         return array_map(static fn (string $column): string => [
-            'classe' => 'Classe', 'eleve' => 'Élève', 'matricule' => 'Matricule',
-            'frais' => 'Frais', 'initial' => 'Montant initial',
-            'paye' => 'Total déjà payé', 'exonere' => 'Montant exonéré', 'restant' => 'Dette restante',
-            'solvabilite' => 'Solvabilité',
+            'eleve' => 'Nom, postnom, prénom',
+            'classe' => 'Classe',
+            'paye' => 'Montant payé',
+            'restant' => 'Dette restante',
         ][$column], $columns);
     }
 
     private function getExportRow(array $debt, array $columns): array
     {
         $values = [
+            'eleve' => \App\Core\PersonName::format($debt),
             'classe' => ($debt['nom_classe'] ?? 'Classe non définie')
                 . (!empty($debt['nom_option']) ? ' - ' . $debt['nom_option'] : ''),
-            'eleve' => \App\Core\PersonName::format($debt),
-            'matricule' => $debt['matricule'] ?? '',
-            'frais' => $debt['frais_details_liste'] ?? ($debt['frais_liste'] ?? ''),
-            'initial' => $this->formatAmountsByCurrency($debt['initial_by_currency'] ?? []),
             'paye' => $this->formatAmountsByCurrency($debt['paid_by_currency'] ?? []),
-            'exonere' => $this->formatAmountsByCurrency($debt['exonerated_by_currency'] ?? []),
             'restant' => $this->formatAmountsByCurrency($debt['remaining_by_currency'] ?? []),
-            'solvabilite' => $debt['solvency_status'] ?? 'Seuil à configurer',
         ];
         return array_map(static fn (string $column): string => $values[$column], $columns);
     }

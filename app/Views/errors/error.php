@@ -1,4 +1,7 @@
-<?php require __DIR__ . '/../partials/app_header.php'; ?>
+<?php
+$showSidebar = false;
+require __DIR__ . '/../partials/app_header.php';
+?>
       <section class="content-header">
         <div class="container-fluid">
           <div class="row mb-2">

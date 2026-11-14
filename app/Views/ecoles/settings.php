@@ -206,6 +206,47 @@
 
       <div class="col-12">
         <div class="card">
+          <div class="card-header"><h2 class="card-title">Approbation des sorties de caisse et de banque</h2></div>
+          <form method="post" action="<?= BASE_URL ?>/ecoles/updateCashApprovalRoles">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) ($csrfToken ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+            <div class="card-body">
+              <p class="text-muted">
+                Une sortie de caisse, de banque ou un paiement de salaire reste en attente et ne débite aucun compte
+                avant l’approbation d’un utilisateur actif appartenant à l’un des rôles sélectionnés.
+                La personne qui soumet la sortie ne peut pas l’approuver elle-même.
+              </p>
+              <?php if (empty($cashApprovalWorkflowAvailable)): ?>
+                <div class="alert alert-warning mb-0">Exécutez la migration <code>migration_create_cash_outflows_approval.sql</code> pour activer le circuit d’approbation.</div>
+              <?php elseif (empty($cashApprovalRoleOptions)): ?>
+                <div class="alert alert-warning mb-0">Aucun compte actif pouvant approuver les sorties n’est disponible dans cette école.</div>
+              <?php else: ?>
+                <div class="row g-2">
+                  <?php foreach ($cashApprovalRoleOptions as $approvalRole => $approvalRoleLabel): ?>
+                    <?php $approvalRoleId = 'cashApprovalRole' . substr(sha1($approvalRole), 0, 10); ?>
+                    <div class="col-md-6 col-xl-4">
+                      <label class="form-check border rounded p-3 h-100" for="<?= $approvalRoleId ?>">
+                        <input class="form-check-input" type="checkbox" name="cash_approval_roles[]"
+                               id="<?= $approvalRoleId ?>" value="<?= htmlspecialchars($approvalRole, ENT_QUOTES, 'UTF-8') ?>"
+                               <?= in_array($approvalRole, $cashApprovalRoles ?? [], true) ? 'checked' : '' ?>>
+                        <span class="form-check-label ms-1"><?= htmlspecialchars($approvalRoleLabel, ENT_QUOTES, 'UTF-8') ?></span>
+                      </label>
+                    </div>
+                  <?php endforeach; ?>
+                </div>
+                <div class="form-text mt-2">Une seule approbation par une personne ayant l’un des rôles sélectionnés suffit.</div>
+              <?php endif; ?>
+            </div>
+            <div class="card-footer text-end">
+              <button type="submit" class="btn btn-primary" <?= empty($cashApprovalWorkflowAvailable) ? 'disabled' : '' ?>>
+                <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Enregistrer les rôles approbateurs
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="col-12">
+        <div class="card">
           <div class="card-header"><h2 class="card-title">Destinataires des demandes de dérogation</h2></div>
           <form method="post" action="<?= BASE_URL ?>/ecoles/updateDerogationRecipients">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) ($csrfToken ?? ''), ENT_QUOTES, 'UTF-8') ?>">

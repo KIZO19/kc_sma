@@ -7,6 +7,7 @@ use App\Core\Controller;
 use App\Models\Ecole;
 use App\Models\ActivityLog;
 use App\Models\Derogation;
+use App\Models\CashOutflow;
 use App\Models\NotificationAccess;
 use App\Models\AnneeScolaire;
 use App\Models\SchoolYearChangeRequest;
@@ -96,6 +97,11 @@ class EcolesController extends Controller
             'derogationRecipientUserIds' => Derogation::getRecipientUserIds($schoolId),
             'messageRecipientOptions' => SchoolMessage::getParentRecipientOptions($schoolId),
             'messageRecipientUserIds' => SchoolMessage::getParentRecipientUserIds($schoolId),
+            'cashApprovalRoleOptions' => CashOutflow::getApprovalRoleOptions($schoolId),
+            'cashApprovalRoles' => CashOutflow::isApprovalWorkflowAvailable()
+                ? CashOutflow::getConfiguredApprovalRoles($schoolId)
+                : [],
+            'cashApprovalWorkflowAvailable' => CashOutflow::isApprovalWorkflowAvailable(),
             'csrfToken' => $_SESSION['school_settings_csrf'],
             'success' => $_SESSION['school_settings_success'] ?? null,
             'error' => $_SESSION['school_settings_error'] ?? null,
@@ -385,6 +391,54 @@ class EcolesController extends Controller
         } catch (\Throwable $exception) {
             error_log('EcolesController::updateMessageRecipients error: ' . $exception->getMessage());
             $_SESSION['school_settings_error'] = 'Impossible d’enregistrer les destinataires des messages. Réessayez.';
+        }
+
+        $_SESSION['school_settings_csrf'] = bin2hex(random_bytes(32));
+        $this->redirect('/ecoles/settings');
+    }
+
+    public function updateCashApprovalRoles(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['ecole_admin']);
+
+        $user = Auth::refresh() ?: Auth::user();
+        $schoolId = (int) ($user['ecole_id'] ?? 0);
+        $token = (string) ($_POST['csrf_token'] ?? '');
+        if (
+            ($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST'
+            || $schoolId <= 0
+            || $token === ''
+            || !hash_equals((string) ($_SESSION['school_settings_csrf'] ?? ''), $token)
+        ) {
+            $_SESSION['school_settings_error'] = 'Le formulaire a expiré. Rechargez la page et réessayez.';
+            $this->redirect('/ecoles/settings');
+        }
+
+        try {
+            if (!CashOutflow::isApprovalWorkflowAvailable()) {
+                throw new \InvalidArgumentException('Exécutez d’abord la migration des approbations de sorties de caisse.');
+            }
+            $roles = $_POST['cash_approval_roles'] ?? [];
+            if (!\is_array($roles)) {
+                throw new \InvalidArgumentException('La liste des rôles approbateurs est invalide.');
+            }
+            CashOutflow::saveApprovalRoles($schoolId, $roles, (int) ($user['id'] ?? 0));
+            $school = Ecole::findById($schoolId);
+            ActivityLog::record(
+                (int) ($user['id'] ?? 0),
+                'cash_outflow_approvers_updated',
+                'school',
+                $schoolId,
+                (string) ($school['nom_etablissement'] ?? 'École'),
+                'Rôles autorisés à approuver les sorties de caisse mis à jour.'
+            );
+            $_SESSION['school_settings_success'] = 'Les rôles approbateurs des sorties de caisse ont été enregistrés.';
+        } catch (\InvalidArgumentException $exception) {
+            $_SESSION['school_settings_error'] = $exception->getMessage();
+        } catch (\Throwable $exception) {
+            error_log('EcolesController::updateCashApprovalRoles error: ' . $exception->getMessage());
+            $_SESSION['school_settings_error'] = 'Impossible d’enregistrer les rôles approbateurs. Réessayez.';
         }
 
         $_SESSION['school_settings_csrf'] = bin2hex(random_bytes(32));

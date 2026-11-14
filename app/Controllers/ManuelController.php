@@ -43,7 +43,7 @@ class ManuelController extends Controller
             'ecole_admin' => 'Accès à la gestion de l’établissement, dans les limites des autorisations et paramètres actifs.',
             'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'promoteur_école' =>
                 'Accès aux activités de direction et de suivi scolaire. Le périmètre peut être limité à une section.',
-            'comptable_école' => 'Accès aux inscriptions et opérations financières : frais, factures, paiements et rapports.',
+            'comptable_école' => 'Accès aux inscriptions et opérations financières : frais, factures, paiements, paie des agents et rapports.',
             'sec_école' => 'Accès au suivi administratif des élèves, inscriptions, présences et documents autorisés.',
             'agent_ecole', 'agent_école' => 'Accès au traitement des inscriptions qui vous sont confiées.',
             'enseignant_école' => 'Accès à vos cours, aux élèves concernés, à leurs présences et à la saisie des notes autorisée.',
@@ -86,7 +86,7 @@ class ManuelController extends Controller
             '/evaluations' => ['purpose' => 'Créer et gérer les évaluations scolaires.', 'steps' => ['Choisissez la classe, le cours et la période.', 'Saisissez le titre et les informations demandées.', 'Vérifiez les dates, puis enregistrez.']],
             '/evenements' => ['purpose' => 'Créer et consulter les événements scolaires.', 'steps' => 'Renseignez titre, date et détails, sélectionnez les destinataires si proposés puis publiez.'],
             '/facturation' => ['purpose' => 'Consulter les éléments de facturation disponibles.', 'steps' => 'Choisissez la période ou l’élément puis vérifiez les montants avant toute validation.'],
-            '/comptes' => ['purpose' => 'Suivre les caisses, comptes et opérations comptables autorisées.', 'steps' => 'Sélectionnez le compte ou la période, vérifiez les écritures et utilisez les actions de consultation ou d’export.'],
+            '/comptes' => ['purpose' => 'Consulter les soldes et suivre les sorties de caisse ou de banque.', 'steps' => ['Le comptable soumet les sorties avec un motif et un compte.', 'La sortie et le paiement de salaire restent en attente jusqu’à l’approbation par un rôle désigné dans les paramètres de l’école.', 'Le compte est débité uniquement après approbation. La personne qui soumet une sortie ne peut pas l’approuver elle-même.']],
             '/rapports' => ['purpose' => 'Produire les rapports disponibles pour votre rôle.', 'steps' => 'Choisissez les filtres, la période et le format, puis lancez l’affichage ou l’export.'],
             '/statistiques' => ['purpose' => 'Analyser les indicateurs agrégés de la plateforme ou de l’école.', 'steps' => 'Sélectionnez les filtres proposés et comparez les indicateurs affichés.'],
             '/mes-cours' => ['purpose' => 'Consulter les cours associés au compte.', 'steps' => 'Choisissez un cours pour voir les informations ou ressources disponibles.'],
@@ -108,6 +108,7 @@ class ManuelController extends Controller
             '/frais' => ['purpose' => 'Créer et gérer les frais et leurs paramètres.', 'steps' => 'Saisissez l’intitulé et le montant, contrôlez le ciblage de l’année, de la classe ou de l’option puis enregistrez.'],
             '/devises' => ['purpose' => 'Gérer les devises et conversions applicables.', 'steps' => 'Vérifiez le code et le taux avant d’enregistrer une devise ou une conversion.'],
             '/recouvrements' => ['purpose' => 'Suivre les soldes restant dus et les opérations de recouvrement.', 'steps' => 'Filtrez par classe ou élève, vérifiez les montants et consultez les actions disponibles.'],
+            '/paies-agents' => ['purpose' => 'Gérer les salaires de base et les fiches mensuelles des agents.', 'steps' => ['Définissez pour chaque agent le salaire de base et sa devise.', 'Préparez la fiche du mois en ajoutant les primes et retenues applicables.', 'Soumettez le paiement à l’approbation. Le compte de même devise ne sera débité qu’après la validation d’un utilisateur ayant un rôle désigné.']],
             '/contact' => ['purpose' => 'Contacter le support de la plateforme.', 'steps' => 'Décrivez le problème, indiquez la page concernée sans transmettre de mot de passe, puis envoyez le message.'],
         ];
     }

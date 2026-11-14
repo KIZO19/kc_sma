@@ -234,6 +234,8 @@
     .small-box { border-radius: 0.75rem; }
     .card { border-radius: 0.9rem; background: var(--card); border-color: var(--border); }
     .content-wrapper { min-height: calc(100vh - 56px); background: var(--surface-muted); }
+    .layout-no-sidebar .app-wrapper { display: block; }
+    .layout-no-sidebar .content-wrapper { margin-left: 0 !important; }
     .breadcrumb .breadcrumb-item a { color: var(--text); }
     .breadcrumb .breadcrumb-item.active { color: var(--text-muted); }
     .sidebar-backdrop { display: none; }
@@ -285,7 +287,8 @@
   </style>
   <link rel="stylesheet" href="<?= BASE_URL ?>/assets/theme.css?v=blue-sidebar-20261105">
 </head>
-<body class="layout-fixed sidebar-mini">
+<?php $showSidebar = $showSidebar ?? true; ?>
+<body class="layout-fixed <?= $showSidebar ? 'sidebar-mini' : 'layout-no-sidebar' ?>">
 <?php
 $modules = $modules ?? [];
 $role = $role ?? '';
@@ -320,8 +323,10 @@ if (!empty($schoolContext['logo_url'])) {
 }
 ?>
   <div class="app-wrapper">
-  <div id="sidebarBackdrop" class="sidebar-backdrop" aria-hidden="true"></div>
-  <nav class="app-header navbar navbar-expand bg-body"
+<?php if ($showSidebar): ?>
+<div id="sidebarBackdrop" class="sidebar-backdrop" aria-hidden="true"></div>
+<?php endif; ?>
+<nav class="app-header navbar navbar-expand bg-body"
        data-notifications-endpoint="<?= BASE_URL ?>/notifications/poll"
        data-notifications-base-url="<?= BASE_URL ?>"
        data-notifications-interval="<?= ($user['role'] ?? '') === 'comptable_école' ? '2000' : '5000' ?>"
@@ -331,11 +336,13 @@ if (!empty($schoolContext['logo_url'])) {
        data-can-compose-messages="<?= !empty($user['id']) && \App\Models\SchoolMessage::canComposeForRole((string) ($user['role'] ?? '')) ? '1' : '0' ?>">
       <div class="container-fluid">
         <ul class="navbar-nav">
+          <?php if ($showSidebar): ?>
           <li class="nav-item">
             <button class="nav-link border-0 bg-transparent" data-sidebar-toggle type="button" aria-label="Ouvrir ou fermer le menu" aria-expanded="false">
               <i class="bi bi-list" aria-hidden="true"></i>
             </button>
           </li>
+          <?php endif; ?>
           <li class="nav-item d-none d-md-block">
             <a href="<?= BASE_URL ?>/dashboard" class="nav-link">Dashboard</a>
           </li>
@@ -536,6 +543,7 @@ if (!empty($schoolContext['logo_url'])) {
     </nav>
     <div id="liveNotificationToasts" class="live-notification-toasts" aria-live="polite" aria-atomic="false"></div>
 
+    <?php if ($showSidebar): ?>
     <aside class="app-sidebar">
       <div class="school-context-card p-3 mb-3">
         <a href="<?= BASE_URL ?>/dashboard" class="brand-link d-flex align-items-center text-decoration-none p-0">
@@ -603,6 +611,7 @@ if (!empty($schoolContext['logo_url'])) {
         </nav>
       </div>
     </aside>
+    <?php endif; ?>
 
     <div class="content-wrapper">
       <?php if (!empty($planExpiryNotice)): ?>

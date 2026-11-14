@@ -6,6 +6,7 @@ use App\Core\Auth;
 use App\Core\Controller;
 use App\Models\Agent;
 use App\Models\User;
+use App\Models\UserMessage;
 
 class AgentsController extends Controller
 {
@@ -221,6 +222,18 @@ class AgentsController extends Controller
 
             $db->commit();
             $_SESSION['agents_success'] = 'La fiche de ' . $account['nom_complet'] . ' et son accès ont été enregistrés.';
+            try {
+                UserMessage::notifySchoolActionReport(
+                    $schoolId,
+                    (int) ($user['id'] ?? 0),
+                    'agent_cree',
+                    'Nouvel agent ajouté',
+                    'La fiche de ' . (string) $account['nom_complet']
+                        . ' et son accès de type ' . User::getRoleLabel($accountRole) . ' ont été enregistrés.'
+                );
+            } catch (\Throwable $notificationError) {
+                error_log('AgentsController::createAgent school action report failed: ' . $notificationError->getMessage());
+            }
         } catch (\Throwable $e) {
             if ($db->inTransaction()) {
                 $db->rollBack();
@@ -280,6 +293,18 @@ class AgentsController extends Controller
         try {
             $account = User::configureAgentAccount($agentId, $schoolId, $accountRole, $identifier, $password);
             $_SESSION['agents_success'] = 'Accès créé et activé pour ' . $account['nom_complet'] . '.';
+            try {
+                UserMessage::notifySchoolActionReport(
+                    $schoolId,
+                    (int) ($user['id'] ?? 0),
+                    'compte_agent_cree',
+                    'Accès agent créé',
+                    'Un accès de type ' . User::getRoleLabel($accountRole)
+                        . ' a été créé pour ' . (string) $account['nom_complet'] . '.'
+                );
+            } catch (\Throwable $notificationError) {
+                error_log('AgentsController::createAccount school action report failed: ' . $notificationError->getMessage());
+            }
         } catch (\Throwable $e) {
             $_SESSION['agents_errors'] = ['Impossible de configurer le compte : ' . $e->getMessage()];
         }
@@ -312,6 +337,20 @@ class AgentsController extends Controller
             $_SESSION['agents_errors'] = ['Statut de compte invalide.'];
         } elseif (User::updateStatus((int) $account['id'], $status)) {
             $_SESSION['agents_success'] = $status === 'Actif' ? 'Compte activé.' : 'Compte désactivé.';
+            if (($account['statut'] ?? '') !== $status) {
+                try {
+                    UserMessage::notifySchoolActionReport(
+                        $schoolId,
+                        (int) ($user['id'] ?? 0),
+                        $status === 'Actif' ? 'compte_agent_active' : 'compte_agent_desactive',
+                        $status === 'Actif' ? 'Accès agent activé' : 'Accès agent désactivé',
+                        'L’accès de ' . (string) ($account['nom_complet'] ?? 'un agent')
+                            . ' a été ' . ($status === 'Actif' ? 'activé' : 'désactivé') . '.'
+                    );
+                } catch (\Throwable $notificationError) {
+                    error_log('AgentsController::updateAccountStatus school action report failed: ' . $notificationError->getMessage());
+                }
+            }
         } else {
             $_SESSION['agents_errors'] = ['Impossible de mettre à jour ce compte.'];
         }

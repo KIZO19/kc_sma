@@ -8,6 +8,7 @@ use PDO;
 class UserMessage
 {
     private static bool $tableEnsured = false;
+    private static bool $schoolActionReportsTableEnsured = false;
 
     public static function notifyParentForStudent(
         int $studentId,
@@ -253,11 +254,16 @@ class UserMessage
     public static function getForUser(int $userId, int $limit = 20): array
     {
         self::ensureTable();
+        self::ensureSchoolActionReportsTable();
         $stmt = Database::getConnection()->prepare(
-            'SELECT id, type, title, body, is_read, created_at
-             FROM messages_utilisateurs
-             WHERE utilisateur_id = :utilisateur_id
-             ORDER BY created_at DESC, id DESC
+            'SELECT m.id, m.type, m.title, m.body, m.is_read, m.created_at
+             FROM messages_utilisateurs m
+             INNER JOIN utilisateurs recipient ON recipient.id = m.utilisateur_id
+             LEFT JOIN rapports_actions_ecole report ON report.id = m.reference_id
+                AND m.type = \'school_action_report\'
+             WHERE m.utilisateur_id = :utilisateur_id'
+                . self::schoolActionReportVisibilitySql() . '
+             ORDER BY m.created_at DESC, m.id DESC
              LIMIT :limit'
         );
         $stmt->bindValue(':utilisateur_id', $userId, PDO::PARAM_INT);
@@ -288,14 +294,88 @@ class UserMessage
         return $sent;
     }
 
+    public static function notifySchoolActionReport(
+        int $schoolId,
+        int $actorUserId,
+        string $actionType,
+        string $title,
+        string $body
+    ): int {
+        if (
+            $schoolId <= 0
+            || $actorUserId <= 0
+            || trim($actionType) === ''
+            || trim($title) === ''
+            || trim($body) === ''
+        ) {
+            throw new \InvalidArgumentException('Le rapport d’action scolaire est incomplet.');
+        }
+
+        self::ensureTable();
+        self::ensureSchoolActionReportsTable();
+        $db = Database::getConnection();
+
+        $actorStmt = $db->prepare(
+            'SELECT nom_complet, role FROM utilisateurs
+             WHERE id = :user_id AND ecole_id = :school_id LIMIT 1'
+        );
+        $actorStmt->execute([':user_id' => $actorUserId, ':school_id' => $schoolId]);
+        $actor = $actorStmt->fetch(PDO::FETCH_ASSOC);
+        $actorLabel = $actor
+            ? trim((string) $actor['nom_complet']) . ' (' . User::getRoleLabel((string) $actor['role']) . ')'
+            : 'Utilisateur #' . $actorUserId;
+        $reportBody = "Action effectuée par : " . $actorLabel . "\n\n" . trim($body);
+
+        $reportStmt = $db->prepare(
+            'INSERT INTO rapports_actions_ecole (ecole_id, acteur_user_id, type_action, title, body)
+             VALUES (:school_id, :actor_user_id, :action_type, :title, :body)'
+        );
+        $reportStmt->execute([
+            ':school_id' => $schoolId,
+            ':actor_user_id' => $actorUserId,
+            ':action_type' => trim($actionType),
+            ':title' => trim($title),
+            ':body' => $reportBody,
+        ]);
+        $reportId = (int) $db->lastInsertId();
+        if ($reportId <= 0) {
+            throw new \RuntimeException('Le rapport d’action scolaire n’a pas pu être identifié.');
+        }
+
+        $recipientsStmt = $db->prepare(
+            "SELECT id FROM utilisateurs
+             WHERE ecole_id = :school_id
+               AND statut = 'Actif'
+               AND role IN ('promoteur_école', 'promoteur_ecole', 'ecole_admin')
+               AND id <> :actor_user_id
+             ORDER BY role, id"
+        );
+        $recipientsStmt->execute([
+            ':school_id' => $schoolId,
+            ':actor_user_id' => $actorUserId,
+        ]);
+
+        $recipientIds = array_map('intval', $recipientsStmt->fetchAll(PDO::FETCH_COLUMN));
+        foreach ($recipientIds as $recipientId) {
+            self::create($recipientId, 'school_action_report', $reportId, $title, $reportBody, false);
+        }
+
+        return count($recipientIds);
+    }
+
     public static function getUnreadForUser(int $userId, int $limit = 5): array
     {
         self::ensureTable();
+        self::ensureSchoolActionReportsTable();
         $stmt = Database::getConnection()->prepare(
-            'SELECT id, type, title, body, created_at
-             FROM messages_utilisateurs
-             WHERE utilisateur_id = :utilisateur_id AND is_read = 0
-             ORDER BY created_at DESC, id DESC
+            'SELECT m.id, m.type, m.title, m.body, m.created_at
+             FROM messages_utilisateurs m
+             INNER JOIN utilisateurs recipient ON recipient.id = m.utilisateur_id
+             LEFT JOIN rapports_actions_ecole report ON report.id = m.reference_id
+                AND m.type = \'school_action_report\'
+             WHERE m.utilisateur_id = :utilisateur_id
+               AND m.is_read = 0' . self::schoolActionReportVisibilitySql() . '
+             ORDER BY m.created_at DESC, m.id DESC
              LIMIT :limit'
         );
         $stmt->bindValue(':utilisateur_id', $userId, PDO::PARAM_INT);
@@ -308,9 +388,15 @@ class UserMessage
     public static function countUnreadForUser(int $userId): int
     {
         self::ensureTable();
+        self::ensureSchoolActionReportsTable();
         $stmt = Database::getConnection()->prepare(
-            'SELECT COUNT(*) FROM messages_utilisateurs
-             WHERE utilisateur_id = :utilisateur_id AND is_read = 0'
+            'SELECT COUNT(*)
+             FROM messages_utilisateurs m
+             INNER JOIN utilisateurs recipient ON recipient.id = m.utilisateur_id
+             LEFT JOIN rapports_actions_ecole report ON report.id = m.reference_id
+                AND m.type = \'school_action_report\'
+             WHERE m.utilisateur_id = :utilisateur_id
+               AND m.is_read = 0' . self::schoolActionReportVisibilitySql()
         );
         $stmt->execute([':utilisateur_id' => $userId]);
 
@@ -320,9 +406,15 @@ class UserMessage
     public static function markRead(int $messageId, int $userId): bool
     {
         self::ensureTable();
+        self::ensureSchoolActionReportsTable();
         $stmt = Database::getConnection()->prepare(
-            'UPDATE messages_utilisateurs SET is_read = 1
-             WHERE id = :id AND utilisateur_id = :utilisateur_id'
+            'UPDATE messages_utilisateurs m
+             INNER JOIN utilisateurs recipient ON recipient.id = m.utilisateur_id
+             LEFT JOIN rapports_actions_ecole report ON report.id = m.reference_id
+                AND m.type = \'school_action_report\'
+             SET m.is_read = 1
+             WHERE m.id = :id AND m.utilisateur_id = :utilisateur_id'
+                . self::schoolActionReportVisibilitySql()
         );
         $stmt->execute([':id' => $messageId, ':utilisateur_id' => $userId]);
 
@@ -332,9 +424,16 @@ class UserMessage
     public static function findForUser(int $messageId, int $userId): ?array
     {
         self::ensureTable();
+        self::ensureSchoolActionReportsTable();
         $stmt = Database::getConnection()->prepare(
-            'SELECT id, type, reference_id, title, body, created_at FROM messages_utilisateurs '
-            . 'WHERE id = :id AND utilisateur_id = :utilisateur_id LIMIT 1'
+            'SELECT m.id, m.type, m.reference_id, m.title, m.body, m.created_at
+             FROM messages_utilisateurs m
+             INNER JOIN utilisateurs recipient ON recipient.id = m.utilisateur_id
+             LEFT JOIN rapports_actions_ecole report ON report.id = m.reference_id
+                AND m.type = \'school_action_report\'
+             WHERE m.id = :id AND m.utilisateur_id = :utilisateur_id'
+                . self::schoolActionReportVisibilitySql() . '
+             LIMIT 1'
         );
         $stmt->execute([':id' => $messageId, ':utilisateur_id' => $userId]);
         $message = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -342,7 +441,14 @@ class UserMessage
         return $message ?: null;
     }
 
-    private static function create(int $userId, string $type, int $referenceId, string $title, string $body): bool
+    private static function create(
+        int $userId,
+        string $type,
+        int $referenceId,
+        string $title,
+        string $body,
+        bool $sendPush = true
+    ): bool
     {
         if ($userId <= 0 || $referenceId <= 0) {
             return false;
@@ -362,7 +468,7 @@ class UserMessage
             ':title' => $title,
             ':body' => $body,
         ]);
-        if ($stmt->rowCount() > 0) {
+        if ($stmt->rowCount() > 0 && $sendPush) {
             PushNotification::sendToUser(
                 $userId,
                 $title,
@@ -370,6 +476,8 @@ class UserMessage
                 BASE_URL . '/messages',
                 'kc-sma-message-' . (int) $db->lastInsertId()
             );
+        }
+        if ($stmt->rowCount() > 0) {
             return true;
         }
 
@@ -453,5 +561,39 @@ class UserMessage
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
         );
         self::$tableEnsured = true;
+    }
+
+    private static function ensureSchoolActionReportsTable(): void
+    {
+        if (self::$schoolActionReportsTableEnsured) {
+            return;
+        }
+
+        Database::getConnection()->exec(
+            'CREATE TABLE IF NOT EXISTS rapports_actions_ecole (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                ecole_id INT NOT NULL,
+                acteur_user_id INT NOT NULL,
+                type_action VARCHAR(60) NOT NULL,
+                title VARCHAR(200) NOT NULL,
+                body TEXT NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                KEY idx_rapports_actions_ecole_date (ecole_id, created_at),
+                KEY idx_rapports_actions_ecole_actor (acteur_user_id, created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+        );
+        self::$schoolActionReportsTableEnsured = true;
+    }
+
+    private static function schoolActionReportVisibilitySql(): string
+    {
+        return " AND (
+            m.type <> 'school_action_report'
+            OR (
+                report.id IS NOT NULL
+                AND report.ecole_id = recipient.ecole_id
+                AND recipient.role IN ('promoteur_école', 'promoteur_ecole', 'ecole_admin')
+            )
+        )";
     }
 }

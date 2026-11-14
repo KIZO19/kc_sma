@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Core\Auth;
 use App\Core\Controller;
 use App\Core\Database;
+use App\Models\AnneeScolaire;
 use App\Models\DetteEleve;
 use App\Models\Eleve;
 use App\Models\FraisScolaire;
@@ -980,6 +981,21 @@ class PaiementsController extends Controller
             error_log('PaiementsController::store notification failed: ' . $e->getMessage());
         }
 
+        try {
+            $reportSchoolId = (int) ($fee['ecole_id'] ?? $eleve['ecole_id'] ?? $userSchool);
+            \App\Models\UserMessage::notifySchoolActionReport(
+                $reportSchoolId,
+                (int) ($user['id'] ?? 0),
+                'paiement_enregistre',
+                'Nouveau paiement enregistré',
+                'Un paiement de ' . number_format($montant, 2, ',', ' ') . ' ' . $currency
+                    . ' a été enregistré pour ' . $studentName . '. Frais : ' . $libelle
+                    . '. Référence : ' . $reference . '.'
+            );
+        } catch (\Throwable $e) {
+            error_log('PaiementsController::store school action report failed: ' . $e->getMessage());
+        }
+
         unset($_SESSION['paiements_old']);
         unset($_SESSION['paiements_success'], $_SESSION['payment_receipt_id']);
         $redirectUrl = BASE_URL . '/paiements/receipt?id=' . urlencode((string) $ecritureId) . '&print=1';
@@ -1032,7 +1048,12 @@ class PaiementsController extends Controller
             $this->redirect('/paiements/gestionAutorisations' . ($ecoleId > 0 ? '?ecole_id=' . $ecoleId : ''));
         }
 
-        $fees = $ecoleId > 0 ? FraisScolaire::getAllBySchool($ecoleId) : [];
+        $activeYear = $ecoleId > 0 ? AnneeScolaire::getActiveBySchool($ecoleId) : null;
+        $activeYearId = (int) ($activeYear['id'] ?? 0);
+        $fees = $activeYearId > 0 ? FraisScolaire::getAllBySchool($ecoleId) : [];
+        $fees = array_values(array_filter($fees, static fn (array $fee): bool =>
+            (int) ($fee['annee_scolaire_id'] ?? 0) === $activeYearId
+        ));
         $matrix = $ecoleId > 0 ? PaiementAutorisation::getRoleAccessMatrix($ecoleId) : [];
         $roleList = PaiementAutorisation::allRoles();
         $this->view('paiements/gestion_autorisations', [
@@ -1211,6 +1232,20 @@ class PaiementsController extends Controller
             $this->redirect('/paiements/edit?id=' . $id);
             return;
         }
+        try {
+            $student = Eleve::findById((int) $payment['eleve_id']);
+            \App\Models\UserMessage::notifySchoolActionReport(
+                (int) ($student['ecole_id'] ?? $schoolId),
+                (int) ($user['id'] ?? 0),
+                'paiement_modifie',
+                'Paiement modifié',
+                'Le paiement #' . $id . ' de ' . \App\Core\PersonName::format($student)
+                    . ' a été modifié. Nouveau montant : ' . number_format($newAmount, 2, ',', ' ')
+                    . '. Libellé : ' . $newLabel . '.'
+            );
+        } catch (\Throwable $notificationError) {
+            error_log('PaiementsController::update school action report failed: ' . $notificationError->getMessage());
+        }
         $this->redirect('/paiements');
     }
 
@@ -1233,6 +1268,7 @@ class PaiementsController extends Controller
         $id = (int) ($_POST['id'] ?? 0);
         $db = Database::getConnection();
         $schoolId = (int) ($user['ecole_id'] ?? 0);
+        $actionSucceeded = false;
         $db->beginTransaction();
         try {
             $sql =
@@ -1321,11 +1357,29 @@ class PaiementsController extends Controller
 
             $db->commit();
             $_SESSION['paiements_success'] = 'Paiement annulé; les soldes ont été rétablis.';
+            $actionSucceeded = true;
         } catch (\Throwable $e) {
             if ($db->inTransaction()) {
                 $db->rollBack();
             }
             $_SESSION['paiements_errors'] = [$e->getMessage()];
+        }
+
+        if ($actionSucceeded) {
+            try {
+                $student = Eleve::findById((int) $payment['eleve_id']);
+                \App\Models\UserMessage::notifySchoolActionReport(
+                    (int) ($student['ecole_id'] ?? $schoolId),
+                    (int) ($user['id'] ?? 0),
+                    'paiement_annule',
+                    'Paiement annulé',
+                    'Le paiement #' . $id . ' de ' . \App\Core\PersonName::format($student)
+                        . ' a été annulé pour erreur de saisie. Montant : '
+                        . number_format((float) $payment['montant'], 2, ',', ' ') . '.'
+                );
+            } catch (\Throwable $notificationError) {
+                error_log('PaiementsController::cancel school action report failed: ' . $notificationError->getMessage());
+            }
         }
 
         $this->redirect('/paiements');

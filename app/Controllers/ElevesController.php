@@ -288,9 +288,31 @@ class ElevesController extends Controller
             if ($entryId > 0) {
                 Eleve::updateDiscipline($entryId, $studentId, $schoolId, $data);
                 $_SESSION['discipline_success'] = 'Le dossier disciplinaire a été mis à jour.';
+                $actionType = 'dossier_disciplinaire_modifie';
+                $actionTitle = 'Dossier disciplinaire modifié';
+                $actionDescription = 'Incident #' . $entryId . ' mis à jour pour '
+                    . \App\Core\PersonName::format($student) . '. Faute : ' . trim((string) $data['faute'])
+                    . '. Sanction : ' . trim((string) $data['sanction']) . '.';
             } else {
-                Eleve::createDiscipline($studentId, $schoolId, $data);
+                $entryId = Eleve::createDiscipline($studentId, $schoolId, $data);
                 $_SESSION['discipline_success'] = 'L’incident a été ajouté au dossier disciplinaire.';
+                $actionType = 'dossier_disciplinaire_cree';
+                $actionTitle = 'Incident disciplinaire ajouté';
+                $actionDescription = 'Un incident a été ajouté au dossier de '
+                    . \App\Core\PersonName::format($student) . '. Faute : ' . trim((string) $data['faute'])
+                    . '. Sanction : ' . trim((string) $data['sanction']) . '.';
+            }
+
+            try {
+                UserMessage::notifySchoolActionReport(
+                    $schoolId,
+                    (int) ($user['id'] ?? 0),
+                    $actionType,
+                    $actionTitle,
+                    $actionDescription
+                );
+            } catch (\Throwable $exception) {
+                error_log('ElevesController::saveDiscipline school action report failed: ' . $exception->getMessage());
             }
         } catch (\InvalidArgumentException | \DomainException $exception) {
             $_SESSION['discipline_error'] = $exception->getMessage();
@@ -339,6 +361,18 @@ class ElevesController extends Controller
         try {
             Eleve::deleteDiscipline($entryId, $studentId, $schoolId);
             $_SESSION['discipline_success'] = 'L’incident a été supprimé du dossier disciplinaire.';
+            try {
+                UserMessage::notifySchoolActionReport(
+                    $schoolId,
+                    (int) ($user['id'] ?? 0),
+                    'dossier_disciplinaire_supprime',
+                    'Incident disciplinaire supprimé',
+                    'L’incident #' . $entryId . ' du dossier de '
+                        . \App\Core\PersonName::format($student) . ' a été supprimé.'
+                );
+            } catch (\Throwable $exception) {
+                error_log('ElevesController::deleteDiscipline school action report failed: ' . $exception->getMessage());
+            }
         } catch (\InvalidArgumentException | \DomainException $exception) {
             $_SESSION['discipline_error'] = $exception->getMessage();
         }
@@ -415,6 +449,20 @@ class ElevesController extends Controller
 
         $this->sendParentSummons($audition);
         $this->transmitAuditionReport($audition);
+        try {
+            UserMessage::notifySchoolActionReport(
+                $schoolId,
+                (int) ($user['id'] ?? 0),
+                'rapport_disciplinaire_cree',
+                'Nouveau rapport disciplinaire',
+                'Un procès-verbal d’audition concernant '
+                    . \App\Core\PersonName::format($audition)
+                    . ' (incident du ' . date('d/m/Y', strtotime((string) $audition['date_evenement']))
+                    . ') a été enregistré.'
+            );
+        } catch (\Throwable $exception) {
+            error_log('ElevesController::recordAudition school action report failed: ' . $exception->getMessage());
+        }
 
         $_SESSION['discipline_success'] = 'Le PV d’audition est enregistré, la convocation a été tentée par email et SMS, et le rapport est transmis aux autorités scolaires. Vérifiez les statuts de livraison ci-dessous.';
         $this->redirect($returnPath);
@@ -556,9 +604,12 @@ class ElevesController extends Controller
 
         $studentName = \App\Core\PersonName::format($audition);
         $title = 'Rapport disciplinaire — ' . ($studentName !== '' ? $studentName : 'Élève');
+        $incidentDate = !empty($audition['date_evenement'])
+            ? (new \DateTimeImmutable((string) $audition['date_evenement']))->format('d/m/Y')
+            : '-';
         $body = 'Un procès-verbal d’audition est disponible pour '
             . ($studentName !== '' ? $studentName : 'un élève')
-            . '. Incident du ' . formatDate($audition['date_evenement'] ?? null)
+            . '. Incident du ' . $incidentDate
             . '. Consultez le rapport depuis cette notification.';
         $deliveredIds = [];
         foreach ($recipientIds as $recipientId) {

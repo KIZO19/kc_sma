@@ -158,6 +158,7 @@ class Controller
                 ['name' => 'Mon abonnement', 'path' => '/ecoles/subscriptions', 'icon' => 'bi-card-checklist'],
                 ['name' => 'Autorisations paiements', 'path' => '/paiements/gestionAutorisations', 'icon' => 'bi-shield-check'],
                 ['name' => 'Agents', 'path' => '/agents', 'icon' => 'bi-people-fill'],
+                ['name' => 'Paie des agents', 'path' => '/paies-agents', 'icon' => 'bi-cash-coin'],
                 ['name' => 'Parents', 'path' => '/parents', 'icon' => 'bi-people'],
                 ['name' => 'Élèves', 'path' => '/eleves', 'icon' => 'bi-person-badge'],
                 ['name' => 'Exonérations', 'path' => '/exonerations', 'icon' => 'bi-shield-minus'],
@@ -241,6 +242,7 @@ class Controller
                 ['name' => 'Dérogations', 'path' => '/derogations', 'icon' => 'bi-file-earmark-check'],
                 ['name' => 'Exonérations', 'path' => '/exonerations', 'icon' => 'bi-shield-minus'],
                 ['name' => 'Recouvrements', 'path' => '/recouvrements', 'icon' => 'bi-cash-stack'],
+                ['name' => 'Paie des agents', 'path' => '/paies-agents', 'icon' => 'bi-cash-coin'],
                 ['name' => 'Caisses & Banques', 'path' => '/comptes', 'icon' => 'bi-bank'],
                 ['name' => 'Paiements', 'path' => '/paiements', 'icon' => 'bi-currency-dollar'],
                 ['name' => 'Événements', 'path' => '/evenements', 'icon' => 'bi-calendar-event'],
@@ -324,6 +326,18 @@ class Controller
         }
 
         $user = Auth::user();
+        if (
+            $user
+            && ($user['role'] ?? '') === $role
+            && !in_array($role, ['ecole_admin', 'comptable_école'], true)
+            && \App\Models\CashOutflow::isUserDesignatedApprover($user)
+        ) {
+            array_unshift($modules, [
+                'name' => 'Approbation des sorties',
+                'path' => '/comptes',
+                'icon' => 'bi-bank',
+            ]);
+        }
         if (!$user || ($user['role'] ?? '') !== $role) {
             return $modules;
         }

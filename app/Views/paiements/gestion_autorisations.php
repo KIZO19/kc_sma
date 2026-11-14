@@ -88,18 +88,19 @@ require __DIR__ . '/../partials/app_header.php';
           <table class="table table-bordered table-striped align-middle">
             <thead class="table-dark">
               <tr>
-                <th>Rôle</th>
-                <?php foreach (($fees ?? []) as $fee): ?>
-                  <th><?= htmlspecialchars((string) ($fee['type_frais'] ?? 'Frais')) ?></th>
+                <th scope="col">Frais</th>
+                <?php foreach (($roleList ?? []) as $roleLabel): ?>
+                  <th scope="col"><?= htmlspecialchars($roleLabel) ?></th>
                 <?php endforeach; ?>
               </tr>
             </thead>
             <tbody>
-              <?php foreach (($roleList ?? []) as $roleKey => $roleLabel): ?>
+              <?php foreach (($fees ?? []) as $fee): ?>
+                <?php $feeId = (int) ($fee['id'] ?? 0); ?>
                 <tr>
-                  <td><?= htmlspecialchars($roleLabel) ?></td>
-                  <?php foreach (($fees ?? []) as $fee): ?>
-                    <?php $feeId = (int) ($fee['id'] ?? 0); $allowed = !empty(($matrix[$roleKey] ?? [])) && in_array($feeId, (array) ($matrix[$roleKey] ?? []), true); ?>
+                  <th scope="row"><?= htmlspecialchars((string) ($fee['type_frais'] ?? 'Frais')) ?></th>
+                  <?php foreach (($roleList ?? []) as $roleKey => $roleLabel): ?>
+                    <?php $allowed = !empty(($matrix[$roleKey] ?? [])) && in_array($feeId, (array) ($matrix[$roleKey] ?? []), true); ?>
                     <td class="text-center">
                       <form method="post" action="<?= BASE_URL ?>/paiements/gestionAutorisations<?= !empty($authorizationSchoolId) ? '?ecole_id=' . (int) $authorizationSchoolId : '' ?>">
                         <input type="hidden" name="permission_type" value="fee">
