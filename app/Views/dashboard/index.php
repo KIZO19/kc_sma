@@ -614,7 +614,8 @@ require __DIR__ . '/../partials/app_header.php';
             $preferredPaths = match ($role ?? '') {
                 'ecole_admin' => ['/ecoles', '/agents', '/inscriptions', '/eleves', '/paiements', '/rapports', '/paiements/gestionAutorisations'],
                 'DE_école' => ['/presences', '/evaluations', '/notes', '/bulletins', '/horaires', '/classes', '/eleves', '/inscriptions'],
-                'promoteur_école', 'DD_école', 'DA_école' => ['/inscriptions', '/utilisateurs', '/classes', '/eleves', '/derogations', '/notes', '/bulletins', '/rapports'],
+                'promoteur_école' => ['/ecoles', '/utilisateurs', '/agents', '/ecoles/settings', '/paiements', '/rapports', '/statistiques', '/inscriptions', '/classes', '/eleves', '/derogations', '/notes', '/bulletins'],
+                'DD_école', 'DA_école' => ['/inscriptions', '/utilisateurs', '/classes', '/eleves', '/derogations', '/notes', '/bulletins', '/rapports'],
                 'sec_école' => ['/inscriptions', '/parents', '/eleves', '/communiques', '/presences', '/rapports'],
                 'enseignant_école' => ['/presences', '/notes', '/eleves'],
                 'eleve_ecole' => [
@@ -900,7 +901,7 @@ require __DIR__ . '/../partials/app_header.php';
           </div>
           <?php endif; ?>
 
-          <?php if (($role ?? '') === 'ecole_admin'): ?>
+          <?php if (in_array(($role ?? ''), ['ecole_admin', 'promoteur_école'], true)): ?>
           <?php if (!empty($_SESSION['dashboard_success'])): ?>
             <div class="alert alert-success alert-dismissible">
               <?= htmlspecialchars($_SESSION['dashboard_success']) ?>

@@ -182,11 +182,12 @@ class ElevesController extends Controller
             : [];
         $notes = $selectedYearId > 0 ? Eleve::getNotes($eleveId, $selectedYearId) : [];
         $discipline = \App\Models\Eleve::getDiscipline($eleveId);
-        $canManageDiscipline = ($user['role'] ?? '') === 'ecole_admin' || Auth::can('manage_discipline');
-        $canManageAuditions = in_array($user['role'] ?? '', ['ecole_admin', 'DD_école'], true);
+        $canManageDiscipline = in_array($user['role'] ?? '', ['ecole_admin', 'promoteur_école'], true)
+            || Auth::can('manage_discipline');
+        $canManageAuditions = in_array($user['role'] ?? '', ['ecole_admin', 'promoteur_école', 'DD_école'], true);
         $canViewAuditions = in_array(
             $user['role'] ?? '',
-            ['super_admin', 'ecole_admin', 'DD_école', 'DE_école', 'préfet_école'],
+            ['super_admin', 'ecole_admin', 'promoteur_école', 'DD_école', 'DE_école', 'préfet_école'],
             true
         );
         $auditionsByIncident = $canViewAuditions
@@ -495,7 +496,7 @@ class ElevesController extends Controller
             DisciplineAudition::getReportRecipientIds((int) $audition['id']),
             true
         );
-        if (!in_array($user['role'] ?? '', ['ecole_admin', 'DD_école'], true) && !$isRecipient) {
+        if (!in_array($user['role'] ?? '', ['ecole_admin', 'promoteur_école', 'DD_école'], true) && !$isRecipient) {
             $this->redirect('/error/accessDenied');
         }
 

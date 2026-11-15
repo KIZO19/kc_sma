@@ -26,7 +26,7 @@ class EcolesController extends Controller
         $role = $user['role'] ?? 'default';
         $modules = $this->getModulesForRole($role);
 
-        if ($role === 'ecole_admin') {
+        if (in_array($role, ['ecole_admin', 'promoteur_école'], true)) {
             $schoolId = (int) ($user['ecole_id'] ?? 0);
             $school = $schoolId > 0 ? Ecole::findById($schoolId) : null;
             if (!$school) {
@@ -67,7 +67,7 @@ class EcolesController extends Controller
     public function settings(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['ecole_admin']);
+        Auth::requireRoles(['ecole_admin', 'promoteur_école']);
 
         $user = Auth::refresh() ?: Auth::user();
         $schoolId = (int) ($user['ecole_id'] ?? 0);
@@ -77,6 +77,7 @@ class EcolesController extends Controller
             return;
         }
 
+        Ecole::ensureSchoolCalendarColumns();
         if (empty($_SESSION['school_settings_csrf'])) {
             $_SESSION['school_settings_csrf'] = bin2hex(random_bytes(32));
         }
@@ -89,6 +90,10 @@ class EcolesController extends Controller
             'modules' => $this->getModulesForRole((string) ($user['role'] ?? 'ecole_admin')),
             'school' => $school,
             'activeSchoolYear' => AnneeScolaire::getActiveBySchool($schoolId),
+            'schoolCalendar' => [
+                'start' => $school['annee_scolaire_debut'] ?? '',
+                'end' => $school['annee_scolaire_fin'] ?? '',
+            ],
             'latestSchoolYearRequest' => SchoolYearChangeRequest::getLatestForSchool($schoolId),
             'schoolFormValues' => $_SESSION['school_settings_old'] ?? [],
             'subscription' => Ecole::getLatestSubscription($schoolId),
@@ -151,6 +156,66 @@ class EcolesController extends Controller
         } catch (\Throwable $e) {
             error_log('EcolesController::setInitialSchoolYear failed: ' . $e->getMessage());
             $_SESSION['school_settings_error'] = 'Impossible d’enregistrer l’année scolaire. Réessayez.';
+        }
+
+        $_SESSION['school_settings_csrf'] = bin2hex(random_bytes(32));
+        $this->redirect('/ecoles/settings');
+    }
+
+    public function updateSchoolCalendar(): void
+    {
+        Auth::requireAuth();
+        Auth::requireRoles(['ecole_admin', 'promoteur_école']);
+
+        $user = Auth::refresh() ?: Auth::user();
+        $schoolId = (int) ($user['ecole_id'] ?? 0);
+        $token = (string) ($_POST['csrf_token'] ?? '');
+        if (
+            $_SERVER['REQUEST_METHOD'] !== 'POST'
+            || $schoolId <= 0
+            || $token === ''
+            || !hash_equals((string) ($_SESSION['school_settings_csrf'] ?? ''), $token)
+        ) {
+            $_SESSION['school_settings_error'] = 'Le formulaire a expiré. Rechargez la page et réessayez.';
+            $this->redirect('/ecoles/settings');
+            return;
+        }
+
+        $startDate = is_string($_POST['annee_scolaire_debut'] ?? null)
+            ? trim($_POST['annee_scolaire_debut'])
+            : '';
+        $endDate = is_string($_POST['annee_scolaire_fin'] ?? null)
+            ? trim($_POST['annee_scolaire_fin'])
+            : '';
+        $start = \DateTimeImmutable::createFromFormat('!Y-m-d', $startDate);
+        $end = \DateTimeImmutable::createFromFormat('!Y-m-d', $endDate);
+        if (
+            !$start
+            || !$end
+            || $start->format('Y-m-d') !== $startDate
+            || $end->format('Y-m-d') !== $endDate
+            || $end < $start
+        ) {
+            $_SESSION['school_settings_error'] = 'Saisissez des dates valides et une date de fin égale ou postérieure à la date de début.';
+        } else {
+            try {
+                Ecole::ensureSchoolCalendarColumns();
+                if (!Ecole::updateSchoolCalendar($schoolId, $startDate, $endDate)) {
+                    throw new \RuntimeException('Calendar update returned false.');
+                }
+                ActivityLog::record(
+                    (int) ($user['id'] ?? 0),
+                    'school_calendar_updated',
+                    'school',
+                    $schoolId,
+                    $startDate . ' - ' . $endDate,
+                    'Calendrier de l’année scolaire mis à jour.'
+                );
+                $_SESSION['school_settings_success'] = 'Les dates de l’année scolaire ont été enregistrées.';
+            } catch (\Throwable $exception) {
+                error_log('EcolesController::updateSchoolCalendar failed: ' . $exception->getMessage());
+                $_SESSION['school_settings_error'] = 'Impossible d’enregistrer les dates de l’année scolaire.';
+            }
         }
 
         $_SESSION['school_settings_csrf'] = bin2hex(random_bytes(32));
@@ -579,7 +644,31 @@ class EcolesController extends Controller
             $matricule = trim($_POST['matricule'] ?? '');
             $telephone = trim($_POST['telephone'] ?? '');
             $adresse = trim($_POST['adresse'] ?? '');
+            $promoterName = trim((string) ($_POST['promoter_nom'] ?? ''));
+            $promoterIdentifier = trim((string) ($_POST['promoter_identifiant'] ?? ''));
+            $promoterPassword = trim((string) ($_POST['promoter_mot_de_passe'] ?? ''));
             $logoUrl = null;
+
+            if ($nom === '') {
+                $errors[] = 'Le nom de l\'établissement est requis.';
+            }
+            if ($email === '') {
+                $errors[] = 'L\'email officiel est requis.';
+            }
+            if ($identifiant === '') {
+                $errors[] = 'L\'identifiant est requis.';
+            }
+            if ($promoterName === '' || mb_strlen($promoterName, 'UTF-8') > 150) {
+                $errors[] = 'Le nom complet du promoteur est requis (150 caractères maximum).';
+            }
+            if ($promoterIdentifier === '' || mb_strlen($promoterIdentifier, 'UTF-8') > 100) {
+                $errors[] = 'L’identifiant du promoteur est requis (100 caractères maximum).';
+            } elseif (\App\Models\User::existsByIdentifiant($promoterIdentifier)) {
+                $errors[] = 'L’identifiant du promoteur est déjà utilisé.';
+            }
+            if ($promoterPassword !== '' && strlen($promoterPassword) < 8) {
+                $errors[] = 'Le mot de passe du promoteur doit contenir au moins 8 caractères.';
+            }
 
             if (!empty($_FILES['logo']['name'])) {
                 if ($_FILES['logo']['error'] !== UPLOAD_ERR_OK) {
@@ -605,33 +694,28 @@ class EcolesController extends Controller
                 }
             }
 
-            if ($nom === '') {
-                $errors[] = 'Le nom de l\'établissement est requis.';
-            }
-            if ($email === '') {
-                $errors[] = 'L\'email officiel est requis.';
-            }
-            if ($identifiant === '') {
-                $errors[] = 'L\'identifiant est requis.';
-            }
-
             if (empty($errors)) {
                 $matricule = $this->generateSchoolMatricule();
+                $db = \App\Core\Database::getConnection();
+                try {
+                    Ecole::ensureSubscriptionDetails();
+                    ActivityLog::ensureTable();
+                    $db->beginTransaction();
 
-                $ecoleId = Ecole::create([
-                    'nom_etablissement' => $nom,
-                    'email_officiel' => $email,
-                    'identifiant' => $identifiant,
-                    'matricule' => $matricule,
-                    'telephone_contact' => $telephone,
-                    'adresse' => $adresse,
-                    'logo_url' => $logoUrl,
-                    'statut_systeme' => 'En_Attente',
-                ]);
+                    $ecoleId = Ecole::create([
+                        'nom_etablissement' => $nom,
+                        'email_officiel' => $email,
+                        'identifiant' => $identifiant,
+                        'matricule' => $matricule,
+                        'telephone_contact' => $telephone,
+                        'adresse' => $adresse,
+                        'logo_url' => $logoUrl,
+                        'statut_systeme' => 'En_Attente',
+                    ]);
+                    if ($ecoleId === false) {
+                        throw new \RuntimeException('Impossible de créer l’école.');
+                    }
 
-                if ($ecoleId === false) {
-                    $errors[] = 'Impossible de créer l\'école, réessayez.';
-                } else {
                     ActivityLog::record(
                         (int) (Auth::user()['id'] ?? 0),
                         'school_created',
@@ -640,28 +724,62 @@ class EcolesController extends Controller
                         $nom,
                         'École créée avec le statut En attente de validation.'
                     );
+
+                    $generatedPromoterPassword = $promoterPassword === '';
+                    if ($generatedPromoterPassword) {
+                        $promoterPassword = bin2hex(random_bytes(8));
+                    }
+                    $promoter = \App\Models\User::create([
+                        'nom_complet' => $promoterName,
+                        'identifiant' => $promoterIdentifier,
+                        'mot_de_passe' => password_hash($promoterPassword, PASSWORD_DEFAULT),
+                        'role' => 'promoteur_école',
+                        'statut' => 'Actif',
+                        'ecole_id' => (int) $ecoleId,
+                    ]);
+                    $promoterUserId = (int) ($promoter['id'] ?? 0);
+                    if ($promoterUserId <= 0) {
+                        throw new \RuntimeException('Impossible de créer le compte promoteur.');
+                    }
+                    ActivityLog::record(
+                        (int) (Auth::user()['id'] ?? 0),
+                        'school_promoter_created',
+                        'user',
+                        $promoterUserId,
+                        $promoterName,
+                        'Compte promoteur créé pour l’école ' . $nom . '.'
+                    );
+
                     $existingAdminId = (int) ($_POST['existing_admin_id'] ?? 0);
                     $newAdminName = trim($_POST['admin_nom'] ?? '');
                     $newAdminIdent = trim($_POST['admin_identifiant'] ?? '');
                     $newAdminPass = trim($_POST['admin_mot_de_passe'] ?? '');
                     $adminUserId = null;
+                    $generatedAdminPassword = false;
 
                     if ($existingAdminId > 0) {
-                        if (\App\Models\User::assignToSchool($existingAdminId, (int) $ecoleId)) {
-                            $adminUserId = $existingAdminId;
-                            $existingAdmin = \App\Models\User::findById($existingAdminId);
-                            ActivityLog::record(
-                                (int) (Auth::user()['id'] ?? 0),
-                                'school_admin_assigned',
-                                'user',
-                                $existingAdminId,
-                                (string) ($existingAdmin['nom_complet'] ?? 'Administrateur d’école'),
-                                'Compte administrateur associé à l’école ' . $nom . '.'
-                            );
+                        $existingAdmin = \App\Models\User::findById($existingAdminId);
+                        if (
+                            !$existingAdmin
+                            || ($existingAdmin['role'] ?? '') !== 'ecole_admin'
+                            || !empty($existingAdmin['ecole_id'])
+                            || !\App\Models\User::assignToSchool($existingAdminId, (int) $ecoleId)
+                        ) {
+                            throw new \RuntimeException('Le compte administrateur sélectionné n’est plus disponible.');
                         }
+                        $adminUserId = $existingAdminId;
+                        ActivityLog::record(
+                            (int) (Auth::user()['id'] ?? 0),
+                            'school_admin_assigned',
+                            'user',
+                            $existingAdminId,
+                            (string) ($existingAdmin['nom_complet'] ?? 'Administrateur d’école'),
+                            'Compte administrateur associé à l’école ' . $nom . '.'
+                        );
                     } elseif ($newAdminIdent !== '' && $newAdminName !== '') {
                         if ($newAdminPass === '') {
                             $newAdminPass = bin2hex(random_bytes(4));
+                            $generatedAdminPassword = true;
                         }
                         $user = \App\Models\User::create([
                             'nom_complet' => $newAdminName,
@@ -671,28 +789,57 @@ class EcolesController extends Controller
                             'statut' => 'Actif',
                             'ecole_id' => (int) $ecoleId,
                         ]);
-                        if (!empty($user['id'])) {
-                            $adminUserId = (int) $user['id'];
-                            ActivityLog::record(
-                                (int) (Auth::user()['id'] ?? 0),
-                                'school_admin_created',
-                                'user',
-                                $adminUserId,
-                                $newAdminName,
-                                'Compte administrateur créé pour l’école ' . $nom . '.'
-                            );
-                            $_SESSION['ecoles_create_success'] = 'École créée. Mot de passe temporaire pour l\'admin: ' . $newAdminPass;
+                        $adminUserId = (int) ($user['id'] ?? 0);
+                        if ($adminUserId <= 0) {
+                            throw new \RuntimeException('Impossible de créer le compte administrateur.');
                         }
+                        ActivityLog::record(
+                            (int) (Auth::user()['id'] ?? 0),
+                            'school_admin_created',
+                            'user',
+                            $adminUserId,
+                            $newAdminName,
+                            'Compte administrateur créé pour l’école ' . $nom . '.'
+                        );
                     }
 
-                    if ($adminUserId) {
-                        Ecole::setAdmin((int) $ecoleId, $adminUserId);
+                    if ($adminUserId !== null && !Ecole::setAdmin((int) $ecoleId, $adminUserId)) {
+                        throw new \RuntimeException('Impossible d’associer l’administrateur à l’école.');
                     }
+
+                    $db->commit();
+                    $temporaryCredentials = [];
+                    if ($generatedPromoterPassword) {
+                        $temporaryCredentials[] = 'Promoteur (' . $promoterIdentifier . ') : ' . $promoterPassword;
+                    }
+                    if ($generatedAdminPassword) {
+                        $temporaryCredentials[] = 'Admin (' . $newAdminIdent . ') : ' . $newAdminPass;
+                    }
+                    if ($temporaryCredentials !== []) {
+                        $_SESSION['ecoles_create_success'] = 'École créée. ' . implode(' · ', $temporaryCredentials);
+                    }
+                } catch (\Throwable $exception) {
+                    if ($db->inTransaction()) {
+                        $db->rollBack();
+                    }
+                    if ($logoUrl !== null) {
+                        $uploadedPath = dirname(__DIR__, 2) . '/public' . $logoUrl;
+                        if (is_file($uploadedPath)) {
+                            unlink($uploadedPath);
+                        }
+                    }
+                    error_log('EcolesController::create failed: ' . $exception->getMessage());
+                    $errors[] = 'Impossible de créer l’école et ses comptes. Vérifiez les informations puis réessayez.';
                 }
             }
 
             if (!empty($errors)) {
                 $_SESSION['ecoles_create_errors'] = $errors;
+                $this->redirect('/ecoles/create');
+                return;
+            }
+
+            if (!empty($_SESSION['ecoles_create_success'])) {
                 $this->redirect('/ecoles/create');
                 return;
             }
@@ -919,7 +1066,7 @@ class EcolesController extends Controller
                             (int) ($parentUser['ecole_id'] ?? 0) <= 0
                             || (int) ($parentUser['ecole_id'] ?? 0) !== (int) ($parentUser['parent_ecole_id'] ?? 0)
                             || (
-                                $role === 'ecole_admin'
+                                in_array($role, ['ecole_admin', 'promoteur_école'], true)
                                 && (int) ($parentUser['ecole_id'] ?? 0) !== (int) ($user['ecole_id'] ?? 0)
                             )
                         ) {
@@ -953,7 +1100,7 @@ class EcolesController extends Controller
 
                         if (!$eleveUser) {
                             $errors[] = 'Aucun élève trouvé pour ce matricule.';
-                        } elseif ($role === 'ecole_admin' && (int) ($eleveUser['ecole_id'] ?? 0) !== (int) ($user['ecole_id'] ?? 0)) {
+                        } elseif (in_array($role, ['ecole_admin', 'promoteur_école'], true) && (int) ($eleveUser['ecole_id'] ?? 0) !== (int) ($user['ecole_id'] ?? 0)) {
                             $errors[] = 'Vous ne pouvez générer un mot de passe que pour les élèves de votre établissement.';
                         } else {
                             $generatedPassword = bin2hex(random_bytes(8));
@@ -1325,7 +1472,7 @@ class EcolesController extends Controller
 
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
-        if ($role === 'ecole_admin') {
+        if (in_array($role, ['ecole_admin', 'promoteur_école'], true)) {
             $schoolId = (int) ($user['ecole_id'] ?? 0);
             if ($schoolId <= 0) {
                 $this->redirect('/error/accessDenied');

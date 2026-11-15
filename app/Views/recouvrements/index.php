@@ -169,7 +169,7 @@ $exportQuery = static function (string $format, array $columns) use ($filters): 
       <?php unset($_SESSION['recouvrements_error']); ?>
     <?php endif; ?>
 
-    <?php if (!empty($currencies) && in_array(($role ?? ''), ['ecole_admin', 'comptable_école'], true)): ?>
+    <?php if (!empty($currencies) && in_array(($role ?? ''), ['ecole_admin', 'promoteur_école', 'comptable_école'], true)): ?>
       <div class="card card-outline card-secondary mb-3">
         <div class="card-header"><h3 class="card-title mb-0">Seuil de paiement par devise</h3></div>
         <div class="card-body">

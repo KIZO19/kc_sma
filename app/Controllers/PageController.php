@@ -54,7 +54,7 @@ class PageController extends Controller
             'evenements' => ['super_admin', 'ecole_admin', 'comptable_école', 'préfet_école', 'DE_école', 'DD_école', 'DA_école', 'sec_école', 'enseignant_école', 'eleve_ecole', 'parent_ecole'],
             'facturation' => ['comptable_école', 'promoteur_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école'],
             'comptes' => ['super_admin', 'ecole_admin', 'comptable_école'],
-            'rapports' => ['super_admin', 'ecole_admin', 'comptable_école', 'sec_école'],
+            'rapports' => ['super_admin', 'ecole_admin', 'promoteur_école', 'comptable_école', 'sec_école'],
             'statistiques' => ['super_admin', 'ecole_admin'],
             'mes-cours' => ['enseignant_école'],
             'mon-emploi' => ['eleve_ecole', 'enseignant_école'],
@@ -67,7 +67,7 @@ class PageController extends Controller
             'paiements-enfant' => ['parent_ecole'],
             'agents' => ['ecole_admin'],
             'parents' => ['super_admin', 'ecole_admin', 'sec_école'],
-            'settings' => ['super_admin', 'ecole_admin'],
+            'settings' => ['super_admin', 'ecole_admin', 'promoteur_école'],
         ];
 
         $pages = [
@@ -244,7 +244,11 @@ class PageController extends Controller
         $accessible = $role === 'super_admin'
             || $route === ''
             || !isset($accessMap[$route])
-            || in_array($role, $accessMap[$route], true);
+            || in_array($role, $accessMap[$route], true)
+            || (
+                $role === 'promoteur_école'
+                && in_array('ecole_admin', $accessMap[$route], true)
+            );
 
         if (isset($pages[$route])) {
             $page = $pages[$route];
@@ -263,7 +267,7 @@ class PageController extends Controller
         }
 
         if ($route === 'ecoles/generatePassword') {
-            $accessible = in_array($role, ['super_admin', 'ecole_admin'], true);
+            $accessible = in_array($role, ['super_admin', 'ecole_admin', 'promoteur_école'], true);
             return [
                 'found' => true,
                 'accessible' => $accessible,

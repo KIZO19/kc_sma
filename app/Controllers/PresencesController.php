@@ -33,7 +33,7 @@ class PresencesController extends Controller
         }
 
         if ($attendanceMode === 'enseignants') {
-            if (!in_array($role, ['ecole_admin', 'DE_école'], true)) {
+            if (!in_array($role, ['ecole_admin', 'promoteur_école', 'DE_école'], true)) {
                 $this->redirect('/error/accessDenied');
             }
 

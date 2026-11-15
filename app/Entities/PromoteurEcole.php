@@ -11,6 +11,6 @@ class PromoteurEcole extends RoleEntity
 
     public function can(string $permission): bool
     {
-        return in_array($permission, ['view_metrics'], true);
+        return in_array($permission, ['manage_school', 'manage_discipline', 'manage_users', 'view_metrics', 'view_reports'], true);
     }
 }

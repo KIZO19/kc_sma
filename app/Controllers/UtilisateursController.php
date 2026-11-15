@@ -128,11 +128,20 @@ class UtilisateursController extends Controller
         }
         $manageableSchoolRoles = array_filter(
             Roles::list(),
-            static fn (string $role): bool =>
-                in_array($role, User::getSchoolScopedRoles(), true)
-                && !in_array($role, ['ecole_admin', 'promoteur_école'], true),
+            fn (string $managedRole): bool =>
+                in_array($managedRole, User::getSchoolScopedRoles(), true)
+                && $managedRole !== 'promoteur_école'
+                && (($role ?? '') === 'promoteur_école' || $managedRole !== 'ecole_admin'),
             ARRAY_FILTER_USE_KEY
         );
+        $manageableAccountIds = [];
+        if (!$isSuperAdmin) {
+            foreach ($allUsers as $account) {
+                if ($this->canManageSchoolAccount($account, $user)) {
+                    $manageableAccountIds[(int) $account['id']] = true;
+                }
+            }
+        }
 
         $this->view('utilisateurs/index', [
             'title' => APP_NAME . ' - Utilisateurs',
@@ -151,6 +160,7 @@ class UtilisateursController extends Controller
             'schoolDetailsById' => $schoolDetailsById,
             'currentSchoolLogoUrl' => $currentSchoolLogoUrl,
             'isLocalAdmin' => !$isSuperAdmin,
+            'manageableAccountIds' => $manageableAccountIds,
             'availableRoles' => Roles::list(),
             'manageableSchoolRoles' => $manageableSchoolRoles,
             'accountCsrfToken' => $_SESSION['user_account_csrf'],
@@ -172,16 +182,30 @@ class UtilisateursController extends Controller
             return $account;
         }
 
+        return $this->canManageSchoolAccount($account, $currentUser) ? $account : null;
+    }
+
+    private function canManageSchoolAccount(array $account, array $currentUser): bool
+    {
+        $managerRole = (string) ($currentUser['role'] ?? '');
+        if (!in_array($managerRole, ['ecole_admin', 'promoteur_école'], true)) {
+            return false;
+        }
+
         $schoolId = (int) ($currentUser['ecole_id'] ?? 0);
-        return $schoolId > 0 && (int) ($account['ecole_id'] ?? 0) === $schoolId
-            ? $account
-            : null;
+        $accountRole = (string) ($account['role'] ?? '');
+
+        return $schoolId > 0
+            && (int) ($account['ecole_id'] ?? 0) === $schoolId
+            && (int) ($account['id'] ?? 0) !== (int) ($currentUser['id'] ?? 0)
+            && !in_array($accountRole, ['super_admin', 'promoteur_école', 'promoteur_ecole'], true)
+            && ($accountRole !== 'ecole_admin' || $managerRole === 'promoteur_école');
     }
 
     public function editAccount(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['super_admin', 'ecole_admin']);
+        Auth::requireRoles(['super_admin', 'ecole_admin', 'promoteur_école']);
         $currentUser = Auth::refresh() ?: Auth::user();
         $account = $this->getEditableAccount((int) ($_GET['id'] ?? 0), $currentUser);
         if (!$account) {
@@ -209,7 +233,7 @@ class UtilisateursController extends Controller
     public function updateAccountInfo(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['super_admin', 'ecole_admin']);
+        Auth::requireRoles(['super_admin', 'ecole_admin', 'promoteur_école']);
         $currentUser = Auth::refresh() ?: Auth::user();
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             $this->redirect('/utilisateurs');
@@ -264,16 +288,22 @@ class UtilisateursController extends Controller
         }
 
         if (User::updateProfile($userId, $data)) {
-            if (($currentUser['role'] ?? '') === 'super_admin' && ($account['role'] ?? '') === 'ecole_admin') {
+            if (
+                in_array($currentUser['role'] ?? '', ['super_admin', 'promoteur_école'], true)
+                && in_array($account['role'] ?? '', ['ecole_admin', 'promoteur_école'], true)
+            ) {
+                $targetIsPromoter = ($account['role'] ?? '') === 'promoteur_école';
                 ActivityLog::record(
                     (int) ($currentUser['id'] ?? 0),
-                    $password !== '' ? 'school_admin_password_reset' : 'school_admin_account_updated',
+                    $targetIsPromoter
+                        ? ($password !== '' ? 'school_promoter_password_reset' : 'school_promoter_account_updated')
+                        : ($password !== '' ? 'school_admin_password_reset' : 'school_admin_account_updated'),
                     'user',
                     $userId,
                     $name,
                     $password !== ''
-                        ? 'Mot de passe de l’administrateur d’école réinitialisé.'
-                        : 'Informations du compte administrateur d’école mises à jour.'
+                        ? 'Mot de passe du ' . ($targetIsPromoter ? 'promoteur' : 'administrateur d’école') . ' réinitialisé.'
+                        : 'Informations du compte ' . ($targetIsPromoter ? 'promoteur' : 'administrateur d’école') . ' mises à jour.'
                 );
             }
             $_SESSION['utilisateurs_success'] = 'Les informations du compte ont été mises à jour.';
@@ -292,10 +322,13 @@ class UtilisateursController extends Controller
     public function updateAccess(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['super_admin', 'ecole_admin']);
+        Auth::requireRoles(['super_admin', 'ecole_admin', 'promoteur_école']);
 
         $currentUser = Auth::refresh() ?: Auth::user();
-        $isSchoolAdmin = ($currentUser['role'] ?? '') === 'ecole_admin';
+        $currentRole = (string) ($currentUser['role'] ?? '');
+        $isSchoolAdmin = $currentRole === 'ecole_admin';
+        $isPromoter = $currentRole === 'promoteur_école';
+        $isSchoolManager = $isSchoolAdmin || $isPromoter;
         $currentSchoolId = (int) ($currentUser['ecole_id'] ?? 0);
         $userId = (int) ($_POST['user_id'] ?? 0);
         $role = (string) ($_POST['role'] ?? '');
@@ -318,24 +351,26 @@ class UtilisateursController extends Controller
             $errors[] = 'Vous ne pouvez pas modifier vos propres accès depuis cette page.';
         }
 
-        if ($isSchoolAdmin) {
+        if ($isSchoolManager) {
             $manageableRoles = array_keys(array_filter(
                 Roles::list(),
-                static fn (string $candidateRole): bool =>
+                fn (string $candidateRole): bool =>
                     in_array($candidateRole, User::getSchoolScopedRoles(), true)
-                    && !in_array($candidateRole, ['ecole_admin', 'promoteur_école'], true),
+                    && $candidateRole !== 'promoteur_école'
+                    && ($isPromoter || $candidateRole !== 'ecole_admin'),
                 ARRAY_FILTER_USE_KEY
             ));
             if (
                 $currentSchoolId <= 0
                 || !$targetUser
-                || (int) ($targetUser['ecole_id'] ?? 0) !== $currentSchoolId
-                || in_array($targetUser['role'] ?? '', ['ecole_admin', 'promoteur_école'], true)
+                || !$this->canManageSchoolAccount($targetUser, $currentUser)
             ) {
-                $errors[] = 'Vous ne pouvez gérer que les comptes rattachés à votre école, hors administrateurs et promoteurs.';
+                $errors[] = $isPromoter
+                    ? 'Vous ne pouvez gérer que les comptes de votre école, hors promoteurs.'
+                    : 'Vous ne pouvez gérer que les comptes de votre école, hors administrateurs et promoteurs.';
             }
             if (!in_array($role, $manageableRoles, true)) {
-                $errors[] = 'Le rôle sélectionné ne peut pas être attribué par un administrateur d’école.';
+                $errors[] = 'Le rôle sélectionné ne peut pas être attribué depuis votre compte.';
             }
             $ecoleId = $currentSchoolId;
         } elseif (!array_key_exists($role, Roles::list())) {
@@ -346,13 +381,13 @@ class UtilisateursController extends Controller
         }
 
         $schoolScoped = in_array($role, User::getSchoolScopedRoles(), true);
-        if (!$isSchoolAdmin && $role === 'super_admin') {
+        if (!$isSchoolManager && $role === 'super_admin') {
             $ecoleId = null;
         } elseif ($schoolScoped && $role !== 'agent_ecole' && $ecoleId <= 0) {
             $errors[] = 'Une école est obligatoire pour ce rôle.';
-        } elseif (!$isSchoolAdmin && $ecoleId > 0 && !Ecole::findById($ecoleId)) {
+        } elseif (!$isSchoolManager && $ecoleId > 0 && !Ecole::findById($ecoleId)) {
             $errors[] = 'École invalide.';
-        } elseif (!$isSchoolAdmin && !$schoolScoped) {
+        } elseif (!$isSchoolManager && !$schoolScoped) {
             $ecoleId = null;
         }
 
@@ -406,7 +441,7 @@ class UtilisateursController extends Controller
             )
         ) {
             if (
-                $isSchoolAdmin
+                $isSchoolManager
                 || ($targetUser['role'] ?? '') === 'ecole_admin'
                 || $role === 'ecole_admin'
             ) {
@@ -451,11 +486,10 @@ class UtilisateursController extends Controller
             $currentSchoolId = (int) ($currentUser['ecole_id'] ?? 0);
             $user = $userId > 0 ? User::findById($userId) : null;
             $isSuperAdmin = ($currentUser['role'] ?? '') === 'super_admin';
-            $isSchoolManager = in_array(
-                $currentUser['role'] ?? '',
-                ['ecole_admin', 'promoteur_école'],
-                true
-            );
+            $managerRole = (string) ($currentUser['role'] ?? '');
+            $isSchoolAdmin = $managerRole === 'ecole_admin';
+            $isPromoter = $managerRole === 'promoteur_école';
+            $isSchoolManager = $isSchoolAdmin || $isPromoter;
             $isPendingUnassignedAgent = $user
                 && ($user['role'] ?? '') === 'agent_ecole'
                 && ($user['statut'] ?? '') === 'Inactif'
@@ -466,11 +500,14 @@ class UtilisateursController extends Controller
             $belongsToCurrentSchool = $user
                 && $currentSchoolId > 0
                 && (int) ($user['ecole_id'] ?? 0) === $currentSchoolId;
+            $canManageTarget = $user
+                && $belongsToCurrentSchool
+                && $this->canManageSchoolAccount($user, $currentUser);
             $canValidate = $user
                 && ($user['statut'] ?? '') === 'Inactif'
                 && (
                     ($isSuperAdmin && (!$requiresSchoolAssignment || $hasSchoolAssignment))
-                    || ($isSchoolManager && $currentSchoolId > 0 && ($belongsToCurrentSchool || $isPendingUnassignedAgent))
+                    || ($isSchoolManager && $currentSchoolId > 0 && ($canManageTarget || $isPendingUnassignedAgent))
                 );
 
             if ($canValidate) {
@@ -492,7 +529,7 @@ class UtilisateursController extends Controller
                     $_SESSION['utilisateurs_errors'] = ['Impossible de valider ce compte utilisateur.'];
                     $this->redirect('/utilisateurs');
                 }
-                if ($isSuperAdmin && ($user['role'] ?? '') === 'ecole_admin') {
+                if (($isSuperAdmin || $isPromoter) && ($user['role'] ?? '') === 'ecole_admin') {
                     ActivityLog::record(
                         (int) ($currentUser['id'] ?? 0),
                         'school_admin_validated',

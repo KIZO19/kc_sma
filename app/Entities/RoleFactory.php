@@ -17,7 +17,7 @@ class RoleFactory
             'DA_école' => new DAEcole(),
             'comptable_école' => new ComptableEcole(),
             'sec_école' => new SecEcole(),
-            'promoteur_école' => new PromoteurEcole(),
+            'promoteur_école', 'promoteur_ecole' => new PromoteurEcole(),
             'enseignant_école' => new EnseignantEcole(),
             'eleve_ecole' => new EleveEcole(),
             'parent_ecole' => new ParentEcole(),

@@ -79,6 +79,32 @@
 
       <div class="col-12">
         <div class="card">
+          <div class="card-header"><h2 class="card-title">Calendrier scolaire officiel</h2></div>
+          <form method="post" action="<?= BASE_URL ?>/ecoles/updateSchoolCalendar">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) ($csrfToken ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+            <div class="card-body">
+              <p class="text-muted">Saisissez les dates officielles communiquées par le ministère. Elles serviront à générer les rapports de l’année scolaire.</p>
+              <div class="row g-3">
+                <div class="col-md-5">
+                  <label class="form-label" for="school-calendar-start">Début de l’année scolaire</label>
+                  <input class="form-control" id="school-calendar-start" name="annee_scolaire_debut" type="date" required value="<?= htmlspecialchars((string) ($schoolCalendar['start'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                </div>
+                <div class="col-md-5">
+                  <label class="form-label" for="school-calendar-end">Fin de l’année scolaire</label>
+                  <input class="form-control" id="school-calendar-end" name="annee_scolaire_fin" type="date" required value="<?= htmlspecialchars((string) ($schoolCalendar['end'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                </div>
+              </div>
+            </div>
+            <div class="card-footer text-end">
+              <button type="submit" class="btn btn-primary"><i class="bi bi-calendar-check me-1" aria-hidden="true"></i>Enregistrer le calendrier</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <?php if (($role ?? '') !== 'promoteur_école'): ?>
+      <div class="col-12">
+        <div class="card">
           <div class="card-header"><h2 class="card-title">Année scolaire d’exercice</h2></div>
           <div class="card-body">
             <?php if (!empty($activeSchoolYear)): ?>
@@ -144,6 +170,7 @@
               </form>
             <?php endif; ?>
           </div>
+          <?php endif; ?>
         </div>
       </div>
 

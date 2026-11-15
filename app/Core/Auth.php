@@ -82,6 +82,7 @@ class Auth
         return match ($normalized) {
             'prefet_ecole', 'prefet_des_etudes' => 'préfet_école',
             'agent_ecole' => 'agent_ecole',
+            'promoteur_ecole' => 'promoteur_école',
             default => $role,
         };
     }
@@ -94,6 +95,7 @@ class Auth
             return null;
         }
 
+        $_SESSION['user']['role'] = self::canonicalizeRole((string) ($_SESSION['user']['role'] ?? ''));
         return $_SESSION['user'];
     }
 
@@ -272,12 +274,23 @@ class Auth
             return;
         }
 
-        if (!in_array($user['role'] ?? '', $roles, true)) {
+        $role = (string) ($user['role'] ?? '');
+        $inheritsSchoolAdminAccess = $role === 'promoteur_école'
+            && in_array('ecole_admin', $roles, true);
+        if (
+            !in_array($role, $roles, true)
+            && !$inheritsSchoolAdminAccess
+        ) {
             if (self::check()) {
                 header('Location: ' . BASE_URL . '/error/accessDenied');
             } else {
                 header('Location: ' . BASE_URL . self::getLandingPage($user['role'] ?? null));
             }
+            exit;
+        }
+
+        if ($role === 'promoteur_école' && (int) ($user['ecole_id'] ?? 0) <= 0) {
+            header('Location: ' . BASE_URL . '/error/accessDenied');
             exit;
         }
 

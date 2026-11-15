@@ -28,7 +28,7 @@ class DashboardController extends Controller
         }
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            if ($role !== 'ecole_admin') {
+            if (!in_array($role, ['ecole_admin', 'promoteur_école'], true)) {
                 $this->redirect('/error/accessDenied');
             }
 
@@ -55,10 +55,11 @@ class DashboardController extends Controller
         $modules = $this->getModulesForRole($role);
         $paymentChartRange = $role === 'comptable_école' ? $this->getPaymentChartRange() : [];
         $dashboardData = $this->buildDashboardData($user, $role, $paymentChartRange);
-        $adminRoleList = $role === 'ecole_admin' ? AdministrationAutorisation::allRoles() : [];
-        $adminModules = $role === 'ecole_admin' ? AdministrationAutorisation::allModules() : [];
-        $adminRoleModules = $role === 'ecole_admin' ? AdministrationAutorisation::getRoleModules() : [];
-        $adminMatrix = $role === 'ecole_admin'
+        $isSchoolAdministrator = in_array($role, ['ecole_admin', 'promoteur_école'], true);
+        $adminRoleList = $isSchoolAdministrator ? AdministrationAutorisation::allRoles() : [];
+        $adminModules = $isSchoolAdministrator ? AdministrationAutorisation::allModules() : [];
+        $adminRoleModules = $isSchoolAdministrator ? AdministrationAutorisation::getRoleModules() : [];
+        $adminMatrix = $isSchoolAdministrator
             ? AdministrationAutorisation::getAccessMatrix((int) ($user['ecole_id'] ?? 0))
             : [];
 
@@ -549,7 +550,7 @@ class DashboardController extends Controller
         $payments30d = $this->sumPaymentsLast30Days($schoolId);
 
         return match ($role) {
-            'ecole_admin' => [
+            'ecole_admin', 'promoteur_école' => [
                 ['title' => 'Élèves inscrits', 'value' => $studentCount, 'icon' => 'bi-people-fill', 'bg' => 'bg-primary', 'hint' => 'Effectif total'],
                 ['title' => 'Dette active', 'value' => $this->formatCurrencyCompact($debtTotal), 'icon' => 'bi-cash-stack', 'bg' => 'bg-danger', 'hint' => 'À régulariser'],
                 ['title' => 'Classes', 'value' => $classCount, 'icon' => 'bi-diagram-3', 'bg' => 'bg-info', 'hint' => 'Organisées'],
@@ -561,7 +562,7 @@ class DashboardController extends Controller
                 ['title' => 'Absents aujourd’hui', 'value' => $teacherAttendance['absent'], 'icon' => 'bi-person-x', 'bg' => 'bg-danger', 'hint' => 'Absences déclarées'],
                 ['title' => 'À pointer', 'value' => $teacherAttendance['pending'], 'icon' => 'bi-clock-history', 'bg' => 'bg-warning', 'hint' => $teacherAttendance['weekly_off'] > 0 ? $teacherAttendance['weekly_off'] . ' en journée hebdomadaire' : 'Présences non encore saisies'],
             ],
-            'promoteur_école', 'DD_école', 'DA_école' => [
+            'DD_école', 'DA_école' => [
                 ['title' => 'Élèves inscrits', 'value' => $studentCount, 'icon' => 'bi-people-fill', 'bg' => 'bg-primary', 'hint' => $sectionScopeId !== null ? 'Effectif du secondaire' : 'Effectif de l’école'],
                 ['title' => 'Classes', 'value' => $classCount, 'icon' => 'bi-diagram-3', 'bg' => 'bg-info', 'hint' => $sectionScopeId !== null ? 'Classes du secondaire' : 'Organisation scolaire'],
                 ['title' => 'Enseignants', 'value' => $teacherCount, 'icon' => 'bi-person-workspace', 'bg' => 'bg-success', 'hint' => $sectionScopeId !== null ? 'Enseignants du secondaire' : 'Comptes enseignants'],

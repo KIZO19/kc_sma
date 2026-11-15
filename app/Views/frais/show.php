@@ -32,7 +32,7 @@
             </table>
           </div>
           <div class="card-footer">
-            <?php if (in_array($role, ['super_admin','ecole_admin','comptable_école'], true)): ?>
+            <?php if (in_array($role, ['super_admin','ecole_admin','promoteur_école','comptable_école'], true)): ?>
               <a href="<?= BASE_URL ?>/frais/edit?id=<?= (int) $fee['id'] ?>" class="btn btn-sm btn-primary">Modifier</a>
             <?php endif; ?>
             <a href="<?= BASE_URL ?>/frais" class="btn btn-sm btn-secondary">Retour</a>

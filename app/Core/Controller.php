@@ -218,6 +218,7 @@ class Controller
             ],
             'promoteur_école', 'DE_école', 'DA_école' => [
                 ['name' => 'Admissions', 'path' => '/inscriptions', 'icon' => 'bi-person-plus'],
+                ['name' => 'Paramètres école', 'path' => '/ecoles/settings', 'icon' => 'bi-gear'],
                 ['name' => 'Utilisateurs', 'path' => '/utilisateurs', 'icon' => 'bi-person-check'],
                 ['name' => 'Classes', 'path' => '/classes', 'icon' => 'bi-houses'],
                 ['name' => 'Options', 'path' => '/options', 'icon' => 'bi-grid-1x2'],
@@ -293,6 +294,14 @@ class Controller
                 ['name' => 'Accueil', 'path' => '/dashboard', 'icon' => 'bi-house'],
             ],
         };
+
+        if ($role === 'promoteur_école') {
+            $modulesByPath = [];
+            foreach (array_merge($this->getModulesForRole('ecole_admin'), $modules) as $module) {
+                $modulesByPath[$module['path']] = $module;
+            }
+            $modules = array_values($modulesByPath);
+        }
 
         if (in_array($role, [
             'ecole_admin',

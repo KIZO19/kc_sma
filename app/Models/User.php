@@ -138,7 +138,7 @@ class User
         if (isset($data['mot_de_passe'])) {
             $data['mot_de_passe'] = self::normalizePasswordHash((string) $data['mot_de_passe']);
         }
-        $schoolScopedRoles = ['ecole_admin', 'agent_ecole', 'enseignant_école', 'eleve_ecole', 'parent_ecole', 'comptable_école', 'sec_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'promoteur_école'];
+        $schoolScopedRoles = ['ecole_admin', 'agent_ecole', 'enseignant_école', 'eleve_ecole', 'parent_ecole', 'comptable_école', 'sec_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'promoteur_école', 'promoteur_ecole'];
 
         $resolvedSchoolId = null;
         if (in_array($role, $schoolScopedRoles, true)) {
@@ -415,6 +415,7 @@ class User
             'DP_école',
             'DA_école',
             'promoteur_école',
+            'promoteur_ecole',
         ];
     }
 
@@ -869,7 +870,7 @@ class User
             'DA_école' => 'Directeur Adjoint',
             'comptable_école' => 'Comptable',
             'sec_école' => 'Secrétaire',
-            'promoteur_école' => 'Promoteur',
+            'promoteur_école', 'promoteur_ecole' => 'Promoteur',
             'enseignant_école' => 'Enseignant',
             'eleve_ecole' => 'Élève',
             'parent_ecole' => 'Parent',

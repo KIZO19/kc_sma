@@ -63,6 +63,21 @@
                       <div class="form-text">Formats autorisés: PNG, JPEG. Taille max: 250 KB.</div>
                     </div>
                     <hr>
+                    <h5>Promoteur de l'école</h5>
+                    <p class="text-muted small">Le promoteur supervise l’école et gère le compte de l’administrateur. Seul le super administrateur peut gérer son compte.</p>
+                    <div class="mb-3">
+                      <label class="form-label">Nom complet du promoteur</label>
+                      <input type="text" name="promoter_nom" class="form-control" maxlength="150" required>
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label">Identifiant du promoteur</label>
+                      <input type="text" name="promoter_identifiant" class="form-control" maxlength="100" required>
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label">Mot de passe du promoteur</label>
+                      <input type="password" name="promoter_mot_de_passe" class="form-control" minlength="8" placeholder="Laisser vide pour générer un mot de passe temporaire">
+                    </div>
+                    <hr>
                     <h5>Admin de l'école</h5>
                     <div class="mb-3">
                       <label class="form-label">Attribuer un admin existant</label>

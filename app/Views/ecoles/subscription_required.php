@@ -43,7 +43,7 @@
               </div>
             <?php endif; ?>
 
-            <?php if (($role ?? '') === 'ecole_admin'): ?>
+            <?php if (in_array(($role ?? ''), ['ecole_admin', 'promoteur_école'], true)): ?>
               <a href="<?= BASE_URL ?>/ecoles/subscriptions" class="btn btn-primary me-2">
                 <i class="bi bi-card-checklist me-1" aria-hidden="true"></i>Consulter l’abonnement
               </a>

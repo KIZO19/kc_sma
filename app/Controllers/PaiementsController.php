@@ -19,7 +19,7 @@ class PaiementsController extends Controller
     public function index(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'parent_ecole']);
+        Auth::requireRoles(['super_admin', 'ecole_admin', 'promoteur_école', 'comptable_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'parent_ecole']);
 
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
@@ -107,7 +107,7 @@ class PaiementsController extends Controller
     public function export(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'parent_ecole']);
+        Auth::requireRoles(['super_admin', 'ecole_admin', 'promoteur_école', 'comptable_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'parent_ecole']);
 
         $user = Auth::refresh() ?: Auth::user();
         $sectionScopeId = $this->getSectionScopeForUser($user);
@@ -181,7 +181,7 @@ class PaiementsController extends Controller
     public function listJson(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'parent_ecole']);
+        Auth::requireRoles(['super_admin', 'ecole_admin', 'promoteur_école', 'comptable_école', 'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'sec_école', 'enseignant_école', 'parent_ecole']);
 
         $user = Auth::refresh() ?: Auth::user();
         $sectionScopeId = $this->getSectionScopeForUser($user);
@@ -1009,7 +1009,7 @@ class PaiementsController extends Controller
         Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école']);
 
         $user = Auth::refresh() ?: Auth::user();
-        if (!in_array($user['role'] ?? '', ['super_admin', 'ecole_admin', 'comptable_école'], true)) {
+        if (!in_array($user['role'] ?? '', ['super_admin', 'ecole_admin', 'promoteur_école', 'comptable_école'], true)) {
             $this->redirect('/paiements');
             return;
         }

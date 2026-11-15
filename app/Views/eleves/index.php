@@ -238,7 +238,7 @@ require __DIR__ . '/../partials/app_header.php';
                         <td>
                           <div class="btn-group btn-group-sm" role="group" aria-label="Actions pour <?= $e($fullName) ?>">
                             <a href="<?= BASE_URL ?>/eleves/show?id=<?= (int) $student['id'] ?>" class="btn btn-outline-primary" title="Consulter la fiche" aria-label="Consulter la fiche"><i class="bi bi-eye"></i></a>
-                            <?php if (in_array($role, ['super_admin', 'ecole_admin', 'comptable_école'], true)): ?>
+                            <?php if (in_array($role, ['super_admin', 'ecole_admin', 'promoteur_école', 'comptable_école'], true)): ?>
                               <a href="<?= BASE_URL ?>/paiements?eleve_id=<?= (int) $student['id'] ?>" class="btn btn-outline-success" title="Consulter les paiements" aria-label="Consulter les paiements"><i class="bi bi-wallet2"></i></a>
                             <?php endif; ?>
                           </div>

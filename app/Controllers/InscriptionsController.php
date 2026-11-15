@@ -118,7 +118,7 @@ class InscriptionsController extends Controller
             'sections' => $sections,
             'options' => $options,
             'canSubmit' => in_array($role, self::SUBMISSION_ROLES, true),
-            'canManageAccountAccess' => in_array($role, ['super_admin', 'ecole_admin', 'sec_école'], true),
+            'canManageAccountAccess' => in_array($role, ['super_admin', 'ecole_admin', 'promoteur_école', 'sec_école'], true),
             'accountAccessCsrf' => $_SESSION['inscriptions_access_csrf'],
             'canEdit' => in_array($role, self::IDENTITY_EDIT_ROLES, true),
             'canApprove' => in_array($role, ['super_admin', 'sec_école', 'préfet_école', 'DP_école', 'comptable_école'], true),

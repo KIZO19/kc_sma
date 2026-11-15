@@ -401,12 +401,7 @@ SCRIPT;
                           </select>
                           <button type="submit" class="btn btn-sm btn-primary">Lier</button>
                         </form>
-                      <?php elseif (
-                          ($role ?? '') === 'ecole_admin'
-                          && (int) ($account['ecole_id'] ?? 0) === (int) ($user['ecole_id'] ?? 0)
-                          && (int) ($account['id'] ?? 0) !== (int) ($user['id'] ?? 0)
-                          && !in_array($account['role'] ?? '', ['ecole_admin', 'promoteur_école'], true)
-                      ): ?>
+                      <?php elseif (isset($manageableAccountIds[(int) ($account['id'] ?? 0)])): ?>
                         <a href="<?= BASE_URL ?>/utilisateurs/editAccount?id=<?= (int) $account['id'] ?>" class="btn btn-sm btn-outline-secondary mb-2">Modifier les informations</a>
                         <form method="post" action="<?= BASE_URL ?>/utilisateurs/update-access" class="d-flex flex-wrap gap-2 align-items-center user-access-form">
                           <input type="hidden" name="user_id" value="<?= (int) $account['id'] ?>">
@@ -435,8 +430,6 @@ SCRIPT;
                           </select>
                           <button type="submit" class="btn btn-sm btn-primary">Modifier les accès</button>
                         </form>
-                      <?php elseif (($role ?? '') === 'ecole_admin' && (int) ($account['ecole_id'] ?? 0) === (int) ($user['ecole_id'] ?? 0)): ?>
-                        <a href="<?= BASE_URL ?>/utilisateurs/editAccount?id=<?= (int) $account['id'] ?>" class="btn btn-sm btn-outline-primary">Modifier les informations</a>
                       <?php else: ?>
                         <span class="text-muted">Lecture seule</span>
                       <?php endif; ?>
@@ -494,8 +487,18 @@ SCRIPT;
                                 in_array(($role ?? ''), ['ecole_admin', 'promoteur_école'], true)
                                 && (int) ($user['ecole_id'] ?? 0) > 0
                                 && (
-                                  (int) ($inactive['ecole_id'] ?? 0) === (int) ($user['ecole_id'] ?? 0)
-                                  || $isPendingUnassignedAgent
+                                  (
+                                    (int) ($inactive['ecole_id'] ?? 0) === (int) ($user['ecole_id'] ?? 0)
+                                    && !in_array($inactive['role'] ?? '', ['super_admin', 'promoteur_école', 'promoteur_ecole'], true)
+                                    && (
+                                      ($inactive['role'] ?? '') !== 'ecole_admin'
+                                      || ($role ?? '') === 'promoteur_école'
+                                    )
+                                  )
+                                  || (
+                                    $isPendingUnassignedAgent
+                                    && !in_array($inactive['role'] ?? '', ['super_admin', 'promoteur_école', 'promoteur_ecole'], true)
+                                  )
                                 )
                               );
                           ?>

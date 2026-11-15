@@ -14,7 +14,7 @@ class RecouvrementsController extends Controller
     public function index(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école']);
+        Auth::requireRoles(['super_admin', 'ecole_admin', 'promoteur_école', 'comptable_école']);
 
         $user = Auth::refresh() ?: Auth::user();
         $role = $user['role'] ?? 'default';
@@ -96,7 +96,7 @@ class RecouvrementsController extends Controller
     public function export(): void
     {
         Auth::requireAuth();
-        Auth::requireRoles(['super_admin', 'ecole_admin', 'comptable_école']);
+        Auth::requireRoles(['super_admin', 'ecole_admin', 'promoteur_école', 'comptable_école']);
 
         $user = Auth::refresh() ?: Auth::user();
         $filters = $this->getFilters();

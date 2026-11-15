@@ -9,6 +9,43 @@ class Ecole
 {
     private static bool $subscriptionDetailsEnsured = false;
     private static bool $planQuotaDetailsEnsured = false;
+    private static bool $schoolCalendarColumnsEnsured = false;
+
+    public static function ensureSchoolCalendarColumns(): void
+    {
+        if (self::$schoolCalendarColumnsEnsured) {
+            return;
+        }
+
+        $db = Database::getConnection();
+        foreach ([
+            'annee_scolaire_debut' => 'DATE NULL',
+            'annee_scolaire_fin' => 'DATE NULL',
+        ] as $name => $definition) {
+            $column = $db->query(
+                'SHOW COLUMNS FROM ecoles LIKE ' . $db->quote($name)
+            )->fetch(PDO::FETCH_ASSOC);
+            if ($column === false) {
+                $db->exec('ALTER TABLE ecoles ADD COLUMN ' . $name . ' ' . $definition);
+            }
+        }
+
+        self::$schoolCalendarColumnsEnsured = true;
+    }
+
+    public static function updateSchoolCalendar(int $id, string $startDate, string $endDate): bool
+    {
+        self::ensureSchoolCalendarColumns();
+        $stmt = Database::getConnection()->prepare(
+            'UPDATE ecoles SET annee_scolaire_debut = :start_date, annee_scolaire_fin = :end_date WHERE id = :id'
+        );
+
+        return $stmt->execute([
+            ':start_date' => $startDate,
+            ':end_date' => $endDate,
+            ':id' => $id,
+        ]);
+    }
 
     public static function getAll(): array
     {

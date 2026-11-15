@@ -41,7 +41,8 @@ class ManuelController extends Controller
         return match ($role) {
             'super_admin' => 'Accès à la plateforme : établissements, demandes, abonnements, comptes et historique.',
             'ecole_admin' => 'Accès à la gestion de l’établissement, dans les limites des autorisations et paramètres actifs.',
-            'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école', 'promoteur_école' =>
+            'promoteur_école' => 'Accès à toutes les informations de l’école et aux rapports de suivi des activités administratives.',
+            'préfet_école', 'DE_école', 'DD_école', 'DP_école', 'DA_école' =>
                 'Accès aux activités de direction et de suivi scolaire. Le périmètre peut être limité à une section.',
             'comptable_école' => 'Accès aux inscriptions et opérations financières : frais, factures, paiements, paie des agents et rapports.',
             'sec_école' => 'Accès au suivi administratif des élèves, inscriptions, présences et documents autorisés.',
@@ -66,7 +67,7 @@ class ManuelController extends Controller
             '/ecoles/addSubscription' => ['purpose' => 'Attribuer un abonnement à un établissement.', 'steps' => 'Sélectionnez l’école et le plan, contrôlez la durée, puis confirmez.'],
             '/utilisateurs' => ['purpose' => 'Gérer les comptes, leurs rôles et leur activation.', 'steps' => ['Recherchez le compte par nom ou identifiant.', 'Vérifiez la personne et le rôle attribué.', 'Modifiez uniquement les éléments nécessaires, puis enregistrez.']],
             '/activities' => ['purpose' => 'Consulter l’historique des activités enregistrées.', 'steps' => 'Filtrez la liste pour retrouver l’utilisateur, l’action ou la période recherchée.'],
-            '/ecoles/settings' => ['purpose' => 'Mettre à jour les paramètres et l’année scolaire de l’école.', 'steps' => 'Vérifiez les coordonnées, enregistrez les changements et, si nécessaire, transmettez une demande de changement d’année au super-administrateur.'],
+            '/ecoles/settings' => ['purpose' => 'Mettre à jour les paramètres de l’école et saisir les dates officielles du calendrier scolaire.', 'steps' => 'Saisissez les dates de début et de fin communiquées par le ministère pour les utiliser dans les rapports de l’année scolaire. Les changements d’année scolaire restent soumis à l’approbation de KC_SMA.'],
             '/agents' => ['purpose' => 'Gérer les agents et leurs affectations.', 'steps' => 'Créez ou recherchez un agent, vérifiez ses informations et enregistrez son affectation.'],
             '/parents' => ['purpose' => 'Consulter et gérer les parents ou tuteurs.', 'steps' => 'Recherchez un parent, ouvrez sa fiche pour vérifier ses coordonnées et ses enfants liés.'],
             '/eleves' => ['purpose' => 'Consulter les dossiers des élèves et leurs informations scolaires.', 'steps' => 'Filtrez par classe ou matricule, puis ouvrez le dossier de l’élève choisi.'],
@@ -87,7 +88,7 @@ class ManuelController extends Controller
             '/evenements' => ['purpose' => 'Créer et consulter les événements scolaires.', 'steps' => 'Renseignez titre, date et détails, sélectionnez les destinataires si proposés puis publiez.'],
             '/facturation' => ['purpose' => 'Consulter les éléments de facturation disponibles.', 'steps' => 'Choisissez la période ou l’élément puis vérifiez les montants avant toute validation.'],
             '/comptes' => ['purpose' => 'Consulter les soldes et suivre les sorties de caisse ou de banque.', 'steps' => ['Le comptable soumet les sorties avec un motif et un compte.', 'La sortie et le paiement de salaire restent en attente jusqu’à l’approbation par un rôle désigné dans les paramètres de l’école.', 'Le compte est débité uniquement après approbation. La personne qui soumet une sortie ne peut pas l’approuver elle-même.']],
-            '/rapports' => ['purpose' => 'Produire les rapports disponibles pour votre rôle.', 'steps' => 'Choisissez les filtres, la période et le format, puis lancez l’affichage ou l’export.'],
+            '/rapports' => ['purpose' => 'Consulter les suivis classés par finances, pédagogie et administration selon votre rôle.', 'steps' => 'Ouvrez une catégorie puis un suivi. Les pages de paiements et de recouvrements proposent des exports CSV, Excel et PDF.'],
             '/statistiques' => ['purpose' => 'Analyser les indicateurs agrégés de la plateforme ou de l’école.', 'steps' => 'Sélectionnez les filtres proposés et comparez les indicateurs affichés.'],
             '/mes-cours' => ['purpose' => 'Consulter les cours associés au compte.', 'steps' => 'Choisissez un cours pour voir les informations ou ressources disponibles.'],
             '/mon-emploi' => ['purpose' => 'Consulter l’emploi du temps personnel ou scolaire.', 'steps' => 'Choisissez la période ou la classe proposée, puis consultez les horaires.'],

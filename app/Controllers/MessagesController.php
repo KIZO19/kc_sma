@@ -415,7 +415,7 @@ class MessagesController extends Controller
             if (
                 $audition !== null
                 && (
-                    in_array($role, ['DD_école', 'ecole_admin'], true)
+                    in_array($role, ['DD_école', 'ecole_admin', 'promoteur_école'], true)
                     || $isReportRecipient
                 )
             ) {

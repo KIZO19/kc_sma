@@ -19,7 +19,7 @@ class ComptesController extends Controller
         }
 
         $role = (string) ($user['role'] ?? '');
-        $canManage = \in_array($role, ['ecole_admin', 'comptable_école'], true);
+        $canManage = \in_array($role, ['ecole_admin', 'promoteur_école', 'comptable_école'], true);
         $canApprove = CashOutflow::isUserDesignatedApprover($user);
         if (!$canManage && !$canApprove) {
             $this->redirect('/error/accessDenied');
